@@ -83,33 +83,35 @@ export const calculateBasePlan = (inputs, assumptions, clientInfo) => {
   const {
     totalPortfolio, monthlySpending, ssPIA, partnerSSPIA,
     ssStartAge, partnerSSStartAge, monthlyPension, pensionStartAge,
-    inflationRate, withdrawalInflationFactor, additionalIncomes
+    inflationRate, personalInflationRate, additionalIncomes
   } = inputs;
 
   const clientSS = getAdjustedSS(ssPIA, ssStartAge);
   const partnerSS = getAdjustedSS(partnerSSPIA, partnerSSStartAge);
   const totalSS = clientSS + partnerSS;
-  const effectiveInflationRate = inflationRate * (withdrawalInflationFactor / 100);
 
   // Get detailed cash flow numbers for a specific year
   const getAnnualDetails = (yearIndex) => {
     const simAge = clientInfo.retirementAge + yearIndex;
     const currentPartnerAge = clientInfo.partnerAge + (simAge - clientInfo.currentAge);
-    const inflationFactor = Math.pow(1 + (effectiveInflationRate / 100), yearIndex);
-    const expenses = monthlySpending * 12 * inflationFactor;
+    // Expenses use personal inflation rate
+    const expenseInflationFactor = Math.pow(1 + (personalInflationRate / 100), yearIndex);
+    // Income (SS, pension) uses full inflation rate
+    const incomeInflationFactor = Math.pow(1 + (inflationRate / 100), yearIndex);
+    const expenses = monthlySpending * 12 * expenseInflationFactor;
 
     let income = 0;
-    if (simAge >= ssStartAge) income += clientSS * 12 * inflationFactor;
+    if (simAge >= ssStartAge) income += clientSS * 12 * incomeInflationFactor;
     if (clientInfo.isMarried && currentPartnerAge >= partnerSSStartAge) {
-      income += partnerSS * 12 * inflationFactor;
+      income += partnerSS * 12 * incomeInflationFactor;
     }
 
-    if (simAge >= pensionStartAge) income += monthlyPension * 12 * inflationFactor;
+    if (simAge >= pensionStartAge) income += monthlyPension * 12 * incomeInflationFactor;
 
     additionalIncomes.forEach(stream => {
       if (simAge >= stream.startAge && simAge <= (stream.endAge || 100)) {
         let streamAmount = stream.amount * 12;
-        if (stream.inflationAdjusted) streamAmount *= inflationFactor;
+        if (stream.inflationAdjusted) streamAmount *= incomeInflationFactor;
         income += streamAmount;
       }
     });

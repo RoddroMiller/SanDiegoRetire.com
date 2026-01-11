@@ -6,14 +6,23 @@
 import { getAdjustedSS, calculateWeightedReturn } from './calculations';
 
 /**
- * Calculate effective inflation factor for a given year
- * @param {number} inflationRate - Base inflation rate
- * @param {number} withdrawalInflationFactor - Withdrawal inflation adjustment factor
+ * Calculate expense inflation factor for a given year (uses personal inflation rate)
+ * @param {number} personalInflationRate - Personal inflation rate
  * @param {number} yearIndex - Year index from retirement
- * @returns {number} Inflation factor
+ * @returns {number} Expense inflation factor
  */
-const getInflationFactor = (inflationRate, withdrawalInflationFactor, yearIndex) => {
-  return Math.pow(1 + (inflationRate * (withdrawalInflationFactor / 100) / 100), yearIndex);
+const getExpenseInflationFactor = (personalInflationRate, yearIndex) => {
+  return Math.pow(1 + (personalInflationRate / 100), yearIndex);
+};
+
+/**
+ * Calculate income inflation factor for a given year (uses full inflation rate)
+ * @param {number} inflationRate - Full inflation rate
+ * @param {number} yearIndex - Year index from retirement
+ * @returns {number} Income inflation factor
+ */
+const getIncomeInflationFactor = (inflationRate, yearIndex) => {
+  return Math.pow(1 + (inflationRate / 100), yearIndex);
 };
 
 /**
@@ -62,28 +71,31 @@ export const calculateSSAnalysis = ({ inputs, clientInfo, assumptions, targetMax
       balance *= (1 + weightedReturn);
       const yearIndex = age - clientInfo.retirementAge;
       const currentPartnerAge = clientInfo.partnerAge + (age - clientInfo.currentAge);
-      const inflationFactor = getInflationFactor(inputs.inflationRate, inputs.withdrawalInflationFactor, yearIndex);
-      const expense = inputs.monthlySpending * 12 * inflationFactor;
+      // Expenses use personal inflation rate
+      const expenseInflationFactor = getExpenseInflationFactor(inputs.personalInflationRate, yearIndex);
+      // Income uses full inflation rate
+      const incomeInflationFactor = getIncomeInflationFactor(inputs.inflationRate, yearIndex);
+      const expense = inputs.monthlySpending * 12 * expenseInflationFactor;
 
       let income = 0;
 
       // Client SS income (variable based on strategy)
       if (age >= startAge && age >= clientInfo.retirementAge) {
-        income += getAdjustedSS(inputs.ssPIA, startAge) * 12 * inflationFactor;
+        income += getAdjustedSS(inputs.ssPIA, startAge) * 12 * incomeInflationFactor;
       }
 
       // Partner SS income (fixed at their chosen start age)
       if (clientInfo.isMarried && currentPartnerAge >= inputs.partnerSSStartAge) {
-        income += getAdjustedSS(inputs.partnerSSPIA, inputs.partnerSSStartAge) * 12 * inflationFactor;
+        income += getAdjustedSS(inputs.partnerSSPIA, inputs.partnerSSStartAge) * 12 * incomeInflationFactor;
       }
 
       // Pension income
       if (age >= inputs.pensionStartAge) {
-        income += inputs.monthlyPension * 12 * inflationFactor;
+        income += inputs.monthlyPension * 12 * incomeInflationFactor;
       }
 
       // Additional income streams
-      income += calculateAdditionalIncome(inputs.additionalIncomes, age, inflationFactor);
+      income += calculateAdditionalIncome(inputs.additionalIncomes, age, incomeInflationFactor);
 
       balance -= Math.max(0, expense - income);
     }
@@ -132,29 +144,32 @@ export const calculateSSPartnerAnalysis = ({ inputs, clientInfo, assumptions, ta
       balance *= (1 + weightedReturn);
       const yearIndex = age - clientInfo.retirementAge;
       const currentPartnerAge = clientInfo.partnerAge + (age - clientInfo.currentAge);
-      const inflationFactor = getInflationFactor(inputs.inflationRate, inputs.withdrawalInflationFactor, yearIndex);
-      const expense = inputs.monthlySpending * 12 * inflationFactor;
+      // Expenses use personal inflation rate
+      const expenseInflationFactor = getExpenseInflationFactor(inputs.personalInflationRate, yearIndex);
+      // Income uses full inflation rate
+      const incomeInflationFactor = getIncomeInflationFactor(inputs.inflationRate, yearIndex);
+      const expense = inputs.monthlySpending * 12 * expenseInflationFactor;
 
       let income = 0;
 
       // Client SS income (fixed at optimal age from client analysis)
       if (age >= clientSSWinner.age && age >= clientInfo.retirementAge) {
-        income += getAdjustedSS(inputs.ssPIA, clientSSWinner.age) * 12 * inflationFactor;
+        income += getAdjustedSS(inputs.ssPIA, clientSSWinner.age) * 12 * incomeInflationFactor;
       }
 
       // Partner SS income (variable based on strategy)
       // Assume partner works until their retirement age (earnings test applies if claiming early)
       if (currentPartnerAge >= pStartAge && currentPartnerAge >= clientInfo.partnerRetirementAge) {
-        income += getAdjustedSS(inputs.partnerSSPIA, pStartAge) * 12 * inflationFactor;
+        income += getAdjustedSS(inputs.partnerSSPIA, pStartAge) * 12 * incomeInflationFactor;
       }
 
       // Pension income
       if (age >= inputs.pensionStartAge) {
-        income += inputs.monthlyPension * 12 * inflationFactor;
+        income += inputs.monthlyPension * 12 * incomeInflationFactor;
       }
 
       // Additional income streams
-      income += calculateAdditionalIncome(inputs.additionalIncomes, age, inflationFactor);
+      income += calculateAdditionalIncome(inputs.additionalIncomes, age, incomeInflationFactor);
 
       balance -= Math.max(0, expense - income);
     }

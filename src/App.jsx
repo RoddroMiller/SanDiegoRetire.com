@@ -71,7 +71,7 @@ export default function BucketPortfolioBuilder() {
     monthlyPension: 0,
     pensionStartAge: 65,
     inflationRate: 3.0,
-    withdrawalInflationFactor: 50,
+    personalInflationRate: 1.5,
     ssReinvestRate: 4.5,
     additionalIncomes: []
   });

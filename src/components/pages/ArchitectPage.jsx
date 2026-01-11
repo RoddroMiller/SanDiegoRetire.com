@@ -225,8 +225,8 @@ export const ArchitectPage = ({
                   <div className="mt-2 bg-slate-50 p-2 rounded border border-slate-200">
                     <label className="text-[10px] font-bold text-slate-500 uppercase">Inflation Rate (%)</label>
                     <input type="number" step="0.1" name="inflationRate" value={inputs.inflationRate} onChange={onInputChange} className="w-full mb-2 px-2 py-1 text-xs border rounded" />
-                    <label className="text-[10px] font-bold text-slate-500 uppercase">Spending Participation (%)</label>
-                    <input type="number" step="10" name="withdrawalInflationFactor" value={inputs.withdrawalInflationFactor} onChange={onInputChange} className="w-full px-2 py-1 text-xs border rounded" />
+                    <label className="text-[10px] font-bold text-slate-500 uppercase">Personal Inflation Rate (%)</label>
+                    <input type="number" step="0.1" name="personalInflationRate" value={inputs.personalInflationRate} onChange={onInputChange} className="w-full px-2 py-1 text-xs border rounded" />
                   </div>
                 )}
               </div>
