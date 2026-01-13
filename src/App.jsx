@@ -2,7 +2,7 @@ import React, { useState, useMemo } from 'react';
 
 // --- Local Imports ---
 import { formatPhoneNumber, calculateAccumulation, calculateBasePlan, runSimulation, calculateSSAnalysis, calculateSSPartnerAnalysis, getAdjustedSS } from './utils';
-import { GateScreen, LoginScreen, AccumulationPage, ArchitectPage } from './components';
+import { GateScreen, LoginScreen, AccumulationPage, ArchitectPage, ClientWizard } from './components';
 import { useAuth, useScenarios } from './hooks';
 
 // --- Main Application ---
@@ -38,7 +38,7 @@ export default function BucketPortfolioBuilder() {
   const [step, setStep] = useState(1);
   const [showSettings, setShowSettings] = useState(true);
   const [activeTab, setActiveTab] = useState('chart');
-  const [rebalanceFreq, setRebalanceFreq] = useState(0);
+  const [rebalanceFreq, setRebalanceFreq] = useState(3);
   const [isGeneratingReport, setIsGeneratingReport] = useState(false);
   const [showCashFlowTable, setShowCashFlowTable] = useState(false);
 
@@ -149,6 +149,33 @@ export default function BucketPortfolioBuilder() {
     setInputs(prev => ({ ...prev, [name]: val }));
   };
 
+  // Additional Income Stream Handlers
+  const addAdditionalIncome = () => {
+    setInputs(prev => ({
+      ...prev,
+      additionalIncomes: [
+        ...prev.additionalIncomes,
+        { id: Date.now(), name: '', amount: 0, startAge: clientInfo.retirementAge, endAge: 100, isOneTime: false, inflationAdjusted: false }
+      ]
+    }));
+  };
+
+  const updateAdditionalIncome = (id, field, value) => {
+    setInputs(prev => ({
+      ...prev,
+      additionalIncomes: prev.additionalIncomes.map(income =>
+        income.id === id ? { ...income, [field]: value } : income
+      )
+    }));
+  };
+
+  const removeAdditionalIncome = (id) => {
+    setInputs(prev => ({
+      ...prev,
+      additionalIncomes: prev.additionalIncomes.filter(income => income.id !== id)
+    }));
+  };
+
   const handleAssumptionChange = (key, field, value) => {
     setAssumptions(prev => ({ ...prev, [key]: { ...prev[key], [field]: parseFloat(value) || 0 } }));
   };
@@ -179,12 +206,10 @@ export default function BucketPortfolioBuilder() {
 
   const updateSSStartAge = (age) => {
     setInputs(prev => ({ ...prev, ssStartAge: age }));
-    alert(`Social Security Start Age set to ${age}`);
   };
 
   const updatePartnerSSStartAge = (age) => {
     setInputs(prev => ({ ...prev, partnerSSStartAge: age }));
-    alert(`Partner Social Security Start Age set to ${age}`);
   };
 
   const proceedToArchitect = () => {
@@ -201,6 +226,22 @@ export default function BucketPortfolioBuilder() {
     setInputs(updatedInputs);
     setStep(2);
     window.scrollTo(0, 0);
+  };
+
+  // Client wizard save progress (auto-save after each page)
+  const handleClientSaveProgress = () => {
+    const finalAccumulation = accumulationData[accumulationData.length - 1]?.balance || 0;
+    const yearsToRetire = Math.max(0, clientInfo.retirementAge - clientInfo.currentAge);
+    const futureSpending = clientInfo.currentSpending * Math.pow(1 + (inputs.personalInflationRate / 100), yearsToRetire);
+
+    const updatedInputs = {
+      ...inputs,
+      totalPortfolio: finalAccumulation,
+      monthlySpending: Math.round(futureSpending)
+    };
+
+    setInputs(updatedInputs);
+    saveProgress({ clientInfo, inputs: updatedInputs, assumptions, targetMaxPortfolioAge, rebalanceFreq }, userRole);
   };
 
   const generateReport = () => {
@@ -232,7 +273,34 @@ export default function BucketPortfolioBuilder() {
     );
   }
 
-  // Step 1: Accumulation Phase
+  // Client Wizard Flow
+  if (userRole === 'client') {
+    return (
+      <ClientWizard
+        clientInfo={clientInfo}
+        onClientChange={handleClientChange}
+        inputs={inputs}
+        onInputChange={handleInputChange}
+        accumulationData={accumulationData}
+        projectionData={projectionData}
+        monteCarloData={monteCarloData}
+        ssAnalysis={ssAnalysis}
+        ssPartnerAnalysis={ssPartnerAnalysis}
+        onSaveProgress={handleClientSaveProgress}
+        onClientSubmit={handleClientSubmit}
+        saveStatus={saveStatus}
+        targetMaxPortfolioAge={targetMaxPortfolioAge}
+        onSetTargetMaxPortfolioAge={setTargetMaxPortfolioAge}
+        onUpdateSSStartAge={updateSSStartAge}
+        onUpdatePartnerSSStartAge={updatePartnerSSStartAge}
+        onAddAdditionalIncome={addAdditionalIncome}
+        onUpdateAdditionalIncome={updateAdditionalIncome}
+        onRemoveAdditionalIncome={removeAdditionalIncome}
+      />
+    );
+  }
+
+  // Advisor Flow - Step 1: Accumulation Phase
   if (step === 1) {
     return (
       <AccumulationPage
@@ -285,6 +353,9 @@ export default function BucketPortfolioBuilder() {
       onSetTargetMaxPortfolioAge={setTargetMaxPortfolioAge}
       onUpdateSSStartAge={updateSSStartAge}
       onUpdatePartnerSSStartAge={updatePartnerSSStartAge}
+      onAddAdditionalIncome={addAdditionalIncome}
+      onUpdateAdditionalIncome={updateAdditionalIncome}
+      onRemoveAdditionalIncome={removeAdditionalIncome}
     />
   );
 }

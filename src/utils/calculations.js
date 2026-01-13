@@ -110,16 +110,27 @@ export const calculateBasePlan = (inputs, assumptions, clientInfo) => {
 
     if (simAge >= pensionStartAge) income += monthlyPension * 12 * incomeInflationFactor;
 
+    // Recurring additional incomes (monthly * 12)
     additionalIncomes.forEach(stream => {
-      if (simAge >= stream.startAge && simAge <= (stream.endAge || 100)) {
+      if (!stream.isOneTime && simAge >= stream.startAge && simAge <= (stream.endAge || 100)) {
         let streamAmount = stream.amount * 12;
         if (stream.inflationAdjusted) streamAmount *= incomeInflationFactor;
         income += streamAmount;
       }
     });
 
+    // One-time contributions (added to portfolio, not income)
+    let oneTimeContributions = 0;
+    additionalIncomes.forEach(stream => {
+      if (stream.isOneTime && simAge === stream.startAge) {
+        let streamAmount = stream.amount;
+        if (stream.inflationAdjusted) streamAmount *= incomeInflationFactor;
+        oneTimeContributions += streamAmount;
+      }
+    });
+
     const gap = Math.max(0, expenses - income);
-    return { expenses, income, gap, simAge, currentPartnerAge };
+    return { expenses, income, gap, simAge, currentPartnerAge, oneTimeContributions };
   };
 
   const getAnnualGap = (yearIndex) => getAnnualDetails(yearIndex).gap;
@@ -196,7 +207,7 @@ export const runSimulation = (basePlan, assumptions, inputs, rebalanceFreq, isMo
         rates.b5 = assumptions.b5.return / 100;
       }
 
-      const { expenses, income, gap, simAge, currentPartnerAge } = getAnnualDetails(i - 1);
+      const { expenses, income, gap, simAge, currentPartnerAge, oneTimeContributions } = getAnnualDetails(i - 1);
 
       balances.b1 *= (1 + rates.b1);
       balances.b2 *= (1 + rates.b2);
@@ -204,13 +215,23 @@ export const runSimulation = (basePlan, assumptions, inputs, rebalanceFreq, isMo
       balances.b4 *= (1 + rates.b4);
       balances.b5 *= (1 + rates.b5);
 
+      // Add one-time contributions to b5 (long-term bucket)
+      if (oneTimeContributions > 0) {
+        balances.b5 += oneTimeContributions;
+      }
+
       const postGrowthTotal = Object.values(balances).reduce((a, b) => a + b, 0);
-      const annualGrowth = postGrowthTotal - startTotal;
+      const annualGrowth = postGrowthTotal - startTotal - oneTimeContributions;
 
       const appliedBench = isMonteCarlo
         ? (benchmarkReturn + (assumptions.b3.stdDev / 100) * randn_bm())
         : benchmarkReturn;
       benchmarkBalance *= (1 + appliedBench);
+
+      // Add one-time contributions to benchmark as well
+      if (oneTimeContributions > 0) {
+        benchmarkBalance += oneTimeContributions;
+      }
 
       let withdrawalAmount = gap;
       const totalWithdrawal = gap;
@@ -295,6 +316,7 @@ export const runSimulation = (basePlan, assumptions, inputs, rebalanceFreq, isMo
         startBalance: Math.round(startTotal),
         growth: Math.round(annualGrowth),
         ssIncome: Math.round(income),
+        contribution: Math.round(oneTimeContributions),
         expenses: Math.round(expenses),
         distribution: Math.round(totalWithdrawal),
         total: Math.max(0, total),

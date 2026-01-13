@@ -224,10 +224,10 @@ export const AccumulationPage = ({
             <div className="space-y-4">
               <div className="relative group">
                 <label className="block text-xs font-bold text-slate-500 uppercase mb-1 flex items-center gap-1">
-                  Current Retirement Portfolio <Info className="w-3 h-3 text-slate-400" />
+                  Current Portfolio <Info className="w-3 h-3 text-slate-400" />
                 </label>
                 <div className="absolute left-0 bottom-full mb-2 hidden group-hover:block w-64 bg-slate-800 text-white text-xs p-2 rounded shadow-lg z-10">
-                  Total of all 401k, Roth, IRA, and other retirement assets.
+                  Total of all 401k, Roth, IRA, other retirement assets, and non-retirement investment accounts.
                 </div>
                 <FormattedNumberInput
                   name="currentPortfolio"
@@ -241,8 +241,8 @@ export const AccumulationPage = ({
                   <label className="block text-xs font-bold text-slate-500 uppercase mb-1 flex items-center gap-1">
                     Current Monthly Spend <Info className="w-3 h-3 text-slate-400" />
                   </label>
-                  <div className="absolute left-0 bottom-full mb-2 hidden group-hover:block w-56 bg-slate-800 text-white text-xs p-2 rounded shadow-lg z-10">
-                    Your current monthly living expenses before retirement.
+                  <div className="absolute left-0 bottom-full mb-2 hidden group-hover:block w-64 bg-slate-800 text-white text-xs p-2 rounded shadow-lg z-10">
+                    All monthly expenses including housing, utilities, food, transportation, healthcare, vacations, and entertainment. Excludes savings and taxes.
                   </div>
                   <FormattedNumberInput
                     name="currentSpending"
@@ -255,8 +255,8 @@ export const AccumulationPage = ({
                   <label className="block text-xs font-bold text-slate-500 uppercase mb-1 flex items-center gap-1">
                     Annual Savings <Info className="w-3 h-3 text-slate-400" />
                   </label>
-                  <div className="absolute left-0 bottom-full mb-2 hidden group-hover:block w-56 bg-slate-800 text-white text-xs p-2 rounded shadow-lg z-10">
-                    Total yearly contributions to all retirement accounts.
+                  <div className="absolute left-0 bottom-full mb-2 hidden group-hover:block w-64 bg-slate-800 text-white text-xs p-2 rounded shadow-lg z-10">
+                    Total yearly contributions to all retirement accounts (401k, IRA, Roth) plus after-tax savings and investment accounts.
                   </div>
                   <FormattedNumberInput
                     name="annualSavings"

@@ -57,7 +57,11 @@ export const ArchitectPage = ({
   targetMaxPortfolioAge,
   onSetTargetMaxPortfolioAge,
   onUpdateSSStartAge,
-  onUpdatePartnerSSStartAge
+  onUpdatePartnerSSStartAge,
+  // Additional Income
+  onAddAdditionalIncome,
+  onUpdateAdditionalIncome,
+  onRemoveAdditionalIncome
 }) => {
   return (
     <div className={`min-h-screen bg-slate-50 font-sans text-slate-800 ${isGeneratingReport ? 'print-mode' : 'p-4 sm:p-6 lg:p-8'}`}>
@@ -211,7 +215,7 @@ export const ArchitectPage = ({
                   </label>
                   <button
                     onClick={onApplyFourPercentRule}
-                    className="text-[9px] bg-slate-100 text-slate-600 px-1.5 py-0.5 rounded border border-slate-200 hover:bg-slate-200"
+                    className="text-[9px] bg-yellow-50 text-yellow-700 px-1.5 py-0.5 rounded border border-yellow-200 hover:bg-yellow-100 transition-colors font-medium"
                   >
                     Set to 4% Rule
                   </button>
@@ -255,7 +259,7 @@ export const ArchitectPage = ({
                   <h4 className="text-xs font-bold text-slate-700 uppercase flex items-center gap-1"><Shield className="w-3 h-3" /> Social Security</h4>
                   <button
                     onClick={() => onSetActiveTab('ss')}
-                    className="text-[10px] bg-emerald-50 text-emerald-700 px-2 py-1 rounded border border-emerald-200 hover:bg-emerald-100 transition-colors"
+                    className="text-[10px] bg-yellow-50 text-yellow-700 px-2 py-1 rounded border border-yellow-200 hover:bg-yellow-100 transition-colors font-medium"
                   >
                     Get Recommendation
                   </button>
@@ -312,7 +316,7 @@ export const ArchitectPage = ({
                   <div className="grid grid-cols-2 gap-2">
                     <div className="relative group">
                       <label className="text-[10px] text-slate-500 uppercase flex items-center gap-1">
-                        Monthly Amount <Info className="w-3 h-3 text-slate-400" />
+                        Monthly Pension <Info className="w-3 h-3 text-slate-400" />
                       </label>
                       <div className="absolute left-0 bottom-full mb-1 hidden group-hover:block w-56 bg-slate-800 text-white text-xs p-2 rounded shadow-lg z-10">
                         Monthly pension or other guaranteed income amount.
@@ -321,13 +325,121 @@ export const ArchitectPage = ({
                     </div>
                     <div className="relative group">
                       <label className="text-[10px] text-slate-500 uppercase flex items-center gap-1">
-                        Start Age <Info className="w-3 h-3 text-slate-400" />
+                        Pension Start Age <Info className="w-3 h-3 text-slate-400" />
                       </label>
                       <div className="absolute left-0 bottom-full mb-1 hidden group-hover:block w-48 bg-slate-800 text-white text-xs p-2 rounded shadow-lg z-10">
                         The age your pension payments begin.
                       </div>
                       <input type="number" name="pensionStartAge" value={inputs.pensionStartAge} onChange={onInputChange} min={55} max={80} className="w-full px-2 py-1 border rounded-md text-sm" />
                     </div>
+                  </div>
+
+                  {/* Additional Income Streams */}
+                  <div className="border-t border-slate-100 pt-3 mt-3">
+                    <div className="flex justify-between items-center mb-2">
+                      <span className="text-[10px] font-bold text-slate-500 uppercase">Additional Income & One-Time Events</span>
+                      <button
+                        onClick={onAddAdditionalIncome}
+                        className="flex items-center gap-1 px-2 py-1 text-[10px] bg-emerald-50 text-emerald-700 rounded border border-emerald-200 hover:bg-emerald-100"
+                      >
+                        <Plus className="w-3 h-3" /> Add
+                      </button>
+                    </div>
+
+                    {inputs.additionalIncomes?.length === 0 && (
+                      <p className="text-[10px] text-slate-400 italic">
+                        Rental income, inheritance, real estate sale, etc.
+                      </p>
+                    )}
+
+                    {inputs.additionalIncomes?.map((income) => (
+                      <div key={income.id} className="p-2 bg-slate-50 rounded border border-slate-200 mb-2">
+                        <div className="flex justify-between items-center mb-2">
+                          <select
+                            value={income.name}
+                            onChange={(e) => {
+                              const type = e.target.value;
+                              onUpdateAdditionalIncome(income.id, 'name', type);
+                              // Auto-set one-time for lump sum events
+                              const oneTimeTypes = ['Real Estate Sale', 'Inheritance', 'Business Sale'];
+                              const isOneTime = oneTimeTypes.includes(type);
+                              onUpdateAdditionalIncome(income.id, 'isOneTime', isOneTime);
+                              if (isOneTime) onUpdateAdditionalIncome(income.id, 'endAge', income.startAge);
+                            }}
+                            className="text-[10px] font-medium bg-white border rounded px-1 py-0.5"
+                          >
+                            <option value="">Type...</option>
+                            <option value="Rental Income">Rental Income (Monthly)</option>
+                            <option value="Part-Time Work">Part-Time Work (Monthly)</option>
+                            <option value="Annuity">Annuity (Monthly)</option>
+                            <option value="Real Estate Sale">Real Estate Sale (One-Time)</option>
+                            <option value="Inheritance">Inheritance (One-Time)</option>
+                            <option value="Business Sale">Business Sale (One-Time)</option>
+                            <option value="Other">Other</option>
+                          </select>
+                          <button onClick={() => onRemoveAdditionalIncome(income.id)} className="p-0.5 text-red-500 hover:bg-red-50 rounded">
+                            <Trash2 className="w-3 h-3" />
+                          </button>
+                        </div>
+                        <div className="grid grid-cols-4 gap-1">
+                          <div>
+                            <label className="block text-[8px] text-slate-500 uppercase">{income.isOneTime ? 'Amount' : 'Monthly'}</label>
+                            <FormattedNumberInput
+                              value={income.amount}
+                              onChange={(e) => onUpdateAdditionalIncome(income.id, 'amount', parseFloat(e.target.value) || 0)}
+                              className="w-full px-1 py-0.5 border rounded text-[10px]"
+                            />
+                          </div>
+                          <div>
+                            <label className="block text-[8px] text-slate-500 uppercase">{income.isOneTime ? 'Age' : 'Start'}</label>
+                            <input
+                              type="number"
+                              value={income.startAge}
+                              onChange={(e) => {
+                                const age = parseInt(e.target.value) || 0;
+                                onUpdateAdditionalIncome(income.id, 'startAge', age);
+                                if (income.isOneTime) onUpdateAdditionalIncome(income.id, 'endAge', age);
+                              }}
+                              className="w-full px-1 py-0.5 border rounded text-[10px]"
+                            />
+                          </div>
+                          {!income.isOneTime && (
+                            <div>
+                              <label className="block text-[8px] text-slate-500 uppercase">End</label>
+                              <input
+                                type="number"
+                                value={income.endAge}
+                                onChange={(e) => onUpdateAdditionalIncome(income.id, 'endAge', parseInt(e.target.value) || 100)}
+                                className="w-full px-1 py-0.5 border rounded text-[10px]"
+                              />
+                            </div>
+                          )}
+                          <div className="flex flex-col justify-end gap-0.5">
+                            <label className="flex items-center gap-0.5 text-[8px] text-slate-500">
+                              <input
+                                type="checkbox"
+                                checked={income.isOneTime}
+                                onChange={(e) => {
+                                  onUpdateAdditionalIncome(income.id, 'isOneTime', e.target.checked);
+                                  if (e.target.checked) onUpdateAdditionalIncome(income.id, 'endAge', income.startAge);
+                                }}
+                                className="w-2.5 h-2.5"
+                              />
+                              One-Time
+                            </label>
+                            <label className="flex items-center gap-0.5 text-[8px] text-slate-500">
+                              <input
+                                type="checkbox"
+                                checked={income.inflationAdjusted}
+                                onChange={(e) => onUpdateAdditionalIncome(income.id, 'inflationAdjusted', e.target.checked)}
+                                className="w-2.5 h-2.5"
+                              />
+                              Inflation Adj
+                            </label>
+                          </div>
+                        </div>
+                      </div>
+                    ))}
                   </div>
                 </div>
               </div>
@@ -487,7 +599,7 @@ const AllocationTab = ({ inputs, basePlan, assumptions, projectionData, clientIn
                 data={[
                   { name: 'Short Term', value: basePlan.b1Val, color: COLORS.shortTerm },
                   { name: 'Mid Term', value: basePlan.b2Val, color: COLORS.midTerm },
-                  { name: 'Hedged', value: basePlan.b3Val, color: COLORS.hedged },
+                  { name: 'Balanced 60/40', value: basePlan.b3Val, color: COLORS.hedged },
                   { name: 'Inc & Gro', value: basePlan.b4Val, color: COLORS.income },
                   { name: 'Long Term', value: Math.max(0, basePlan.b5Val), color: COLORS.longTerm },
                 ]}
@@ -528,7 +640,7 @@ const AllocationTab = ({ inputs, basePlan, assumptions, projectionData, clientIn
             description="Conservative growth bridge (Years 4-6)."
           />
           <AllocationRow
-            color={COLORS.hedged} name="3. Hedged Growth"
+            color={COLORS.hedged} name="3. Balanced 60/40"
             amount={basePlan.b3Val} percent={((basePlan.b3Val / inputs.totalPortfolio) * 100).toFixed(1)}
             returnRate={assumptions.b3.return} stdDev={assumptions.b3.stdDev}
             historicalReturn={assumptions.b3.historical}
@@ -592,7 +704,7 @@ const AllocationTab = ({ inputs, basePlan, assumptions, projectionData, clientIn
               <ComposedChart data={projectionData}>
                 <CartesianGrid strokeDasharray="3 3" vertical={false} />
                 <XAxis dataKey="year" />
-                <YAxis tickFormatter={(val) => `$${val / 1000}k`} />
+                <YAxis tickFormatter={(val) => `$${(val / 1000000).toFixed(1)}M`} />
                 <YAxis yAxisId="right" orientation="right" tickFormatter={(val) => `${val.toFixed(1)}%`} domain={[0, 'auto']} />
                 <Tooltip
                   formatter={(val, name) => {
@@ -613,7 +725,7 @@ const AllocationTab = ({ inputs, basePlan, assumptions, projectionData, clientIn
             <Activity className="w-4 h-4 mt-0.5" />
             <p>
               <strong>Distribution Rate (Red Line):</strong> Shows annual withdrawal as % of portfolio. Rising rate indicates depletion risk. <br />
-              <strong>Balanced 60/40 (Gold Line):</strong> Benchmark comparison using Hedged Growth returns.
+              <strong>Balanced 60/40 (Gold Line):</strong> Benchmark comparison using Balanced 60/40 returns.
             </p>
           </div>
         </>
@@ -626,6 +738,7 @@ const AllocationTab = ({ inputs, basePlan, assumptions, projectionData, clientIn
                 {clientInfo.isMarried && <th className="p-2 text-left">Partner Age</th>}
                 <th className="p-2">Start Balance</th>
                 <th className="p-2 text-emerald-600">Growth</th>
+                <th className="p-2 text-purple-600">Contribution</th>
                 <th className="p-2 text-blue-600">Income (SS/Pens)</th>
                 <th className="p-2 text-orange-600">Withdrawal</th>
                 <th className="p-2 text-slate-800">Total Spend</th>
@@ -639,6 +752,7 @@ const AllocationTab = ({ inputs, basePlan, assumptions, projectionData, clientIn
                   {clientInfo.isMarried && <td className="p-2 text-left text-slate-500">{Math.floor(row.partnerAge)}</td>}
                   <td className="p-2 text-slate-500">${row.startBalance.toLocaleString()}</td>
                   <td className="p-2 text-emerald-600">+${row.growth.toLocaleString()}</td>
+                  <td className="p-2 text-purple-600">{row.contribution > 0 ? `+$${row.contribution.toLocaleString()}` : '-'}</td>
                   <td className="p-2 text-blue-600">+${row.ssIncome.toLocaleString()}</td>
                   <td className="p-2 text-orange-600">-${row.distribution.toLocaleString()}</td>
                   <td className="p-2 font-medium text-slate-800">${row.expenses.toLocaleString()}</td>
@@ -678,7 +792,7 @@ const MonteCarloTab = ({ monteCarloData, rebalanceFreq }) => (
           <ComposedChart data={monteCarloData.data}>
             <CartesianGrid strokeDasharray="3 3" vertical={false} />
             <XAxis dataKey="year" />
-            <YAxis tickFormatter={(val) => `$${val / 1000}k`} />
+            <YAxis tickFormatter={(val) => `$${(val / 1000000).toFixed(1)}M`} />
             <Legend />
             <Area type="monotone" dataKey="p90" name="Upside (90th Percentile)" stroke="#166534" strokeWidth={2} fill={COLORS.midTerm} fillOpacity={0.3} />
             <Area type="monotone" dataKey="p10" name="Downside (10th Percentile)" stroke="#dc2626" strokeWidth={2} fill="white" fillOpacity={1} />
@@ -752,14 +866,22 @@ const SSOptimizationTab = ({ clientInfo, inputs, ssAnalysis, ssPartnerAnalysis, 
       {/* Partner Recommendation */}
       {clientInfo.isMarried && ssPartnerAnalysis && (
         <div className="mb-12 border-t pt-8">
-          <div className="bg-slate-800 text-white p-6 rounded-xl mb-6 flex items-center gap-4">
-            <Users className="w-10 h-10 text-yellow-500" />
-            <div>
-              <h4 className="text-lg font-bold">Partner Recommendation</h4>
-              <p className="text-gray-400 text-sm mt-1">
-                Claim at Age <strong className="text-yellow-500 text-lg">{ssPartnerAnalysis.winner.age}</strong> to maximize portfolio balance at age {targetMaxPortfolioAge}.
-              </p>
+          <div className="bg-slate-800 text-white p-6 rounded-xl mb-6 flex items-center justify-between">
+            <div className="flex items-center gap-4">
+              <Users className="w-10 h-10 text-yellow-500" />
+              <div>
+                <h4 className="text-lg font-bold">Partner Recommendation</h4>
+                <p className="text-gray-400 text-sm mt-1">
+                  Claim at Age <strong className="text-yellow-500 text-lg">{ssPartnerAnalysis.winner.age}</strong> to maximize portfolio balance at age {targetMaxPortfolioAge}.
+                </p>
+              </div>
             </div>
+            <button
+              onClick={() => onUpdatePartnerSSStartAge(ssPartnerAnalysis.winner.age)}
+              className="px-4 py-2 bg-yellow-500 hover:bg-yellow-400 text-black font-bold rounded-lg transition-all flex items-center gap-2"
+            >
+              <CheckCircle className="w-4 h-4" /> Apply Age {ssPartnerAnalysis.winner.age}
+            </button>
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-8">

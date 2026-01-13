@@ -30,18 +30,31 @@ const getIncomeInflationFactor = (inflationRate, yearIndex) => {
  * @param {Array} additionalIncomes - Array of additional income streams
  * @param {number} age - Current age
  * @param {number} inflationFactor - Inflation adjustment factor
- * @returns {number} Total additional income
+ * @returns {object} Object with recurring income and one-time contributions
  */
 const calculateAdditionalIncome = (additionalIncomes, age, inflationFactor) => {
   let income = 0;
+  let oneTimeContributions = 0;
+
   additionalIncomes.forEach(stream => {
-    if (age >= stream.startAge && age <= (stream.endAge || 100)) {
-      let streamAmount = stream.amount * 12;
-      if (stream.inflationAdjusted) streamAmount *= inflationFactor;
-      income += streamAmount;
+    if (stream.isOneTime) {
+      // One-time events: only apply at the specific age, add to portfolio
+      if (age === stream.startAge) {
+        let streamAmount = stream.amount;
+        if (stream.inflationAdjusted) streamAmount *= inflationFactor;
+        oneTimeContributions += streamAmount;
+      }
+    } else {
+      // Recurring income: multiply by 12 for annual, apply over age range
+      if (age >= stream.startAge && age <= (stream.endAge || 100)) {
+        let streamAmount = stream.amount * 12;
+        if (stream.inflationAdjusted) streamAmount *= inflationFactor;
+        income += streamAmount;
+      }
     }
   });
-  return income;
+
+  return { income, oneTimeContributions };
 };
 
 /**
@@ -94,8 +107,10 @@ export const calculateSSAnalysis = ({ inputs, clientInfo, assumptions, targetMax
         income += inputs.monthlyPension * 12 * incomeInflationFactor;
       }
 
-      // Additional income streams
-      income += calculateAdditionalIncome(inputs.additionalIncomes, age, incomeInflationFactor);
+      // Additional income streams (recurring only - one-time adds to portfolio)
+      const additionalIncomeResult = calculateAdditionalIncome(inputs.additionalIncomes || [], age, incomeInflationFactor);
+      income += additionalIncomeResult.income;
+      balance += additionalIncomeResult.oneTimeContributions;
 
       balance -= Math.max(0, expense - income);
     }
@@ -168,8 +183,10 @@ export const calculateSSPartnerAnalysis = ({ inputs, clientInfo, assumptions, ta
         income += inputs.monthlyPension * 12 * incomeInflationFactor;
       }
 
-      // Additional income streams
-      income += calculateAdditionalIncome(inputs.additionalIncomes, age, incomeInflationFactor);
+      // Additional income streams (recurring only - one-time adds to portfolio)
+      const additionalIncomeResult = calculateAdditionalIncome(inputs.additionalIncomes || [], age, incomeInflationFactor);
+      income += additionalIncomeResult.income;
+      balance += additionalIncomeResult.oneTimeContributions;
 
       balance -= Math.max(0, expense - income);
     }
