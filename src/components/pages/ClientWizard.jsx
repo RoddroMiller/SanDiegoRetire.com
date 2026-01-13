@@ -608,7 +608,7 @@ export const ClientWizard = ({
                 </p>
                 <div className="absolute left-0 bottom-full mb-2 hidden group-hover:block w-72 bg-slate-800 text-white text-xs p-3 rounded shadow-lg z-20">
                   <p className="font-bold mb-1">How is the recommendation calculated?</p>
-                  <p>We analyze each claiming age (62-70) by simulating your portfolio through retirement. The recommended age is the one that results in the largest portfolio balance at age {clientInfo.retirementAge + 30 > 95 ? 95 : clientInfo.retirementAge + 30}, considering your spending needs and other income sources.</p>
+                  <p>We analyze each claiming age (62-70) by simulating your portfolio through retirement. The recommended age is the one that results in the largest portfolio balance at age 80, considering your spending needs and other income sources.</p>
                 </div>
               </div>
 
@@ -649,7 +649,7 @@ export const ClientWizard = ({
                   <div className="flex justify-between items-center">
                     <div>
                       <p className="text-sm font-bold text-slate-800">Optimized (Recommended)</p>
-                      <p className="text-xs text-slate-500">Maximizes portfolio at age {clientInfo.retirementAge + 30 > 95 ? 95 : clientInfo.retirementAge + 30}</p>
+                      <p className="text-xs text-slate-500">Maximizes portfolio at age 80</p>
                     </div>
                     <span className="text-lg font-bold text-emerald-700">Age {ssAnalysis?.winner?.age || 67}</span>
                   </div>
