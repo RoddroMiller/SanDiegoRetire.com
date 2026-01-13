@@ -602,7 +602,15 @@ export const ClientWizard = ({
 
             {/* SS Optimizer Summary */}
             <div className="mt-4 p-4 bg-yellow-50 rounded-lg border border-yellow-200">
-              <p className="text-xs font-bold text-yellow-800 uppercase mb-3">Claiming Strategy Options</p>
+              <div className="relative group inline-block mb-3">
+                <p className="text-xs font-bold text-yellow-800 uppercase flex items-center gap-1 cursor-help">
+                  Claiming Strategy Options <Info className="w-3 h-3 text-yellow-600" />
+                </p>
+                <div className="absolute left-0 bottom-full mb-2 hidden group-hover:block w-72 bg-slate-800 text-white text-xs p-3 rounded shadow-lg z-20">
+                  <p className="font-bold mb-1">How is the recommendation calculated?</p>
+                  <p>We analyze each claiming age (62-70) by simulating your portfolio through retirement. The recommended age is the one that results in the largest portfolio balance at age {clientInfo.retirementAge + 30 > 95 ? 95 : clientInfo.retirementAge + 30}, considering your spending needs and other income sources.</p>
+                </div>
+              </div>
 
               <div className="space-y-3">
                 {/* Option 1: Maximize Legacy */}
@@ -619,21 +627,35 @@ export const ClientWizard = ({
                   </div>
                 </div>
 
-                {/* Option 2: Balanced / Recommended */}
+                {/* Option 2: Full Retirement Age */}
                 <div
-                  className={`p-3 rounded-lg border-2 cursor-pointer transition-all ${inputs.ssStartAge === (ssAnalysis?.winner?.age || 67) && inputs.ssStartAge !== 70 && inputs.ssStartAge !== 62 ? 'border-emerald-500 bg-emerald-50' : 'border-slate-200 bg-white hover:border-emerald-300'}`}
+                  className={`p-3 rounded-lg border-2 cursor-pointer transition-all ${inputs.ssStartAge === 67 ? 'border-emerald-500 bg-emerald-50' : 'border-slate-200 bg-white hover:border-emerald-300'}`}
+                  onClick={() => onUpdateSSStartAge(67)}
+                >
+                  <div className="flex justify-between items-center">
+                    <div>
+                      <p className="text-sm font-bold text-slate-800">Full Retirement Age</p>
+                      <p className="text-xs text-slate-500">Claim at FRA with no reduction or increase</p>
+                    </div>
+                    <span className="text-lg font-bold text-emerald-700">Age 67</span>
+                  </div>
+                </div>
+
+                {/* Option 3: Optimized / Recommended */}
+                <div
+                  className={`p-3 rounded-lg border-2 cursor-pointer transition-all ${inputs.ssStartAge === (ssAnalysis?.winner?.age || 67) && inputs.ssStartAge !== 70 && inputs.ssStartAge !== 67 && inputs.ssStartAge !== 62 ? 'border-emerald-500 bg-emerald-50' : 'border-slate-200 bg-white hover:border-emerald-300'}`}
                   onClick={() => onUpdateSSStartAge(ssAnalysis?.winner?.age || 67)}
                 >
                   <div className="flex justify-between items-center">
                     <div>
-                      <p className="text-sm font-bold text-slate-800">Balanced (Recommended)</p>
-                      <p className="text-xs text-slate-500">Optimized based on your portfolio & spending</p>
+                      <p className="text-sm font-bold text-slate-800">Optimized (Recommended)</p>
+                      <p className="text-xs text-slate-500">Maximizes portfolio at age {clientInfo.retirementAge + 30 > 95 ? 95 : clientInfo.retirementAge + 30}</p>
                     </div>
                     <span className="text-lg font-bold text-emerald-700">Age {ssAnalysis?.winner?.age || 67}</span>
                   </div>
                 </div>
 
-                {/* Option 3: Maximize Early Portfolio */}
+                {/* Option 4: Maximize Early Portfolio */}
                 <div
                   className={`p-3 rounded-lg border-2 cursor-pointer transition-all ${inputs.ssStartAge === 62 ? 'border-emerald-500 bg-emerald-50' : 'border-slate-200 bg-white hover:border-emerald-300'}`}
                   onClick={() => onUpdateSSStartAge(62)}
