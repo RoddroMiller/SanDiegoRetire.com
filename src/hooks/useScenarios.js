@@ -98,6 +98,59 @@ export const useScenarios = ({ currentUser, userRole }) => {
   }, [currentUser]);
 
   /**
+   * Save progress silently (for both clients and advisors)
+   * @param {object} scenarioState - Current scenario state to save
+   * @param {string} role - User role (client/advisor/master)
+   * @returns {Promise<boolean>} Success status
+   */
+  const saveProgress = useCallback(async (scenarioState, role) => {
+    const { clientInfo, inputs, assumptions, targetMaxPortfolioAge, rebalanceFreq } = scenarioState;
+
+    if (!currentUser || !db) {
+      console.log("Database not connected - progress not saved.");
+      return false;
+    }
+
+    const isClient = role === 'client';
+    const docId = isClient
+      ? `progress_${clientInfo.name || clientInfo.email || 'client'}_${Date.now()}`
+      : (clientInfo.email || clientInfo.name || `scenario_${Date.now()}`);
+    const safeDocId = docId.replace(/[^a-zA-Z0-9_-]/g, '_');
+
+    const scenarioData = {
+      advisorId: isClient ? 'CLIENT_PROGRESS' : currentUser.uid,
+      advisorEmail: isClient ? 'Client Progress' : (currentUser.email || 'anonymous'),
+      isClientSubmission: false,
+      clientInfo,
+      inputs,
+      assumptions,
+      targetMaxPortfolioAge,
+      rebalanceFreq,
+      updatedAt: Date.now()
+    };
+
+    try {
+      await setDoc(
+        doc(db, 'artifacts', appId, 'public', 'data', 'scenarios', safeDocId),
+        scenarioData
+      );
+
+      // Update local state for advisors
+      if (!isClient) {
+        setSavedScenarios(prev => {
+          const filtered = prev.filter(s => s.id !== safeDocId);
+          return [{ id: safeDocId, ...scenarioData }, ...filtered];
+        });
+      }
+
+      return true;
+    } catch (error) {
+      console.error("Error saving progress:", error);
+      return false;
+    }
+  }, [currentUser]);
+
+  /**
    * Submit a scenario (for clients)
    * @param {object} scenarioState - Current scenario state to submit
    * @returns {Promise<boolean>} Success status
@@ -198,6 +251,7 @@ export const useScenarios = ({ currentUser, userRole }) => {
 
     // Actions
     saveScenario,
+    saveProgress,
     submitClientScenario,
     loadScenario,
     deleteScenario,

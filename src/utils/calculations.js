@@ -41,9 +41,10 @@ export const getAdjustedSS = (pia, startAge) => {
 /**
  * Calculate accumulation phase data (portfolio growth before retirement)
  * @param {object} clientInfo - Client information object
+ * @param {number} inflationRate - Annual inflation rate for savings adjustment
  * @returns {Array} Array of yearly balance data points
  */
-export const calculateAccumulation = (clientInfo) => {
+export const calculateAccumulation = (clientInfo, inflationRate = 0) => {
   const { currentAge, retirementAge, currentPortfolio, annualSavings, expectedReturn } = clientInfo;
   const years = Math.max(0, retirementAge - currentAge);
   const data = [];
@@ -52,7 +53,8 @@ export const calculateAccumulation = (clientInfo) => {
   for (let i = 0; i <= years; i++) {
     data.push({ age: currentAge + i, balance: Math.round(balance) });
     if (i < years) {
-      balance += annualSavings;
+      const inflationAdjustedSavings = annualSavings * Math.pow(1 + (inflationRate / 100), i);
+      balance += inflationAdjustedSavings;
       balance *= (1 + (expectedReturn / 100));
     }
   }
@@ -219,9 +221,8 @@ export const runSimulation = (basePlan, assumptions, inputs, rebalanceFreq, isMo
         benchmarkBalance = 0;
       }
 
-      const withdrawOrder = rebalanceFreq === 0
-        ? ['b1', 'b2', 'b3', 'b5', 'b4']
-        : ['b1', 'b2', 'b5', 'b4', 'b3'];
+      // Sequential withdrawal: B1 → B2 → B3 → B4 → B5 (B5 is last)
+      const withdrawOrder = ['b1', 'b2', 'b3', 'b4', 'b5'];
 
       for (let b of withdrawOrder) {
         if (withdrawalAmount <= 0) break;
@@ -235,22 +236,51 @@ export const runSimulation = (basePlan, assumptions, inputs, rebalanceFreq, isMo
       }
 
       if (rebalanceFreq > 0 && i % rebalanceFreq === 0) {
-        const next3YearsGap = getAnnualGap(i) + getAnnualGap(i + 1) + getAnnualGap(i + 2);
-        const refillNeeded = Math.max(0, next3YearsGap - balances.b1);
-        let amountToRefill = refillNeeded;
+        // Dynamic rebalancing with rolling window targets
+        const currentTotal = Object.values(balances).reduce((a, b) => a + b, 0);
 
-        for (let b of ['b5', 'b4', 'b3']) {
-          if (amountToRefill <= 0) break;
-          if (balances[b] > amountToRefill) {
-            balances[b] -= amountToRefill;
-            balances.b1 += amountToRefill;
-            amountToRefill = 0;
-          } else if (balances[b] > 0) {
-            amountToRefill -= balances[b];
-            balances.b1 += balances[b];
-            balances[b] = 0;
+        // Helper to calculate present value of spending gaps for a range of years
+        const calcPVGaps = (startYear, endYear, rate) => {
+          let totalPV = 0;
+          for (let yr = startYear; yr <= endYear; yr++) {
+            if (yr > years) break; // Don't go beyond simulation
+            const futureGap = getAnnualGap(yr - 1);
+            const yearsOut = yr - i; // Years from current rebalance point
+            const pvFactor = Math.pow(1 + (rate / 100), yearsOut);
+            totalPV += futureGap / pvFactor;
           }
-        }
+          return totalPV;
+        };
+
+        // Calculate dynamic targets based on current year (rolling window)
+        // B1: Next 3 years (i+1 to i+3)
+        const b1Target = calcPVGaps(i + 1, i + 3, assumptions.b1.return);
+        // B2: Years 4-6 from now (i+4 to i+6)
+        const b2Target = calcPVGaps(i + 4, i + 6, assumptions.b2.return);
+        // B3: Years 7-14 from now (i+7 to i+14)
+        const b3Target = calcPVGaps(i + 7, i + 14, assumptions.b3.return);
+        // B4: Always 10% of current total
+        const b4Target = currentTotal * 0.10;
+        // B5: Everything else
+
+        // Collect all funds
+        let availableFunds = currentTotal;
+
+        // Fill buckets in priority order: B1 → B2 → B3 → B4 → B5
+        balances.b1 = Math.min(b1Target, availableFunds);
+        availableFunds -= balances.b1;
+
+        balances.b2 = Math.min(b2Target, Math.max(0, availableFunds));
+        availableFunds -= balances.b2;
+
+        balances.b3 = Math.min(b3Target, Math.max(0, availableFunds));
+        availableFunds -= balances.b3;
+
+        balances.b4 = Math.min(b4Target, Math.max(0, availableFunds));
+        availableFunds -= balances.b4;
+
+        // B5 gets whatever remains (no negatives)
+        balances.b5 = Math.max(0, availableFunds);
       }
 
       const total = Object.values(balances).reduce((a, b) => a + b, 0);

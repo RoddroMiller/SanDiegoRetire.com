@@ -193,9 +193,14 @@ export const ArchitectPage = ({
               <Briefcase className="w-4 h-4" /> Retirement Inputs
             </h3>
             <div className="space-y-4">
-              <div>
-                <label className="text-xs font-bold text-slate-500 uppercase">Starting Portfolio</label>
+              <div className="relative group">
+                <label className="text-xs font-bold text-slate-500 uppercase flex items-center gap-1">
+                  Starting Portfolio <Info className="w-3 h-3 text-slate-400" />
+                </label>
                 <div className="text-xs text-slate-400 mb-1">(From Accumulation Phase)</div>
+                <div className="absolute left-0 top-0 mt-[-40px] hidden group-hover:block w-64 bg-slate-800 text-white text-xs p-2 rounded shadow-lg z-10">
+                  Your projected portfolio value at retirement from the accumulation phase.
+                </div>
                 <FormattedNumberInput name="totalPortfolio" value={inputs.totalPortfolio} onChange={onInputChange} className="w-full px-3 py-2 border rounded-md text-sm font-bold text-emerald-700 bg-emerald-50" />
               </div>
 
@@ -222,11 +227,25 @@ export const ArchitectPage = ({
                   {showSettings ? "Hide Settings" : "Advanced Settings"}
                 </button>
                 {showSettings && (
-                  <div className="mt-2 bg-slate-50 p-2 rounded border border-slate-200">
-                    <label className="text-[10px] font-bold text-slate-500 uppercase">Inflation Rate (%)</label>
-                    <input type="number" step="0.1" name="inflationRate" value={inputs.inflationRate} onChange={onInputChange} className="w-full mb-2 px-2 py-1 text-xs border rounded" />
-                    <label className="text-[10px] font-bold text-slate-500 uppercase">Personal Inflation Rate (%)</label>
-                    <input type="number" step="0.1" name="personalInflationRate" value={inputs.personalInflationRate} onChange={onInputChange} className="w-full px-2 py-1 text-xs border rounded" />
+                  <div className="mt-2 bg-slate-50 p-2 rounded border border-slate-200 space-y-2">
+                    <div className="relative group">
+                      <label className="text-[10px] font-bold text-slate-500 uppercase flex items-center gap-1">
+                        Inflation Rate (%) <Info className="w-3 h-3 text-slate-400" />
+                      </label>
+                      <div className="absolute left-0 bottom-full mb-1 hidden group-hover:block w-56 bg-slate-800 text-white text-xs p-2 rounded shadow-lg z-10">
+                        General inflation rate for income sources like Social Security and pensions.
+                      </div>
+                      <input type="number" step="0.1" name="inflationRate" value={inputs.inflationRate} onChange={onInputChange} className="w-full px-2 py-1 text-xs border rounded" />
+                    </div>
+                    <div className="relative group">
+                      <label className="text-[10px] font-bold text-slate-500 uppercase flex items-center gap-1">
+                        Personal Inflation Rate (%) <Info className="w-3 h-3 text-slate-400" />
+                      </label>
+                      <div className="absolute left-0 bottom-full mb-1 hidden group-hover:block w-56 bg-slate-800 text-white text-xs p-2 rounded shadow-lg z-10">
+                        Your personal spending inflation, typically lower than general inflation in retirement.
+                      </div>
+                      <input type="number" step="0.1" name="personalInflationRate" value={inputs.personalInflationRate} onChange={onInputChange} className="w-full px-2 py-1 text-xs border rounded" />
+                    </div>
                   </div>
                 )}
               </div>
@@ -243,23 +262,43 @@ export const ArchitectPage = ({
                 </div>
                 <div className="space-y-3">
                   <div className="grid grid-cols-2 gap-2">
-                    <div>
-                      <label className="text-[10px] text-slate-500 uppercase">Benefit @ FRA</label>
+                    <div className="relative group">
+                      <label className="text-[10px] text-slate-500 uppercase flex items-center gap-1">
+                        Benefit @ FRA <Info className="w-3 h-3 text-slate-400" />
+                      </label>
+                      <div className="absolute left-0 bottom-full mb-1 hidden group-hover:block w-56 bg-slate-800 text-white text-xs p-2 rounded shadow-lg z-10">
+                        Your Social Security benefit at Full Retirement Age (67) from your SSA statement.
+                      </div>
                       <FormattedNumberInput name="ssPIA" value={inputs.ssPIA} onChange={onInputChange} className="w-full px-2 py-1 border rounded-md text-sm" />
                     </div>
-                    <div>
-                      <label className="text-[10px] text-slate-500 uppercase">Start Age (62-70)</label>
+                    <div className="relative group">
+                      <label className="text-[10px] text-slate-500 uppercase flex items-center gap-1">
+                        Start Age (62-70) <Info className="w-3 h-3 text-slate-400" />
+                      </label>
+                      <div className="absolute left-0 bottom-full mb-1 hidden group-hover:block w-56 bg-slate-800 text-white text-xs p-2 rounded shadow-lg z-10">
+                        The age you plan to begin collecting Social Security benefits.
+                      </div>
                       <input type="number" name="ssStartAge" value={inputs.ssStartAge} onChange={onInputChange} min={62} max={70} className="w-full px-2 py-1 border rounded-md text-sm" />
                     </div>
                   </div>
                   {clientInfo.isMarried && (
                     <div className="grid grid-cols-2 gap-2">
-                      <div>
-                        <label className="text-[10px] text-slate-500 uppercase">Partner Benefit</label>
+                      <div className="relative group">
+                        <label className="text-[10px] text-slate-500 uppercase flex items-center gap-1">
+                          Partner Benefit <Info className="w-3 h-3 text-slate-400" />
+                        </label>
+                        <div className="absolute left-0 bottom-full mb-1 hidden group-hover:block w-56 bg-slate-800 text-white text-xs p-2 rounded shadow-lg z-10">
+                          Your partner's Social Security benefit at Full Retirement Age.
+                        </div>
                         <FormattedNumberInput name="partnerSSPIA" value={inputs.partnerSSPIA} onChange={onInputChange} className="w-full px-2 py-1 border rounded-md text-sm" />
                       </div>
-                      <div>
-                        <label className="text-[10px] text-slate-500 uppercase">Start Age (62-70)</label>
+                      <div className="relative group">
+                        <label className="text-[10px] text-slate-500 uppercase flex items-center gap-1">
+                          Start Age (62-70) <Info className="w-3 h-3 text-slate-400" />
+                        </label>
+                        <div className="absolute left-0 bottom-full mb-1 hidden group-hover:block w-56 bg-slate-800 text-white text-xs p-2 rounded shadow-lg z-10">
+                          The age your partner plans to begin collecting Social Security.
+                        </div>
                         <input type="number" name="partnerSSStartAge" value={inputs.partnerSSStartAge} onChange={onInputChange} min={62} max={70} className="w-full px-2 py-1 border rounded-md text-sm" />
                       </div>
                     </div>
@@ -271,12 +310,22 @@ export const ArchitectPage = ({
                 <h4 className="text-xs font-bold text-slate-700 uppercase flex items-center gap-1 mb-3"><DollarSign className="w-3 h-3" /> Pension / Other Income</h4>
                 <div className="space-y-3">
                   <div className="grid grid-cols-2 gap-2">
-                    <div>
-                      <label className="text-[10px] text-slate-500 uppercase">Monthly Amount</label>
+                    <div className="relative group">
+                      <label className="text-[10px] text-slate-500 uppercase flex items-center gap-1">
+                        Monthly Amount <Info className="w-3 h-3 text-slate-400" />
+                      </label>
+                      <div className="absolute left-0 bottom-full mb-1 hidden group-hover:block w-56 bg-slate-800 text-white text-xs p-2 rounded shadow-lg z-10">
+                        Monthly pension or other guaranteed income amount.
+                      </div>
                       <FormattedNumberInput name="monthlyPension" value={inputs.monthlyPension} onChange={onInputChange} className="w-full px-2 py-1 border rounded-md text-sm" />
                     </div>
-                    <div>
-                      <label className="text-[10px] text-slate-500 uppercase">Start Age</label>
+                    <div className="relative group">
+                      <label className="text-[10px] text-slate-500 uppercase flex items-center gap-1">
+                        Start Age <Info className="w-3 h-3 text-slate-400" />
+                      </label>
+                      <div className="absolute left-0 bottom-full mb-1 hidden group-hover:block w-48 bg-slate-800 text-white text-xs p-2 rounded shadow-lg z-10">
+                        The age your pension payments begin.
+                      </div>
                       <input type="number" name="pensionStartAge" value={inputs.pensionStartAge} onChange={onInputChange} min={55} max={80} className="w-full px-2 py-1 border rounded-md text-sm" />
                     </div>
                   </div>

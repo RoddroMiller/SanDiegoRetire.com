@@ -1,6 +1,6 @@
 import React from 'react';
 import { ResponsiveContainer, AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip } from 'recharts';
-import { User, DollarSign, ArrowRight, FolderOpen, Loader, Trash2, LogOut } from 'lucide-react';
+import { User, DollarSign, ArrowRight, FolderOpen, Loader, Trash2, LogOut, Info } from 'lucide-react';
 
 import { COLORS, LOGO_URL } from '../../constants';
 import { formatPhoneNumber } from '../../utils';
@@ -155,8 +155,13 @@ export const AccumulationPage = ({
 
             {/* Age Inputs */}
             <div className="grid grid-cols-2 gap-4">
-              <div>
-                <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Your Age</label>
+              <div className="relative group">
+                <label className="block text-xs font-bold text-slate-500 uppercase mb-1 flex items-center gap-1">
+                  Your Age <Info className="w-3 h-3 text-slate-400" />
+                </label>
+                <div className="absolute left-0 bottom-full mb-2 hidden group-hover:block w-48 bg-slate-800 text-white text-xs p-2 rounded shadow-lg z-10">
+                  Your current age used to calculate years until retirement.
+                </div>
                 <FormattedNumberInput
                   name="currentAge"
                   value={clientInfo.currentAge}
@@ -164,8 +169,13 @@ export const AccumulationPage = ({
                   className="p-3 border rounded-lg w-full font-bold text-slate-700"
                 />
               </div>
-              <div>
-                <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Retirement Age</label>
+              <div className="relative group">
+                <label className="block text-xs font-bold text-slate-500 uppercase mb-1 flex items-center gap-1">
+                  Retirement Age <Info className="w-3 h-3 text-slate-400" />
+                </label>
+                <div className="absolute left-0 bottom-full mb-2 hidden group-hover:block w-48 bg-slate-800 text-white text-xs p-2 rounded shadow-lg z-10">
+                  The age you plan to stop working and begin taking distributions.
+                </div>
                 <FormattedNumberInput
                   name="retirementAge"
                   value={clientInfo.retirementAge}
@@ -175,8 +185,13 @@ export const AccumulationPage = ({
               </div>
               {clientInfo.isMarried && (
                 <>
-                  <div>
-                    <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Partner Age</label>
+                  <div className="relative group">
+                    <label className="block text-xs font-bold text-slate-500 uppercase mb-1 flex items-center gap-1">
+                      Partner Age <Info className="w-3 h-3 text-slate-400" />
+                    </label>
+                    <div className="absolute left-0 bottom-full mb-2 hidden group-hover:block w-48 bg-slate-800 text-white text-xs p-2 rounded shadow-lg z-10">
+                      Your partner's current age for joint planning calculations.
+                    </div>
                     <FormattedNumberInput
                       name="partnerAge"
                       value={clientInfo.partnerAge}
@@ -184,8 +199,13 @@ export const AccumulationPage = ({
                       className="p-3 border rounded-lg w-full font-bold text-slate-700"
                     />
                   </div>
-                  <div>
-                    <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Partner Retire Age</label>
+                  <div className="relative group">
+                    <label className="block text-xs font-bold text-slate-500 uppercase mb-1 flex items-center gap-1">
+                      Partner Retire Age <Info className="w-3 h-3 text-slate-400" />
+                    </label>
+                    <div className="absolute left-0 bottom-full mb-2 hidden group-hover:block w-48 bg-slate-800 text-white text-xs p-2 rounded shadow-lg z-10">
+                      The age your partner plans to retire.
+                    </div>
                     <FormattedNumberInput
                       name="partnerRetirementAge"
                       value={clientInfo.partnerRetirementAge}
@@ -202,10 +222,13 @@ export const AccumulationPage = ({
               <DollarSign className="w-5 h-5 text-emerald-600" /> Financial Inputs
             </h3>
             <div className="space-y-4">
-              <div>
-                <label className="block text-xs font-bold text-slate-500 uppercase mb-1">
-                  Current Investable Assets
+              <div className="relative group">
+                <label className="block text-xs font-bold text-slate-500 uppercase mb-1 flex items-center gap-1">
+                  Current Retirement Portfolio <Info className="w-3 h-3 text-slate-400" />
                 </label>
+                <div className="absolute left-0 bottom-full mb-2 hidden group-hover:block w-64 bg-slate-800 text-white text-xs p-2 rounded shadow-lg z-10">
+                  Total of all 401k, Roth, IRA, and other retirement assets.
+                </div>
                 <FormattedNumberInput
                   name="currentPortfolio"
                   value={clientInfo.currentPortfolio}
@@ -214,10 +237,13 @@ export const AccumulationPage = ({
                 />
               </div>
               <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-xs font-bold text-slate-500 uppercase mb-1">
-                    Current Monthly Spend
+                <div className="relative group">
+                  <label className="block text-xs font-bold text-slate-500 uppercase mb-1 flex items-center gap-1">
+                    Current Monthly Spend <Info className="w-3 h-3 text-slate-400" />
                   </label>
+                  <div className="absolute left-0 bottom-full mb-2 hidden group-hover:block w-56 bg-slate-800 text-white text-xs p-2 rounded shadow-lg z-10">
+                    Your current monthly living expenses before retirement.
+                  </div>
                   <FormattedNumberInput
                     name="currentSpending"
                     value={clientInfo.currentSpending}
@@ -225,8 +251,13 @@ export const AccumulationPage = ({
                     className="p-3 border rounded-lg w-full"
                   />
                 </div>
-                <div>
-                  <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Annual Savings</label>
+                <div className="relative group">
+                  <label className="block text-xs font-bold text-slate-500 uppercase mb-1 flex items-center gap-1">
+                    Annual Savings <Info className="w-3 h-3 text-slate-400" />
+                  </label>
+                  <div className="absolute left-0 bottom-full mb-2 hidden group-hover:block w-56 bg-slate-800 text-white text-xs p-2 rounded shadow-lg z-10">
+                    Total yearly contributions to all retirement accounts.
+                  </div>
                   <FormattedNumberInput
                     name="annualSavings"
                     value={clientInfo.annualSavings}
@@ -235,10 +266,13 @@ export const AccumulationPage = ({
                   />
                 </div>
               </div>
-              <div>
-                <label className="block text-xs font-bold text-slate-500 uppercase mb-1">
-                  Projected Annual Portfolio Returns (%)
+              <div className="relative group">
+                <label className="block text-xs font-bold text-slate-500 uppercase mb-1 flex items-center gap-1">
+                  Projected Annual Portfolio Returns (%) <Info className="w-3 h-3 text-slate-400" />
                 </label>
+                <div className="absolute left-0 bottom-full mb-2 hidden group-hover:block w-64 bg-slate-800 text-white text-xs p-2 rounded shadow-lg z-10">
+                  Expected average annual return on your investments during accumulation phase.
+                </div>
                 <input
                   type="number"
                   step="0.1"

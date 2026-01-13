@@ -27,6 +27,7 @@ export default function BucketPortfolioBuilder() {
     isLoadingScenarios,
     saveStatus,
     saveScenario,
+    saveProgress,
     submitClientScenario,
     loadScenario,
     deleteScenario,
@@ -70,7 +71,7 @@ export default function BucketPortfolioBuilder() {
     partnerSSStartAge: 67,
     monthlyPension: 0,
     pensionStartAge: 65,
-    inflationRate: 3.0,
+    inflationRate: 2.5,
     personalInflationRate: 1.5,
     ssReinvestRate: 4.5,
     additionalIncomes: []
@@ -80,7 +81,7 @@ export default function BucketPortfolioBuilder() {
   const [assumptions, setAssumptions] = useState({
     b1: { return: 2.0, stdDev: 2.0, name: "Short Term", historical: 2.8 },
     b2: { return: 4.0, stdDev: 5.0, name: "Mid Term", historical: 5.2 },
-    b3: { return: 5.5, stdDev: 8.0, name: "Hedged Growth", historical: 7.5 },
+    b3: { return: 5.5, stdDev: 8.0, name: "Balanced 60/40", historical: 7.5 },
     b4: { return: 6.0, stdDev: 12.0, name: "Inc & Growth", historical: 9.1 },
     b5: { return: 8.0, stdDev: 18.0, name: "Long Term", historical: 10.2 },
   });
@@ -114,7 +115,7 @@ export default function BucketPortfolioBuilder() {
   };
 
   // --- Calculations (using imported utilities) ---
-  const accumulationData = useMemo(() => calculateAccumulation(clientInfo), [clientInfo]);
+  const accumulationData = useMemo(() => calculateAccumulation(clientInfo, inputs.inflationRate), [clientInfo, inputs.inflationRate]);
   const basePlan = useMemo(() => calculateBasePlan(inputs, assumptions, clientInfo), [inputs, assumptions, clientInfo]);
 
   const ssAnalysis = useMemo(() => calculateSSAnalysis({
@@ -189,8 +190,15 @@ export default function BucketPortfolioBuilder() {
   const proceedToArchitect = () => {
     const finalAccumulation = accumulationData[accumulationData.length - 1].balance;
     const yearsToRetire = Math.max(0, clientInfo.retirementAge - clientInfo.currentAge);
-    const futureSpending = clientInfo.currentSpending * Math.pow(1 + (inputs.inflationRate / 100), yearsToRetire);
-    setInputs(prev => ({ ...prev, totalPortfolio: finalAccumulation, monthlySpending: Math.round(futureSpending) }));
+    const futureSpending = clientInfo.currentSpending * Math.pow(1 + (inputs.personalInflationRate / 100), yearsToRetire);
+
+    // Create updated inputs for saving
+    const updatedInputs = { ...inputs, totalPortfolio: finalAccumulation, monthlySpending: Math.round(futureSpending) };
+
+    // Save progress silently
+    saveProgress({ clientInfo, inputs: updatedInputs, assumptions, targetMaxPortfolioAge, rebalanceFreq }, userRole);
+
+    setInputs(updatedInputs);
     setStep(2);
     window.scrollTo(0, 0);
   };
