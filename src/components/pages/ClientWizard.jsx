@@ -1,10 +1,10 @@
-import React, { useState, useMemo } from 'react';
-import { ResponsiveContainer, AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ComposedChart, Line } from 'recharts';
+import React, { useState, useMemo, useEffect } from 'react';
+import { ResponsiveContainer, AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ComposedChart, Line, Legend } from 'recharts';
 import { User, DollarSign, ArrowRight, ArrowLeft, Shield, Info, Activity, Briefcase, Send, TrendingUp, Clock, PiggyBank, BarChart2, Table as TableIcon, Plus, Trash2, AlertCircle } from 'lucide-react';
 
 import { COLORS, LOGO_URL } from '../../constants';
 import { formatPhoneNumber } from '../../utils';
-import { Card, StatBox, FormattedNumberInput } from '../ui';
+import { Card, StatBox, FormattedNumberInput, Disclaimer } from '../ui';
 
 /**
  * Client Wizard - Multi-step flow for prospects/clients
@@ -43,7 +43,19 @@ export const ClientWizard = ({
   const [showCashFlowTable, setShowCashFlowTable] = useState(false);
   const [validationError, setValidationError] = useState('');
 
-  // Calculate improvement solutions
+  // Improvement solution selections
+  const [selectedImprovements, setSelectedImprovements] = useState({
+    delay: false,
+    savings: false,
+    spending: false
+  });
+  const [customImprovements, setCustomImprovements] = useState({
+    delayYears: 0,
+    additionalSavings: 0,
+    spendingReduction: 0
+  });
+
+  // Calculate improvement solutions based on actual financial picture
   const improvementSolutions = useMemo(() => {
     const currentSuccessRate = monteCarloData?.successRate || 0;
     const targetSuccessRate = 95;
@@ -52,24 +64,164 @@ export const ClientWizard = ({
       return { needed: false, delayYears: 0, additionalSavings: 0, spendingReduction: 0 };
     }
 
-    // Calculate delay retirement solution (roughly 2-3% improvement per year)
     const successGap = targetSuccessRate - currentSuccessRate;
-    const delayYears = Math.min(10, Math.ceil(successGap / 3));
+    const yearsToRetirement = Math.max(1, clientInfo.retirementAge - clientInfo.currentAge);
+    const annualSpending = inputs.monthlySpending * 12;
+    const portfolio = inputs.totalPortfolio || (accumulationData[accumulationData.length - 1]?.balance || 0);
 
-    // Calculate additional savings needed (roughly $10k/year per 1% improvement)
-    const additionalSavings = Math.ceil(successGap / 1) * 5000;
+    // Calculate existing additional income at retirement (annual)
+    let additionalIncomeAtRetirement = 0;
+    let oneTimeBoosts = 0;
 
-    // Calculate spending reduction (roughly $200/month per 1% improvement)
-    const spendingReduction = Math.ceil(successGap * 150);
+    if (inputs.additionalIncomes && inputs.additionalIncomes.length > 0) {
+      inputs.additionalIncomes.forEach(income => {
+        if (income.isOneTime) {
+          // One-time events add to portfolio, spread impact over 30 years
+          if (income.startAge >= clientInfo.currentAge) {
+            oneTimeBoosts += income.amount;
+          }
+        } else {
+          // Recurring income at retirement age
+          if (income.startAge <= clientInfo.retirementAge && income.endAge >= clientInfo.retirementAge) {
+            additionalIncomeAtRetirement += income.amount * 12;
+          }
+        }
+      });
+    }
+
+    // Estimate annual income gap (what the portfolio needs to cover after other income)
+    // Using 4% rule as baseline for sustainable withdrawal
+    const sustainableWithdrawal = portfolio * 0.04;
+    const ssIncome = (inputs.ssPIA || 0) * 12; // Will start later but helps overall
+    const pensionIncome = (inputs.monthlyPension || 0) * 12;
+
+    // Total income sources (not all start at retirement, but they help overall)
+    const projectedIncome = sustainableWithdrawal + additionalIncomeAtRetirement + (oneTimeBoosts * 0.04);
+    const incomeGap = Math.max(0, annualSpending - projectedIncome);
+
+    // Scale recommendations based on actual gap and situation
+    // If there's significant additional income, recommendations should be smaller
+    const gapRatio = incomeGap / Math.max(annualSpending, 1);
+    const adjustmentFactor = Math.max(0.2, Math.min(1, gapRatio)); // Between 20% and 100%
+
+    // Delay retirement: Each year of delay adds ~1 year of savings + portfolio growth
+    // More impactful for smaller portfolios
+    const baseDelayYears = Math.ceil(successGap / 4); // ~4% improvement per year
+    const delayYears = Math.min(10, Math.max(1, Math.round(baseDelayYears * adjustmentFactor)));
+
+    // Additional savings: Based on years to retirement and income gap
+    // Each dollar saved compounds over years to retirement
+    const compoundFactor = Math.pow(1.07, yearsToRetirement); // Assume 7% growth
+    const targetAdditionalPortfolio = incomeGap / 0.04; // What additional portfolio would close the gap
+    const rawAdditionalSavings = targetAdditionalPortfolio / yearsToRetirement / compoundFactor;
+    const additionalSavings = Math.round(Math.max(1000, rawAdditionalSavings * adjustmentFactor) / 1000) * 1000;
+
+    // Spending reduction: Direct impact on sustainability
+    // Each $1 less in monthly spending = $12 less annual need = $300 less portfolio needed (at 4%)
+    const spendingReductionNeeded = incomeGap / 12; // Monthly gap
+    const spendingReduction = Math.round(Math.max(100, spendingReductionNeeded * adjustmentFactor) / 50) * 50;
 
     return {
       needed: true,
       delayYears,
       additionalSavings,
       spendingReduction,
-      currentRate: currentSuccessRate
+      currentRate: currentSuccessRate,
+      // Include context for display
+      hasAdditionalIncome: additionalIncomeAtRetirement > 0 || oneTimeBoosts > 0,
+      additionalIncomeAmount: additionalIncomeAtRetirement,
+      oneTimeAmount: oneTimeBoosts
     };
-  }, [monteCarloData]);
+  }, [monteCarloData, clientInfo, inputs, accumulationData]);
+
+  // Initialize custom improvement values when improvementSolutions changes
+  useEffect(() => {
+    if (improvementSolutions.needed) {
+      setCustomImprovements({
+        delayYears: improvementSolutions.delayYears,
+        additionalSavings: improvementSolutions.additionalSavings,
+        spendingReduction: improvementSolutions.spendingReduction
+      });
+    }
+  }, [improvementSolutions]);
+
+  // Calculate adjusted projections based on selected improvements
+  const adjustedProjections = useMemo(() => {
+    const hasAnySelection = selectedImprovements.delay || selectedImprovements.savings || selectedImprovements.spending;
+
+    if (!hasAnySelection) {
+      return {
+        hasChanges: false,
+        portfolio: inputs.totalPortfolio,
+        monthlyNeed: inputs.monthlySpending,
+        successRate: monteCarloData?.successRate || 0,
+        legacyBalance: projectionData[projectionData.length - 1]?.total || 0
+      };
+    }
+
+    // Start with current values
+    let adjustedPortfolio = inputs.totalPortfolio || (accumulationData[accumulationData.length - 1]?.balance || 0);
+    let adjustedMonthlyNeed = inputs.monthlySpending;
+    let successRateBoost = 0;
+
+    // Delay retirement: more years to save + portfolio growth
+    if (selectedImprovements.delay && customImprovements.delayYears > 0) {
+      const delayYears = customImprovements.delayYears;
+      const annualSavings = clientInfo.annualSavings || 0;
+      const growthRate = (clientInfo.expectedReturn || 7) / 100;
+
+      // Additional savings during delay years
+      for (let i = 0; i < delayYears; i++) {
+        adjustedPortfolio = adjustedPortfolio * (1 + growthRate) + annualSavings;
+      }
+
+      // Success rate improvement (~3-4% per year of delay)
+      successRateBoost += delayYears * 3.5;
+    }
+
+    // Save more: additional savings compounded to retirement
+    if (selectedImprovements.savings && customImprovements.additionalSavings > 0) {
+      const yearsToRetirement = Math.max(1, clientInfo.retirementAge - clientInfo.currentAge);
+      const growthRate = (clientInfo.expectedReturn || 7) / 100;
+      const additionalSavings = customImprovements.additionalSavings;
+
+      // Future value of additional annual savings
+      const fvFactor = (Math.pow(1 + growthRate, yearsToRetirement) - 1) / growthRate;
+      adjustedPortfolio += additionalSavings * fvFactor;
+
+      // Success rate improvement based on portfolio increase
+      const portfolioIncrease = (additionalSavings * fvFactor) / (inputs.totalPortfolio || 1);
+      successRateBoost += Math.min(15, portfolioIncrease * 20);
+    }
+
+    // Spend less in retirement: direct reduction in monthly need
+    if (selectedImprovements.spending && customImprovements.spendingReduction > 0) {
+      adjustedMonthlyNeed = Math.max(0, inputs.monthlySpending - customImprovements.spendingReduction);
+
+      // Success rate improvement (~1% per $100 reduction in monthly spending
+      successRateBoost += Math.min(20, customImprovements.spendingReduction / 100);
+    }
+
+    // Calculate adjusted success rate (capped at 99%)
+    const baseSuccessRate = monteCarloData?.successRate || 0;
+    const adjustedSuccessRate = Math.min(99, baseSuccessRate + successRateBoost);
+
+    // Estimate adjusted legacy balance
+    // Simplified: assume legacy grows proportionally with portfolio increase and spending decrease
+    const baseLegacy = projectionData[projectionData.length - 1]?.total || 0;
+    const portfolioRatio = adjustedPortfolio / (inputs.totalPortfolio || 1);
+    const spendingRatio = adjustedMonthlyNeed / (inputs.monthlySpending || 1);
+    const legacyMultiplier = portfolioRatio * (2 - spendingRatio); // Higher portfolio + lower spending = higher legacy
+    const adjustedLegacy = Math.max(0, baseLegacy * legacyMultiplier);
+
+    return {
+      hasChanges: true,
+      portfolio: adjustedPortfolio,
+      monthlyNeed: adjustedMonthlyNeed,
+      successRate: adjustedSuccessRate,
+      legacyBalance: adjustedLegacy
+    };
+  }, [selectedImprovements, customImprovements, inputs, clientInfo, monteCarloData, projectionData, accumulationData]);
 
   const handleNext = () => {
     // Validate contact info on page 1
@@ -89,8 +241,17 @@ export const ClientWizard = ({
     }
 
     setValidationError('');
-    // Save progress before moving to next step
-    onSaveProgress();
+
+    // Save progress before moving to next step (with error handling)
+    try {
+      if (onSaveProgress) {
+        onSaveProgress();
+      }
+    } catch (error) {
+      console.error('Error saving progress:', error);
+      // Continue to next step even if save fails
+    }
+
     setWizardStep(prev => Math.min(prev + 1, 4));
     window.scrollTo(0, 0);
   };
@@ -713,31 +874,47 @@ export const ClientWizard = ({
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
         <StatBox
           label="Starting Balance"
-          value={`$${(inputs.totalPortfolio / 1000000).toFixed(2)}M`}
-          subtext="At Retirement"
+          value={adjustedProjections.hasChanges && (selectedImprovements.delay || selectedImprovements.savings)
+            ? `$${(adjustedProjections.portfolio / 1000000).toFixed(2)}M`
+            : `$${(inputs.totalPortfolio / 1000000).toFixed(2)}M`}
+          subtext={adjustedProjections.hasChanges && (selectedImprovements.delay || selectedImprovements.savings)
+            ? <><span className="line-through opacity-60">${(inputs.totalPortfolio / 1000000).toFixed(2)}M</span> → +${((adjustedProjections.portfolio - inputs.totalPortfolio) / 1000).toFixed(0)}k</>
+            : "At Retirement"}
           icon={Briefcase}
-          colorClass="bg-gray-800 text-white"
+          colorClass={`bg-gray-800 text-white ${adjustedProjections.hasChanges && (selectedImprovements.delay || selectedImprovements.savings) ? 'ring-2 ring-emerald-400' : ''}`}
         />
         <StatBox
           label="Monthly Need"
-          value={`$${inputs.monthlySpending.toLocaleString()}`}
-          subtext="Inflation Adjusted"
+          value={adjustedProjections.hasChanges && selectedImprovements.spending
+            ? `$${adjustedProjections.monthlyNeed.toLocaleString()}`
+            : `$${inputs.monthlySpending.toLocaleString()}`}
+          subtext={adjustedProjections.hasChanges && selectedImprovements.spending
+            ? <><span className="line-through opacity-60">${inputs.monthlySpending.toLocaleString()}</span> → -${(inputs.monthlySpending - adjustedProjections.monthlyNeed).toLocaleString()}/mo</>
+            : "Inflation Adjusted"}
           icon={DollarSign}
-          colorClass="bg-yellow-500 text-white"
+          colorClass={`bg-yellow-500 text-white ${adjustedProjections.hasChanges && selectedImprovements.spending ? 'ring-2 ring-emerald-400' : ''}`}
         />
         <StatBox
           label="Success Probability"
-          value={`${monteCarloData?.successRate?.toFixed(1) || 0}%`}
-          subtext="30-Year Projection"
+          value={adjustedProjections.hasChanges
+            ? `${adjustedProjections.successRate.toFixed(1)}%`
+            : `${(monteCarloData?.successRate || 0).toFixed(1)}%`}
+          subtext={adjustedProjections.hasChanges
+            ? <><span className="line-through opacity-60">{(monteCarloData?.successRate || 0).toFixed(1)}%</span> → +{(adjustedProjections.successRate - (monteCarloData?.successRate || 0)).toFixed(1)}%</>
+            : "30-Year Projection"}
           icon={Activity}
-          colorClass={monteCarloData?.successRate > 80 ? "bg-emerald-600 text-white" : "bg-orange-500 text-white"}
+          colorClass={`${(adjustedProjections.hasChanges ? adjustedProjections.successRate : monteCarloData?.successRate) > 80 ? "bg-emerald-600" : "bg-orange-500"} text-white ${adjustedProjections.hasChanges ? 'ring-2 ring-yellow-300' : ''}`}
         />
         <StatBox
           label="Legacy Balance"
-          value={`$${((projectionData[projectionData.length - 1]?.total || 0) / 1000000).toFixed(2)}M`}
-          subtext="Year 30 Projection"
+          value={adjustedProjections.hasChanges
+            ? `$${(adjustedProjections.legacyBalance / 1000000).toFixed(2)}M`
+            : `$${((projectionData[projectionData.length - 1]?.total || 0) / 1000000).toFixed(2)}M`}
+          subtext={adjustedProjections.hasChanges
+            ? <><span className="line-through opacity-60">${((projectionData[projectionData.length - 1]?.total || 0) / 1000000).toFixed(2)}M</span> → +${((adjustedProjections.legacyBalance - (projectionData[projectionData.length - 1]?.total || 0)) / 1000).toFixed(0)}k</>
+            : "Year 30 Projection"}
           icon={Shield}
-          colorClass="bg-emerald-800 text-white"
+          colorClass={`bg-emerald-800 text-white ${adjustedProjections.hasChanges ? 'ring-2 ring-yellow-300' : ''}`}
         />
       </div>
 
@@ -762,26 +939,29 @@ export const ClientWizard = ({
         </div>
 
         {!showCashFlowTable ? (
-          <div className="h-80 w-full">
-            <ResponsiveContainer width="100%" height="100%">
-              <ComposedChart data={projectionData}>
-                <CartesianGrid strokeDasharray="3 3" vertical={false} />
-                <XAxis dataKey="year" />
-                <YAxis tickFormatter={(val) => `$${(val / 1000000).toFixed(1)}M`} />
-                <YAxis yAxisId="right" orientation="right" tickFormatter={(val) => `${val.toFixed(1)}%`} domain={[0, 'auto']} />
-                <Tooltip
-                  formatter={(val, name) => {
-                    if (name === 'Distribution Rate') return `${val.toFixed(2)}%`;
-                    return `$${val.toLocaleString()}`;
-                  }}
-                  labelFormatter={(l) => `Year ${l}`}
-                />
-                <Area type="monotone" dataKey="total" name="Portfolio Balance" fill={COLORS.areaFill} stroke={COLORS.areaFill} fillOpacity={0.8} />
-                <Line type="monotone" dataKey="benchmark" name="Balanced 60/40" stroke={COLORS.benchmark} strokeDasharray="5 5" strokeWidth={2} dot={false} />
-                <Line yAxisId="right" type="monotone" dataKey="distRate" name="Distribution Rate" stroke={COLORS.distRate} strokeWidth={2} dot={false} />
-              </ComposedChart>
-            </ResponsiveContainer>
-          </div>
+          <>
+            <div className="h-80 w-full">
+              <ResponsiveContainer width="100%" height="100%">
+                <ComposedChart data={projectionData}>
+                  <CartesianGrid strokeDasharray="3 3" vertical={false} />
+                  <XAxis dataKey="year" />
+                  <YAxis tickFormatter={(val) => val >= 2000000 ? `$${Math.round(val / 1000000)}M` : `$${Math.round(val / 1000)}k`} />
+                  <YAxis yAxisId="right" orientation="right" tickFormatter={(val) => `${val.toFixed(1)}%`} domain={[0, 'auto']} />
+                  <Tooltip
+                    formatter={(val, name) => {
+                      if (name === 'Distribution Rate') return `${val.toFixed(2)}%`;
+                      return `$${val.toLocaleString()}`;
+                    }}
+                    labelFormatter={(l) => `Year ${l}`}
+                  />
+                  <Legend />
+                  <Area type="monotone" dataKey="total" name="Miller Portfolio Architect Strategy" fill={COLORS.areaFill} stroke={COLORS.areaFill} fillOpacity={0.8} />
+                  <Line type="monotone" dataKey="benchmark" name="Benchmark 60/40 (Annual Rebalance)" stroke={COLORS.benchmark} strokeDasharray="5 5" strokeWidth={2} dot={false} />
+                  <Line yAxisId="right" type="monotone" dataKey="distRate" name="Distribution Rate" stroke={COLORS.distRate} strokeWidth={2} dot={false} />
+                </ComposedChart>
+              </ResponsiveContainer>
+            </div>
+          </>
         ) : (
           <div className="overflow-x-auto max-h-80">
             <table className="w-full text-xs text-right border-collapse">
@@ -820,45 +1000,178 @@ export const ClientWizard = ({
           <h3 className="font-bold text-lg text-slate-800 mb-4 flex items-center gap-2">
             <TrendingUp className="w-5 h-5 text-yellow-600" /> Ways to Improve Your Outcome
           </h3>
-          <p className="text-sm text-slate-600 mb-6">
+          <p className="text-sm text-slate-600 mb-4">
             Your current success probability is <strong>{improvementSolutions.currentRate?.toFixed(1)}%</strong>.
-            Here are three ways to reach 95% or higher:
+            Select one or more options below and adjust the amounts to see what works for you:
           </p>
+          {improvementSolutions.hasAdditionalIncome && (
+            <div className="mb-6 p-3 bg-emerald-50 border border-emerald-200 rounded-lg text-sm text-emerald-700">
+              <strong>Note:</strong> These recommendations already factor in your additional income
+              {improvementSolutions.additionalIncomeAmount > 0 && (
+                <span> (${(improvementSolutions.additionalIncomeAmount / 12).toLocaleString()}/mo recurring)</span>
+              )}
+              {improvementSolutions.oneTimeAmount > 0 && (
+                <span> and one-time events (${improvementSolutions.oneTimeAmount.toLocaleString()})</span>
+              )}
+              .
+            </div>
+          )}
 
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            <div className="p-4 bg-blue-50 rounded-lg border border-blue-200">
-              <div className="flex items-center gap-2 mb-2">
-                <Clock className="w-5 h-5 text-blue-600" />
-                <h4 className="font-bold text-blue-800">Delay Retirement</h4>
+            {/* Delay Retirement Option */}
+            <div
+              className={`p-4 rounded-lg border-2 transition-all cursor-pointer ${
+                selectedImprovements.delay
+                  ? 'bg-blue-100 border-blue-500 shadow-md'
+                  : 'bg-blue-50 border-blue-200 hover:border-blue-400'
+              }`}
+              onClick={() => setSelectedImprovements(prev => ({ ...prev, delay: !prev.delay }))}
+            >
+              <div className="flex items-center justify-between mb-3">
+                <div className="flex items-center gap-2">
+                  <input
+                    type="checkbox"
+                    checked={selectedImprovements.delay}
+                    onChange={(e) => {
+                      e.stopPropagation();
+                      setSelectedImprovements(prev => ({ ...prev, delay: e.target.checked }));
+                    }}
+                    className="w-5 h-5 text-blue-600 rounded border-blue-300"
+                  />
+                  <Clock className="w-5 h-5 text-blue-600" />
+                  <h4 className="font-bold text-blue-800">Delay Retirement</h4>
+                </div>
               </div>
-              <p className="text-2xl font-bold text-blue-700">{improvementSolutions.delayYears} years</p>
-              <p className="text-xs text-blue-600 mt-1">
-                Retire at age {clientInfo.retirementAge + improvementSolutions.delayYears} instead of {clientInfo.retirementAge}
-              </p>
+              <div className="space-y-2">
+                <label className="block text-xs text-blue-600 uppercase font-bold">Years to Delay</label>
+                <input
+                  type="number"
+                  min={1}
+                  max={15}
+                  value={customImprovements.delayYears}
+                  onChange={(e) => {
+                    e.stopPropagation();
+                    setCustomImprovements(prev => ({ ...prev, delayYears: parseInt(e.target.value) || 0 }));
+                  }}
+                  onClick={(e) => e.stopPropagation()}
+                  className="w-full p-2 border rounded text-lg font-bold text-blue-700 bg-white"
+                />
+                <p className="text-xs text-blue-600">
+                  New retirement age: <strong>{clientInfo.retirementAge + customImprovements.delayYears}</strong>
+                </p>
+              </div>
             </div>
 
-            <div className="p-4 bg-emerald-50 rounded-lg border border-emerald-200">
-              <div className="flex items-center gap-2 mb-2">
-                <PiggyBank className="w-5 h-5 text-emerald-600" />
-                <h4 className="font-bold text-emerald-800">Save More</h4>
+            {/* Save More Option */}
+            <div
+              className={`p-4 rounded-lg border-2 transition-all cursor-pointer ${
+                selectedImprovements.savings
+                  ? 'bg-emerald-100 border-emerald-500 shadow-md'
+                  : 'bg-emerald-50 border-emerald-200 hover:border-emerald-400'
+              }`}
+              onClick={() => setSelectedImprovements(prev => ({ ...prev, savings: !prev.savings }))}
+            >
+              <div className="flex items-center justify-between mb-3">
+                <div className="flex items-center gap-2">
+                  <input
+                    type="checkbox"
+                    checked={selectedImprovements.savings}
+                    onChange={(e) => {
+                      e.stopPropagation();
+                      setSelectedImprovements(prev => ({ ...prev, savings: e.target.checked }));
+                    }}
+                    className="w-5 h-5 text-emerald-600 rounded border-emerald-300"
+                  />
+                  <PiggyBank className="w-5 h-5 text-emerald-600" />
+                  <h4 className="font-bold text-emerald-800">Save More</h4>
+                </div>
               </div>
-              <p className="text-2xl font-bold text-emerald-700">${improvementSolutions.additionalSavings.toLocaleString()}/yr</p>
-              <p className="text-xs text-emerald-600 mt-1">
-                Increase annual savings to ${(clientInfo.annualSavings + improvementSolutions.additionalSavings).toLocaleString()}
-              </p>
+              <div className="space-y-2">
+                <label className="block text-xs text-emerald-600 uppercase font-bold">Additional Savings/Year</label>
+                <FormattedNumberInput
+                  value={customImprovements.additionalSavings}
+                  onChange={(e) => {
+                    setCustomImprovements(prev => ({ ...prev, additionalSavings: parseFloat(e.target.value) || 0 }));
+                  }}
+                  onClick={(e) => e.stopPropagation()}
+                  className="w-full p-2 border rounded text-lg font-bold text-emerald-700 bg-white"
+                />
+                <p className="text-xs text-emerald-600">
+                  New total: <strong>${(clientInfo.annualSavings + customImprovements.additionalSavings).toLocaleString()}/yr</strong>
+                </p>
+              </div>
             </div>
 
-            <div className="p-4 bg-orange-50 rounded-lg border border-orange-200">
-              <div className="flex items-center gap-2 mb-2">
-                <DollarSign className="w-5 h-5 text-orange-600" />
-                <h4 className="font-bold text-orange-800">Spend Less</h4>
+            {/* Spend Less in Retirement Option */}
+            <div
+              className={`p-4 rounded-lg border-2 transition-all cursor-pointer ${
+                selectedImprovements.spending
+                  ? 'bg-orange-100 border-orange-500 shadow-md'
+                  : 'bg-orange-50 border-orange-200 hover:border-orange-400'
+              }`}
+              onClick={() => setSelectedImprovements(prev => ({ ...prev, spending: !prev.spending }))}
+            >
+              <div className="flex items-center justify-between mb-3">
+                <div className="flex items-center gap-2">
+                  <input
+                    type="checkbox"
+                    checked={selectedImprovements.spending}
+                    onChange={(e) => {
+                      e.stopPropagation();
+                      setSelectedImprovements(prev => ({ ...prev, spending: e.target.checked }));
+                    }}
+                    className="w-5 h-5 text-orange-600 rounded border-orange-300"
+                  />
+                  <DollarSign className="w-5 h-5 text-orange-600" />
+                  <h4 className="font-bold text-orange-800">Spend Less in Retirement</h4>
+                </div>
               </div>
-              <p className="text-2xl font-bold text-orange-700">-${improvementSolutions.spendingReduction.toLocaleString()}/mo</p>
-              <p className="text-xs text-orange-600 mt-1">
-                Reduce spending to ${(clientInfo.currentSpending - improvementSolutions.spendingReduction).toLocaleString()}/month
-              </p>
+              <div className="space-y-2">
+                <label className="block text-xs text-orange-600 uppercase font-bold">Reduce Monthly Need</label>
+                <FormattedNumberInput
+                  value={customImprovements.spendingReduction}
+                  onChange={(e) => {
+                    setCustomImprovements(prev => ({ ...prev, spendingReduction: parseFloat(e.target.value) || 0 }));
+                  }}
+                  onClick={(e) => e.stopPropagation()}
+                  className="w-full p-2 border rounded text-lg font-bold text-orange-700 bg-white"
+                />
+                <p className="text-xs text-orange-600">
+                  New retirement need: <strong>${Math.max(0, inputs.monthlySpending - customImprovements.spendingReduction).toLocaleString()}/mo</strong>
+                </p>
+              </div>
             </div>
           </div>
+
+          {/* Selected Improvements Summary */}
+          {(selectedImprovements.delay || selectedImprovements.savings || selectedImprovements.spending) && (
+            <div className="mt-6 p-4 bg-slate-100 rounded-lg border border-slate-300">
+              <h4 className="font-bold text-slate-800 mb-3">Your Selected Improvements</h4>
+              <div className="space-y-2 text-sm">
+                {selectedImprovements.delay && (
+                  <div className="flex items-center gap-2 text-blue-700">
+                    <Clock className="w-4 h-4" />
+                    <span>Delay retirement by <strong>{customImprovements.delayYears} years</strong> (retire at {clientInfo.retirementAge + customImprovements.delayYears})</span>
+                  </div>
+                )}
+                {selectedImprovements.savings && (
+                  <div className="flex items-center gap-2 text-emerald-700">
+                    <PiggyBank className="w-4 h-4" />
+                    <span>Save an additional <strong>${customImprovements.additionalSavings.toLocaleString()}/year</strong></span>
+                  </div>
+                )}
+                {selectedImprovements.spending && (
+                  <div className="flex items-center gap-2 text-orange-700">
+                    <DollarSign className="w-4 h-4" />
+                    <span>Reduce retirement monthly need by <strong>${customImprovements.spendingReduction.toLocaleString()}/month</strong> (to ${Math.max(0, inputs.monthlySpending - customImprovements.spendingReduction).toLocaleString()}/mo)</span>
+                  </div>
+                )}
+              </div>
+              <p className="text-xs text-slate-500 mt-3 italic">
+                Discuss these options with your advisor to see the impact on your retirement projections.
+              </p>
+            </div>
+          )}
         </Card>
       )}
 
@@ -896,11 +1209,11 @@ export const ClientWizard = ({
 
   // Progress indicator
   const renderProgress = () => (
-    <div className="flex items-center justify-center gap-2 mb-8">
+    <div className="flex items-center justify-center gap-1.5 sm:gap-2 mb-6 sm:mb-8">
       {[1, 2, 3, 4].map((num) => (
         <div
           key={num}
-          className={`w-10 h-10 rounded-full flex items-center justify-center font-bold text-sm transition-all ${
+          className={`w-8 h-8 sm:w-10 sm:h-10 rounded-full flex items-center justify-center font-bold text-xs sm:text-sm transition-all ${
             wizardStep === num
               ? 'bg-emerald-600 text-white scale-110'
               : wizardStep > num
@@ -915,19 +1228,21 @@ export const ClientWizard = ({
   );
 
   return (
-    <div className="min-h-screen bg-slate-50 font-sans text-slate-800 p-4 sm:p-6 lg:p-8">
+    <div className="min-h-screen bg-slate-50 font-sans text-slate-800 p-3 sm:p-4 md:p-6 lg:p-8">
       <div className="max-w-5xl mx-auto">
         {/* Header */}
-        <div className="bg-black p-6 rounded-t-2xl text-white flex items-center justify-between">
-          <div>
-            <h1 className="text-2xl font-bold">Retirement Planning</h1>
-            <p className="text-yellow-500 text-sm mt-1">Step {wizardStep} of 4</p>
+        <div className="bg-black p-4 sm:p-6 rounded-t-2xl text-white flex items-center justify-between gap-3">
+          <div className="flex items-center gap-3">
+            <img src={LOGO_URL} alt="Logo" className="h-10 sm:h-12 md:h-[72px] w-auto bg-white p-1 sm:p-2 rounded-lg flex-shrink-0" />
+            <div>
+              <h1 className="text-lg sm:text-xl md:text-2xl font-bold">Retirement Planning</h1>
+              <p className="text-yellow-500 text-xs sm:text-sm mt-1">Step {wizardStep} of 4</p>
+            </div>
           </div>
-          <img src={LOGO_URL} alt="Logo" className="h-12 w-auto bg-white p-2 rounded-lg" />
         </div>
 
         {/* Main Content */}
-        <div className="bg-white p-8 rounded-b-2xl shadow-xl">
+        <div className="bg-white p-4 sm:p-6 md:p-8 rounded-b-2xl shadow-xl">
           {renderProgress()}
 
           {wizardStep === 1 && renderPage1()}
@@ -936,13 +1251,13 @@ export const ClientWizard = ({
           {wizardStep === 4 && renderPage4()}
 
           {/* Navigation Buttons */}
-          <div className="flex justify-between mt-8 pt-6 border-t">
+          <div className="flex justify-between mt-6 sm:mt-8 pt-4 sm:pt-6 border-t">
             {wizardStep > 1 ? (
               <button
                 onClick={handleBack}
-                className="flex items-center gap-2 px-6 py-3 text-slate-600 hover:bg-slate-100 rounded-lg transition-all"
+                className="flex items-center gap-1 sm:gap-2 px-3 sm:px-6 py-2 sm:py-3 text-slate-600 hover:bg-slate-100 rounded-lg transition-all text-sm sm:text-base"
               >
-                <ArrowLeft className="w-5 h-5" /> Back
+                <ArrowLeft className="w-4 h-4 sm:w-5 sm:h-5" /> Back
               </button>
             ) : (
               <div />
@@ -951,12 +1266,13 @@ export const ClientWizard = ({
             {wizardStep < 4 && (
               <button
                 onClick={handleNext}
-                className="flex items-center gap-2 px-8 py-3 bg-emerald-700 hover:bg-emerald-800 text-white font-bold rounded-lg transition-all"
+                className="flex items-center gap-1 sm:gap-2 px-4 sm:px-8 py-2 sm:py-3 bg-emerald-700 hover:bg-emerald-800 text-white font-bold rounded-lg transition-all text-sm sm:text-base"
               >
-                Next <ArrowRight className="w-5 h-5" />
+                Next <ArrowRight className="w-4 h-4 sm:w-5 sm:h-5" />
               </button>
             )}
           </div>
+          <Disclaimer />
         </div>
       </div>
     </div>

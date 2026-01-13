@@ -2,8 +2,8 @@ import React, { useState, useMemo } from 'react';
 
 // --- Local Imports ---
 import { formatPhoneNumber, calculateAccumulation, calculateBasePlan, runSimulation, calculateSSAnalysis, calculateSSPartnerAnalysis, getAdjustedSS } from './utils';
-import { GateScreen, LoginScreen, AccumulationPage, ArchitectPage, ClientWizard } from './components';
-import { useAuth, useScenarios } from './hooks';
+import { GateScreen, LoginScreen, AccumulationPage, ArchitectPage, ClientWizard, PlanManagement } from './components';
+import { useAuth, useScenarios, useAdvisors } from './hooks';
 
 // --- Main Application ---
 
@@ -31,8 +31,22 @@ export default function BucketPortfolioBuilder() {
     submitClientScenario,
     loadScenario,
     deleteScenario,
-    clearScenarios
+    clearScenarios,
+    reassignScenario,
+    refreshScenarios
   } = useScenarios({ currentUser, userRole });
+
+  // Advisor view state (planning vs management)
+  const [advisorView, setAdvisorView] = useState('planning');
+
+  // --- Advisors Hook ---
+  const {
+    advisors,
+    isLoadingAdvisors,
+    addAdvisor,
+    deleteAdvisor,
+    refreshAdvisors
+  } = useAdvisors();
 
   // App State
   const [step, setStep] = useState(1);
@@ -300,6 +314,32 @@ export default function BucketPortfolioBuilder() {
     );
   }
 
+  // Advisor Flow - Plan Management View
+  if (advisorView === 'management') {
+    return (
+      <PlanManagement
+        userRole={userRole}
+        currentUser={currentUser}
+        savedScenarios={savedScenarios}
+        isLoadingScenarios={isLoadingScenarios}
+        onLoadScenario={(scenario) => {
+          handleLoadScenario(scenario);
+          setAdvisorView('planning');
+        }}
+        onDeleteScenario={handleDeleteScenario}
+        onReassignScenario={reassignScenario}
+        onRefreshScenarios={refreshScenarios}
+        onLogout={onLogout}
+        onBackToPlanning={() => setAdvisorView('planning')}
+        advisors={advisors}
+        isLoadingAdvisors={isLoadingAdvisors}
+        onAddAdvisor={addAdvisor}
+        onDeleteAdvisor={deleteAdvisor}
+        onRefreshAdvisors={refreshAdvisors}
+      />
+    );
+  }
+
   // Advisor Flow - Step 1: Accumulation Phase
   if (step === 1) {
     return (
@@ -314,6 +354,7 @@ export default function BucketPortfolioBuilder() {
         onClientChange={handleClientChange}
         accumulationData={accumulationData}
         onProceed={proceedToArchitect}
+        onViewManagement={() => setAdvisorView('management')}
       />
     );
   }
@@ -356,6 +397,7 @@ export default function BucketPortfolioBuilder() {
       onAddAdditionalIncome={addAdditionalIncome}
       onUpdateAdditionalIncome={updateAdditionalIncome}
       onRemoveAdditionalIncome={removeAdditionalIncome}
+      onViewManagement={() => setAdvisorView('management')}
     />
   );
 }

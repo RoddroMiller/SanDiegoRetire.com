@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { ArrowRight } from 'lucide-react';
+import { Disclaimer } from '../ui';
 
 export const LoginScreen = ({ onBack, onLogin, authError }) => {
   const [email, setEmail] = useState('');
@@ -11,15 +12,15 @@ export const LoginScreen = ({ onBack, onLogin, authError }) => {
   };
 
   return (
-    <div className="min-h-screen bg-slate-100 flex items-center justify-center p-6">
-      <div className="bg-white p-8 rounded-xl shadow-lg w-full max-w-sm">
+    <div className="min-h-screen bg-slate-100 flex items-center justify-center p-4 sm:p-6">
+      <div className="bg-white p-6 sm:p-8 rounded-xl shadow-lg w-full max-w-sm">
         <button
           onClick={onBack}
-          className="mb-6 text-sm text-slate-400 hover:text-slate-600 flex items-center gap-1"
+          className="mb-4 sm:mb-6 text-sm text-slate-400 hover:text-slate-600 flex items-center gap-1"
         >
           <ArrowRight className="w-3 h-3 rotate-180" /> Back
         </button>
-        <h2 className="text-2xl font-bold text-slate-800 mb-6">Advisor Login</h2>
+        <h2 className="text-xl sm:text-2xl font-bold text-slate-800 mb-4 sm:mb-6">Advisor Login</h2>
 
         {authError && (
           <div className="mb-4 p-3 bg-red-50 text-red-600 text-sm rounded border border-red-200">
@@ -49,6 +50,7 @@ export const LoginScreen = ({ onBack, onLogin, authError }) => {
             Log In
           </button>
         </form>
+        <Disclaimer />
       </div>
     </div>
   );

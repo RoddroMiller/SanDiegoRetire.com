@@ -243,14 +243,18 @@ export const runSimulation = (basePlan, assumptions, inputs, rebalanceFreq, isMo
       }
 
       // Sequential withdrawal: B1 → B2 → B3 → B4 → B5 (B5 is last)
+      // Track withdrawals from each bucket
       const withdrawOrder = ['b1', 'b2', 'b3', 'b4', 'b5'];
+      const withdrawalsFromBucket = { b1: 0, b2: 0, b3: 0, b4: 0, b5: 0 };
 
       for (let b of withdrawOrder) {
         if (withdrawalAmount <= 0) break;
         if (balances[b] >= withdrawalAmount) {
+          withdrawalsFromBucket[b] = withdrawalAmount;
           balances[b] -= withdrawalAmount;
           withdrawalAmount = 0;
         } else {
+          withdrawalsFromBucket[b] = balances[b];
           withdrawalAmount -= balances[b];
           balances[b] = 0;
         }
@@ -321,7 +325,19 @@ export const runSimulation = (basePlan, assumptions, inputs, rebalanceFreq, isMo
         distribution: Math.round(totalWithdrawal),
         total: Math.max(0, total),
         benchmark: Math.max(0, benchmarkBalance),
-        distRate
+        distRate,
+        // Individual bucket values for architecture chart
+        b1: Math.round(balances.b1),
+        b2: Math.round(balances.b2),
+        b3: Math.round(balances.b3),
+        b4: Math.round(balances.b4),
+        b5: Math.round(balances.b5),
+        // Withdrawals from each bucket
+        w1: Math.round(withdrawalsFromBucket.b1),
+        w2: Math.round(withdrawalsFromBucket.b2),
+        w3: Math.round(withdrawalsFromBucket.b3),
+        w4: Math.round(withdrawalsFromBucket.b4),
+        w5: Math.round(withdrawalsFromBucket.b5)
       });
     }
 

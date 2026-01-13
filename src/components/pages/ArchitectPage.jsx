@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import {
   PieChart, Pie, Cell, Tooltip, ResponsiveContainer, BarChart, Bar,
   XAxis, YAxis, CartesianGrid, Legend, ComposedChart, Line, Area, AreaChart, LineChart
@@ -8,11 +8,11 @@ import {
   ChevronDown, ChevronUp, Activity, BarChart2, Briefcase, Download, Lock,
   RefreshCw, Percent, Plus, Trash2, History, User, Users, FileText, ArrowRight,
   Info, CheckCircle, RefreshCcw, MousePointerClick, Save, FolderOpen, Loader,
-  LogIn, LogOut, UserCheck, Send, Table as TableIcon
+  LogIn, LogOut, UserCheck, Send, Table as TableIcon, PiggyBank, Layers
 } from 'lucide-react';
 
 import { COLORS, LOGO_URL } from '../../constants';
-import { Card, StatBox, AllocationRow, FormattedNumberInput } from '../ui';
+import { Card, StatBox, AllocationRow, FormattedNumberInput, Disclaimer } from '../ui';
 
 /**
  * Architect Page - Step 2 of the portfolio planning process
@@ -61,14 +61,160 @@ export const ArchitectPage = ({
   // Additional Income
   onAddAdditionalIncome,
   onUpdateAdditionalIncome,
-  onRemoveAdditionalIncome
+  onRemoveAdditionalIncome,
+  // Navigation
+  onViewManagement
 }) => {
+  // Improvement solution selections
+  const [selectedImprovements, setSelectedImprovements] = useState({
+    delay: false,
+    savings: false,
+    spending: false
+  });
+  const [customImprovements, setCustomImprovements] = useState({
+    delayYears: 0,
+    additionalSavings: 0,
+    spendingReduction: 0
+  });
+
+  // Calculate improvement solutions based on actual financial picture
+  const improvementSolutions = useMemo(() => {
+    const currentSuccessRate = monteCarloData?.successRate || 0;
+    const targetSuccessRate = 95;
+
+    if (currentSuccessRate >= targetSuccessRate) {
+      return { needed: false, delayYears: 0, additionalSavings: 0, spendingReduction: 0 };
+    }
+
+    const successGap = targetSuccessRate - currentSuccessRate;
+    const yearsToRetirement = Math.max(1, clientInfo.retirementAge - clientInfo.currentAge);
+    const annualSpending = inputs.monthlySpending * 12;
+    const portfolio = inputs.totalPortfolio || (accumulationData[accumulationData.length - 1]?.balance || 0);
+
+    // Calculate existing additional income at retirement (annual)
+    let additionalIncomeAtRetirement = 0;
+    let oneTimeBoosts = 0;
+
+    if (inputs.additionalIncomes && inputs.additionalIncomes.length > 0) {
+      inputs.additionalIncomes.forEach(income => {
+        if (income.isOneTime) {
+          if (income.startAge >= clientInfo.currentAge) {
+            oneTimeBoosts += income.amount;
+          }
+        } else {
+          if (income.startAge <= clientInfo.retirementAge && income.endAge >= clientInfo.retirementAge) {
+            additionalIncomeAtRetirement += income.amount * 12;
+          }
+        }
+      });
+    }
+
+    const sustainableWithdrawal = portfolio * 0.04;
+    const projectedIncome = sustainableWithdrawal + additionalIncomeAtRetirement + (oneTimeBoosts * 0.04);
+    const incomeGap = Math.max(0, annualSpending - projectedIncome);
+    const gapRatio = incomeGap / Math.max(annualSpending, 1);
+    const adjustmentFactor = Math.max(0.2, Math.min(1, gapRatio));
+
+    const baseDelayYears = Math.ceil(successGap / 4);
+    const delayYears = Math.min(10, Math.max(1, Math.round(baseDelayYears * adjustmentFactor)));
+
+    const compoundFactor = Math.pow(1.07, yearsToRetirement);
+    const targetAdditionalPortfolio = incomeGap / 0.04;
+    const rawAdditionalSavings = targetAdditionalPortfolio / yearsToRetirement / compoundFactor;
+    const additionalSavings = Math.round(Math.max(1000, rawAdditionalSavings * adjustmentFactor) / 1000) * 1000;
+
+    const spendingReductionNeeded = incomeGap / 12;
+    const spendingReduction = Math.round(Math.max(100, spendingReductionNeeded * adjustmentFactor) / 50) * 50;
+
+    return {
+      needed: true,
+      delayYears,
+      additionalSavings,
+      spendingReduction,
+      currentRate: currentSuccessRate,
+      hasAdditionalIncome: additionalIncomeAtRetirement > 0 || oneTimeBoosts > 0,
+      additionalIncomeAmount: additionalIncomeAtRetirement,
+      oneTimeAmount: oneTimeBoosts
+    };
+  }, [monteCarloData, clientInfo, inputs, accumulationData]);
+
+  // Initialize custom improvement values
+  useEffect(() => {
+    if (improvementSolutions.needed) {
+      setCustomImprovements({
+        delayYears: improvementSolutions.delayYears,
+        additionalSavings: improvementSolutions.additionalSavings,
+        spendingReduction: improvementSolutions.spendingReduction
+      });
+    }
+  }, [improvementSolutions]);
+
+  // Calculate adjusted projections based on selected improvements
+  const adjustedProjections = useMemo(() => {
+    const hasAnySelection = selectedImprovements.delay || selectedImprovements.savings || selectedImprovements.spending;
+
+    if (!hasAnySelection) {
+      return {
+        hasChanges: false,
+        portfolio: inputs.totalPortfolio,
+        monthlyNeed: inputs.monthlySpending,
+        successRate: monteCarloData?.successRate || 0,
+        legacyBalance: projectionData[projectionData.length - 1]?.total || 0
+      };
+    }
+
+    let adjustedPortfolio = inputs.totalPortfolio || (accumulationData[accumulationData.length - 1]?.balance || 0);
+    let adjustedMonthlyNeed = inputs.monthlySpending;
+    let successRateBoost = 0;
+
+    if (selectedImprovements.delay && customImprovements.delayYears > 0) {
+      const delayYears = customImprovements.delayYears;
+      const annualSavings = clientInfo.annualSavings || 0;
+      const growthRate = (clientInfo.expectedReturn || 7) / 100;
+      for (let i = 0; i < delayYears; i++) {
+        adjustedPortfolio = adjustedPortfolio * (1 + growthRate) + annualSavings;
+      }
+      successRateBoost += delayYears * 3.5;
+    }
+
+    if (selectedImprovements.savings && customImprovements.additionalSavings > 0) {
+      const yearsToRetirement = Math.max(1, clientInfo.retirementAge - clientInfo.currentAge);
+      const growthRate = (clientInfo.expectedReturn || 7) / 100;
+      const fvFactor = (Math.pow(1 + growthRate, yearsToRetirement) - 1) / growthRate;
+      adjustedPortfolio += customImprovements.additionalSavings * fvFactor;
+      const portfolioIncrease = (customImprovements.additionalSavings * fvFactor) / (inputs.totalPortfolio || 1);
+      successRateBoost += Math.min(15, portfolioIncrease * 20);
+    }
+
+    if (selectedImprovements.spending && customImprovements.spendingReduction > 0) {
+      adjustedMonthlyNeed = Math.max(0, inputs.monthlySpending - customImprovements.spendingReduction);
+      successRateBoost += Math.min(20, customImprovements.spendingReduction / 100);
+    }
+
+    const baseSuccessRate = monteCarloData?.successRate || 0;
+    const adjustedSuccessRate = Math.min(99, baseSuccessRate + successRateBoost);
+
+    const baseLegacy = projectionData[projectionData.length - 1]?.total || 0;
+    const portfolioRatio = adjustedPortfolio / (inputs.totalPortfolio || 1);
+    const spendingRatio = adjustedMonthlyNeed / (inputs.monthlySpending || 1);
+    const legacyMultiplier = portfolioRatio * (2 - spendingRatio);
+    const adjustedLegacy = Math.max(0, baseLegacy * legacyMultiplier);
+
+    return {
+      hasChanges: true,
+      portfolio: adjustedPortfolio,
+      monthlyNeed: adjustedMonthlyNeed,
+      successRate: adjustedSuccessRate,
+      legacyBalance: adjustedLegacy
+    };
+  }, [selectedImprovements, customImprovements, inputs, clientInfo, monteCarloData, projectionData, accumulationData]);
+
   return (
     <div className={`min-h-screen bg-slate-50 font-sans text-slate-800 ${isGeneratingReport ? 'print-mode' : 'p-4 sm:p-6 lg:p-8'}`}>
 
       {/* REPORT HEADER (Print Only) */}
       <div className="hidden print:flex flex-col h-screen break-after-page items-center justify-center text-center p-12">
-        <img src={LOGO_URL} alt="Logo" className="h-32 mb-8" />
+        <img src={LOGO_URL} alt="Logo" className="h-48 mb-8" />
         <h1 className="text-5xl font-bold text-slate-900 mb-4">Retirement Illustration Strategy</h1>
         <p className="text-2xl text-slate-500 mb-12">Prepared for {clientInfo.name || "Valued Client"}</p>
         <div className="text-left border-t pt-8 w-full max-w-md mx-auto space-y-2 text-slate-600">
@@ -79,43 +225,54 @@ export const ArchitectPage = ({
       </div>
 
       {/* HEADER */}
-      <div className="max-w-7xl mx-auto mb-8 flex flex-col md:flex-row md:items-center justify-between gap-4 print:hidden">
-        <div>
-          <div className="flex items-center gap-3">
-            <img src={LOGO_URL} alt="Logo" className="h-12 w-auto object-contain" />
-            <h1 className="text-3xl font-bold text-slate-900">Portfolio Architect</h1>
+      <div className="max-w-7xl mx-auto mb-4 sm:mb-6 md:mb-8 print:hidden">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 sm:gap-4">
+          <div className="flex items-center gap-2 sm:gap-3">
+            <img src={LOGO_URL} alt="Logo" className="h-10 sm:h-12 md:h-[72px] w-auto object-contain" />
+            <div>
+              <h1 className="text-xl sm:text-2xl md:text-3xl font-bold text-slate-900">Portfolio Architect</h1>
+              <p className="text-slate-500 text-xs sm:text-sm">Distribution Phase Strategy</p>
+            </div>
           </div>
-          <p className="text-slate-500 mt-1 ml-1">Distribution Phase Strategy</p>
-        </div>
-        <div className="flex items-center gap-2">
-          <button onClick={onBackToInputs} className="px-4 py-2 text-slate-600 hover:bg-slate-100 rounded-lg text-sm">
-            Back to Inputs
-          </button>
-          {userRole !== 'client' && (
-            <button
-              onClick={onSaveScenario}
-              disabled={saveStatus === 'saving'}
-              className={`flex items-center gap-2 px-4 py-2 text-white rounded-lg shadow-sm transition-all font-medium ${saveStatus === 'success' ? 'bg-green-600' : 'bg-emerald-700 hover:bg-emerald-800'}`}
-            >
-              {saveStatus === 'saving' ? <Loader className="w-4 h-4 animate-spin" /> : saveStatus === 'success' ? <CheckCircle className="w-4 h-4" /> : <Save className="w-4 h-4" />}
-              {saveStatus === 'success' ? 'Saved' : 'Save'}
+          <div className="flex flex-wrap items-center gap-1.5 sm:gap-2">
+            <button onClick={onBackToInputs} className="px-2 sm:px-4 py-1.5 sm:py-2 text-slate-600 hover:bg-slate-100 rounded-lg text-xs sm:text-sm">
+              <span className="hidden sm:inline">Back to </span>Inputs
             </button>
-          )}
-          {userRole === 'client' && (
-            <button
-              onClick={onClientSubmit}
-              disabled={saveStatus === 'saving'}
-              className={`flex items-center gap-2 px-4 py-2 text-white rounded-lg shadow-sm transition-all font-medium ${saveStatus === 'success' ? 'bg-green-600' : 'bg-emerald-700 hover:bg-emerald-800'}`}
-            >
-              {saveStatus === 'saving' ? <Loader className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
-              {saveStatus === 'success' ? 'Opening...' : 'Talk to an advisor about my plan'}
-            </button>
-          )}
-          {userRole !== 'client' && (
-            <button onClick={onGenerateReport} className="flex items-center gap-2 px-4 py-2 bg-black text-white rounded-lg hover:bg-gray-800 shadow-sm transition-all font-medium">
-              <FileText className="w-4 h-4" /> PDF Report
-            </button>
-          )}
+            {userRole !== 'client' && onViewManagement && (
+              <button
+                onClick={onViewManagement}
+                className="px-2 sm:px-4 py-1.5 sm:py-2 bg-slate-200 hover:bg-slate-300 text-slate-700 rounded-lg text-xs sm:text-sm font-medium transition-all flex items-center gap-1 sm:gap-2"
+              >
+                <Settings className="w-3 h-3 sm:w-4 sm:h-4" /> <span className="hidden sm:inline">Manage</span> Plans
+              </button>
+            )}
+            {userRole !== 'client' && (
+              <button
+                onClick={onSaveScenario}
+                disabled={saveStatus === 'saving'}
+                className={`flex items-center gap-1 sm:gap-2 px-2 sm:px-4 py-1.5 sm:py-2 text-white rounded-lg shadow-sm transition-all font-medium text-xs sm:text-sm ${saveStatus === 'success' ? 'bg-green-600' : 'bg-emerald-700 hover:bg-emerald-800'}`}
+              >
+                {saveStatus === 'saving' ? <Loader className="w-3 h-3 sm:w-4 sm:h-4 animate-spin" /> : saveStatus === 'success' ? <CheckCircle className="w-3 h-3 sm:w-4 sm:h-4" /> : <Save className="w-3 h-3 sm:w-4 sm:h-4" />}
+                {saveStatus === 'success' ? 'Saved' : 'Save'}
+              </button>
+            )}
+            {userRole === 'client' && (
+              <button
+                onClick={onClientSubmit}
+                disabled={saveStatus === 'saving'}
+                className={`flex items-center gap-1 sm:gap-2 px-2 sm:px-4 py-1.5 sm:py-2 text-white rounded-lg shadow-sm transition-all font-medium text-xs sm:text-sm ${saveStatus === 'success' ? 'bg-green-600' : 'bg-emerald-700 hover:bg-emerald-800'}`}
+              >
+                {saveStatus === 'saving' ? <Loader className="w-3 h-3 sm:w-4 sm:h-4 animate-spin" /> : <Send className="w-3 h-3 sm:w-4 sm:h-4" />}
+                <span className="hidden sm:inline">{saveStatus === 'success' ? 'Opening...' : 'Talk to an advisor'}</span>
+                <span className="sm:hidden">{saveStatus === 'success' ? 'Opening...' : 'Contact'}</span>
+              </button>
+            )}
+            {userRole !== 'client' && (
+              <button onClick={onGenerateReport} className="flex items-center gap-1 sm:gap-2 px-2 sm:px-4 py-1.5 sm:py-2 bg-black text-white rounded-lg hover:bg-gray-800 shadow-sm transition-all font-medium text-xs sm:text-sm">
+                <FileText className="w-3 h-3 sm:w-4 sm:h-4" /> <span className="hidden sm:inline">PDF</span> Report
+              </button>
+            )}
+          </div>
         </div>
       </div>
 
@@ -158,7 +315,7 @@ export const ArchitectPage = ({
       <div className="hidden print:block break-after-page p-8">
         <div className="flex justify-between items-start mb-4">
           <h2 className="text-3xl font-bold text-slate-900 mb-6">Phase 1: Accumulation</h2>
-          <img src={LOGO_URL} alt="Logo" className="h-8" />
+          <img src={LOGO_URL} alt="Logo" className="h-12" />
         </div>
         <div className="h-[500px] w-full border rounded-xl p-4 mb-8">
           <ResponsiveContainer width="100%" height="100%">
@@ -487,54 +644,82 @@ export const ArchitectPage = ({
           <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
             <StatBox
               label="Starting Balance"
-              value={`$${(inputs.totalPortfolio / 1000000).toFixed(2)}M`}
-              subtext="Accumulation + Contributions"
+              value={adjustedProjections.hasChanges && (selectedImprovements.delay || selectedImprovements.savings)
+                ? `$${(adjustedProjections.portfolio / 1000000).toFixed(2)}M`
+                : `$${(inputs.totalPortfolio / 1000000).toFixed(2)}M`}
+              subtext={adjustedProjections.hasChanges && (selectedImprovements.delay || selectedImprovements.savings)
+                ? <><span className="line-through opacity-60">${(inputs.totalPortfolio / 1000000).toFixed(2)}M</span> → +${((adjustedProjections.portfolio - inputs.totalPortfolio) / 1000).toFixed(0)}k</>
+                : "Accumulation + Contributions"}
               icon={Briefcase}
-              colorClass="bg-gray-800 text-white"
+              colorClass={`bg-gray-800 text-white ${adjustedProjections.hasChanges && (selectedImprovements.delay || selectedImprovements.savings) ? 'ring-2 ring-emerald-400' : ''}`}
             />
             <StatBox
               label="Monthly Need"
-              value={`$${inputs.monthlySpending.toLocaleString()}`}
-              subtext="Inflation Adjusted"
+              value={adjustedProjections.hasChanges && selectedImprovements.spending
+                ? `$${adjustedProjections.monthlyNeed.toLocaleString()}`
+                : `$${inputs.monthlySpending.toLocaleString()}`}
+              subtext={adjustedProjections.hasChanges && selectedImprovements.spending
+                ? <><span className="line-through opacity-60">${inputs.monthlySpending.toLocaleString()}</span> → -${(inputs.monthlySpending - adjustedProjections.monthlyNeed).toLocaleString()}/mo</>
+                : "Inflation Adjusted"}
               icon={AlertCircle}
-              colorClass="bg-yellow-500 text-white"
+              colorClass={`bg-yellow-500 text-white ${adjustedProjections.hasChanges && selectedImprovements.spending ? 'ring-2 ring-emerald-400' : ''}`}
             />
             <StatBox
               label="Success Probability"
-              value={`${monteCarloData?.successRate.toFixed(1)}%`}
-              subtext="Positive balance at 30yrs"
+              value={adjustedProjections.hasChanges
+                ? `${adjustedProjections.successRate.toFixed(1)}%`
+                : `${(monteCarloData?.successRate || 0).toFixed(1)}%`}
+              subtext={adjustedProjections.hasChanges
+                ? <><span className="line-through opacity-60">{(monteCarloData?.successRate || 0).toFixed(1)}%</span> → +{(adjustedProjections.successRate - (monteCarloData?.successRate || 0)).toFixed(1)}%</>
+                : "Positive balance at 30yrs"}
               icon={Activity}
-              colorClass={monteCarloData?.successRate > 80 ? "bg-emerald-600 text-white" : "bg-orange-500 text-white"}
+              colorClass={`${(adjustedProjections.hasChanges ? adjustedProjections.successRate : monteCarloData?.successRate) > 80 ? "bg-emerald-600" : "bg-orange-500"} text-white ${adjustedProjections.hasChanges ? 'ring-2 ring-yellow-300' : ''}`}
             />
             <StatBox
               label="Legacy Balance (30yr)"
-              value={`$${((projectionData[projectionData.length - 1]?.total || 0) / 1000000).toFixed(2)}M`}
-              subtext="Projected Ending Value"
+              value={adjustedProjections.hasChanges
+                ? `$${(adjustedProjections.legacyBalance / 1000000).toFixed(2)}M`
+                : `$${((projectionData[projectionData.length - 1]?.total || 0) / 1000000).toFixed(2)}M`}
+              subtext={adjustedProjections.hasChanges
+                ? <><span className="line-through opacity-60">${((projectionData[projectionData.length - 1]?.total || 0) / 1000000).toFixed(2)}M</span> → +${((adjustedProjections.legacyBalance - (projectionData[projectionData.length - 1]?.total || 0)) / 1000).toFixed(0)}k</>
+                : "Projected Ending Value"}
               icon={Shield}
-              colorClass="bg-emerald-800 text-white"
+              colorClass={`bg-emerald-800 text-white ${adjustedProjections.hasChanges ? 'ring-2 ring-yellow-300' : ''}`}
             />
           </div>
 
           {/* Tab Navigation */}
-          <div className="border-b border-slate-200 print:hidden">
-            <nav className="-mb-px flex space-x-8 overflow-x-auto" aria-label="Tabs">
+          <div className="border-b border-slate-200 print:hidden -mx-4 sm:mx-0">
+            <nav className="-mb-px flex space-x-2 sm:space-x-4 md:space-x-8 overflow-x-auto px-4 sm:px-0 scrollbar-hide" aria-label="Tabs">
               <button
                 onClick={() => onSetActiveTab('chart')}
-                className={`${activeTab === 'chart' ? 'border-emerald-500 text-emerald-700' : 'border-transparent text-slate-500 hover:text-slate-700 hover:border-slate-300'} whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm flex items-center gap-2`}
+                className={`${activeTab === 'chart' ? 'border-emerald-500 text-emerald-700' : 'border-transparent text-slate-500 hover:text-slate-700 hover:border-slate-300'} whitespace-nowrap py-3 sm:py-4 px-1 border-b-2 font-medium text-xs sm:text-sm flex items-center gap-1 sm:gap-2`}
               >
-                <BarChart2 className="w-4 h-4" /> Allocation & Plan
+                <BarChart2 className="w-3 h-3 sm:w-4 sm:h-4" /> <span className="hidden sm:inline">Allocation &</span> Plan
               </button>
               <button
                 onClick={() => onSetActiveTab('montecarlo')}
-                className={`${activeTab === 'montecarlo' ? 'border-emerald-500 text-emerald-700' : 'border-transparent text-slate-500 hover:text-slate-700 hover:border-slate-300'} whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm flex items-center gap-2`}
+                className={`${activeTab === 'montecarlo' ? 'border-emerald-500 text-emerald-700' : 'border-transparent text-slate-500 hover:text-slate-700 hover:border-slate-300'} whitespace-nowrap py-3 sm:py-4 px-1 border-b-2 font-medium text-xs sm:text-sm flex items-center gap-1 sm:gap-2`}
               >
-                <Activity className="w-4 h-4" /> Monte Carlo
+                <Activity className="w-3 h-3 sm:w-4 sm:h-4" /> Monte Carlo
               </button>
               <button
                 onClick={() => onSetActiveTab('ss')}
-                className={`${activeTab === 'ss' ? 'border-emerald-500 text-emerald-700' : 'border-transparent text-slate-500 hover:text-slate-700 hover:border-slate-300'} whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm flex items-center gap-2`}
+                className={`${activeTab === 'ss' ? 'border-emerald-500 text-emerald-700' : 'border-transparent text-slate-500 hover:text-slate-700 hover:border-slate-300'} whitespace-nowrap py-3 sm:py-4 px-1 border-b-2 font-medium text-xs sm:text-sm flex items-center gap-1 sm:gap-2`}
               >
-                <Shield className="w-4 h-4" /> SS Optimization
+                <Shield className="w-3 h-3 sm:w-4 sm:h-4" /> SS <span className="hidden sm:inline">Optimization</span>
+              </button>
+              <button
+                onClick={() => onSetActiveTab('improve')}
+                className={`${activeTab === 'improve' ? 'border-emerald-500 text-emerald-700' : 'border-transparent text-slate-500 hover:text-slate-700 hover:border-slate-300'} whitespace-nowrap py-3 sm:py-4 px-1 border-b-2 font-medium text-xs sm:text-sm flex items-center gap-1 sm:gap-2`}
+              >
+                <TrendingUp className="w-3 h-3 sm:w-4 sm:h-4" /> Improve
+              </button>
+              <button
+                onClick={() => onSetActiveTab('architecture')}
+                className={`${activeTab === 'architecture' ? 'border-emerald-500 text-emerald-700' : 'border-transparent text-slate-500 hover:text-slate-700 hover:border-slate-300'} whitespace-nowrap py-3 sm:py-4 px-1 border-b-2 font-medium text-xs sm:text-sm flex items-center gap-1 sm:gap-2`}
+              >
+                <Layers className="w-3 h-3 sm:w-4 sm:h-4" /> <span className="hidden sm:inline">Architecture</span><span className="sm:hidden">Arch</span>
               </button>
             </nav>
           </div>
@@ -573,6 +758,31 @@ export const ArchitectPage = ({
               onUpdatePartnerSSStartAge={onUpdatePartnerSSStartAge}
             />
           )}
+
+          {activeTab === 'improve' && (
+            <ImproveOutcomeTab
+              clientInfo={clientInfo}
+              inputs={inputs}
+              monteCarloData={monteCarloData}
+              improvementSolutions={improvementSolutions}
+              selectedImprovements={selectedImprovements}
+              setSelectedImprovements={setSelectedImprovements}
+              customImprovements={customImprovements}
+              setCustomImprovements={setCustomImprovements}
+            />
+          )}
+
+          {activeTab === 'architecture' && (
+            <ArchitectureTab
+              inputs={inputs}
+              basePlan={basePlan}
+              assumptions={assumptions}
+              projectionData={projectionData}
+            />
+          )}
+        </div>
+        <div className="max-w-7xl mx-auto print:hidden">
+          <Disclaimer />
         </div>
       </div>
 
@@ -587,7 +797,7 @@ const AllocationTab = ({ inputs, basePlan, assumptions, projectionData, clientIn
   <div className="mt-6 animate-in fade-in duration-300">
     <div className="flex justify-between items-start mb-4 hidden print:flex">
       <h2 className="text-2xl font-bold text-slate-900">Phase 2: Distribution Allocation</h2>
-      <img src={LOGO_URL} alt="Logo" className="h-8" />
+      <img src={LOGO_URL} alt="Logo" className="h-12" />
     </div>
     <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
       <Card className="p-6 flex flex-col justify-center">
@@ -704,19 +914,18 @@ const AllocationTab = ({ inputs, basePlan, assumptions, projectionData, clientIn
               <ComposedChart data={projectionData}>
                 <CartesianGrid strokeDasharray="3 3" vertical={false} />
                 <XAxis dataKey="year" />
-                <YAxis tickFormatter={(val) => `$${(val / 1000000).toFixed(1)}M`} />
+                <YAxis tickFormatter={(val) => val >= 2000000 ? `$${Math.round(val / 1000000)}M` : `$${Math.round(val / 1000)}k`} />
                 <YAxis yAxisId="right" orientation="right" tickFormatter={(val) => `${val.toFixed(1)}%`} domain={[0, 'auto']} />
                 <Tooltip
                   formatter={(val, name) => {
                     if (name === 'Distribution Rate') return `${val.toFixed(2)}%`;
-                    if (name === 'Balanced 60/40') return `$${val.toLocaleString()}`;
                     return `$${val.toLocaleString()}`;
                   }}
                   labelFormatter={(l) => `Year ${l}`}
                 />
                 <Legend />
-                <Area type="monotone" dataKey="total" name="Portfolio Balance" fill={COLORS.areaFill} stroke={COLORS.areaFill} fillOpacity={0.8} />
-                <Line type="monotone" dataKey="benchmark" name="Balanced 60/40" stroke={COLORS.benchmark} strokeDasharray="5 5" strokeWidth={2} dot={false} />
+                <Area type="monotone" dataKey="total" name="Miller Portfolio Architect Strategy" fill={COLORS.areaFill} stroke={COLORS.areaFill} fillOpacity={0.8} />
+                <Line type="monotone" dataKey="benchmark" name="Benchmark 60/40 (Annual Rebalance)" stroke={COLORS.benchmark} strokeDasharray="5 5" strokeWidth={2} dot={false} />
                 <Line yAxisId="right" type="monotone" dataKey="distRate" name="Distribution Rate" stroke={COLORS.distRate} strokeWidth={2} dot={false} />
               </ComposedChart>
             </ResponsiveContainer>
@@ -724,8 +933,9 @@ const AllocationTab = ({ inputs, basePlan, assumptions, projectionData, clientIn
           <div className="mt-4 p-3 bg-yellow-50 text-xs text-yellow-800 rounded border border-yellow-100 flex items-start gap-2">
             <Activity className="w-4 h-4 mt-0.5" />
             <p>
-              <strong>Distribution Rate (Red Line):</strong> Shows annual withdrawal as % of portfolio. Rising rate indicates depletion risk. <br />
-              <strong>Balanced 60/40 (Gold Line):</strong> Benchmark comparison using Balanced 60/40 returns.
+              <strong>Grey Area:</strong> Miller Portfolio Architect Strategy - dynamic bucket allocation optimized for retirement income. <br />
+              <strong>Gold Line:</strong> Benchmark 60/40 with annual rebalance for comparison. <br />
+              <strong>Red Line:</strong> Distribution rate - annual withdrawal as % of portfolio.
             </p>
           </div>
         </>
@@ -792,7 +1002,7 @@ const MonteCarloTab = ({ monteCarloData, rebalanceFreq }) => (
           <ComposedChart data={monteCarloData.data}>
             <CartesianGrid strokeDasharray="3 3" vertical={false} />
             <XAxis dataKey="year" />
-            <YAxis tickFormatter={(val) => `$${(val / 1000000).toFixed(1)}M`} />
+            <YAxis tickFormatter={(val) => val >= 2000000 ? `$${Math.round(val / 1000000)}M` : `$${Math.round(val / 1000)}k`} />
             <Legend />
             <Area type="monotone" dataKey="p90" name="Upside (90th Percentile)" stroke="#166534" strokeWidth={2} fill={COLORS.midTerm} fillOpacity={0.3} />
             <Area type="monotone" dataKey="p10" name="Downside (10th Percentile)" stroke="#dc2626" strokeWidth={2} fill="white" fillOpacity={1} />
@@ -930,6 +1140,359 @@ const SSOptimizationTab = ({ clientInfo, inputs, ssAnalysis, ssPartnerAnalysis, 
   </div>
 );
 
+// Improve Outcome Tab
+const ImproveOutcomeTab = ({ clientInfo, inputs, monteCarloData, improvementSolutions, selectedImprovements, setSelectedImprovements, customImprovements, setCustomImprovements }) => (
+  <div className="space-y-6 animate-in fade-in duration-300 mt-6">
+    {improvementSolutions.needed ? (
+      <Card className="p-6 border-t-4 border-yellow-500">
+        <h3 className="font-bold text-lg text-slate-800 mb-4 flex items-center gap-2">
+          <TrendingUp className="w-5 h-5 text-yellow-600" /> Ways to Improve Your Outcome
+        </h3>
+        <p className="text-sm text-slate-600 mb-4">
+          Your current success probability is <strong>{improvementSolutions.currentRate?.toFixed(1)}%</strong>.
+          Select one or more options below and adjust the amounts to see what works for you:
+        </p>
+        {improvementSolutions.hasAdditionalIncome && (
+          <div className="mb-6 p-3 bg-emerald-50 border border-emerald-200 rounded-lg text-sm text-emerald-700">
+            <strong>Note:</strong> These recommendations already factor in your additional income
+            {improvementSolutions.additionalIncomeAmount > 0 && (
+              <span> (${(improvementSolutions.additionalIncomeAmount / 12).toLocaleString()}/mo recurring)</span>
+            )}
+            {improvementSolutions.oneTimeAmount > 0 && (
+              <span> and one-time events (${improvementSolutions.oneTimeAmount.toLocaleString()})</span>
+            )}
+            .
+          </div>
+        )}
+
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          {/* Delay Retirement Option */}
+          <div
+            className={`p-4 rounded-lg border-2 transition-all cursor-pointer ${
+              selectedImprovements.delay
+                ? 'bg-blue-100 border-blue-500 shadow-md'
+                : 'bg-blue-50 border-blue-200 hover:border-blue-400'
+            }`}
+            onClick={() => setSelectedImprovements(prev => ({ ...prev, delay: !prev.delay }))}
+          >
+            <div className="flex items-center justify-between mb-3">
+              <div className="flex items-center gap-2">
+                <input
+                  type="checkbox"
+                  checked={selectedImprovements.delay}
+                  onChange={(e) => {
+                    e.stopPropagation();
+                    setSelectedImprovements(prev => ({ ...prev, delay: e.target.checked }));
+                  }}
+                  className="w-5 h-5 text-blue-600 rounded border-blue-300"
+                />
+                <Clock className="w-5 h-5 text-blue-600" />
+                <h4 className="font-bold text-blue-800">Delay Retirement</h4>
+              </div>
+            </div>
+            <div className="space-y-2">
+              <label className="block text-xs text-blue-600 uppercase font-bold">Years to Delay</label>
+              <input
+                type="number"
+                min={1}
+                max={15}
+                value={customImprovements.delayYears}
+                onChange={(e) => {
+                  e.stopPropagation();
+                  setCustomImprovements(prev => ({ ...prev, delayYears: parseInt(e.target.value) || 0 }));
+                }}
+                onClick={(e) => e.stopPropagation()}
+                className="w-full p-2 border rounded text-lg font-bold text-blue-700 bg-white"
+              />
+              <p className="text-xs text-blue-600">
+                New retirement age: <strong>{clientInfo.retirementAge + customImprovements.delayYears}</strong>
+              </p>
+            </div>
+          </div>
+
+          {/* Save More Option */}
+          <div
+            className={`p-4 rounded-lg border-2 transition-all cursor-pointer ${
+              selectedImprovements.savings
+                ? 'bg-emerald-100 border-emerald-500 shadow-md'
+                : 'bg-emerald-50 border-emerald-200 hover:border-emerald-400'
+            }`}
+            onClick={() => setSelectedImprovements(prev => ({ ...prev, savings: !prev.savings }))}
+          >
+            <div className="flex items-center justify-between mb-3">
+              <div className="flex items-center gap-2">
+                <input
+                  type="checkbox"
+                  checked={selectedImprovements.savings}
+                  onChange={(e) => {
+                    e.stopPropagation();
+                    setSelectedImprovements(prev => ({ ...prev, savings: e.target.checked }));
+                  }}
+                  className="w-5 h-5 text-emerald-600 rounded border-emerald-300"
+                />
+                <PiggyBank className="w-5 h-5 text-emerald-600" />
+                <h4 className="font-bold text-emerald-800">Save More</h4>
+              </div>
+            </div>
+            <div className="space-y-2">
+              <label className="block text-xs text-emerald-600 uppercase font-bold">Additional Savings/Year</label>
+              <FormattedNumberInput
+                value={customImprovements.additionalSavings}
+                onChange={(e) => {
+                  setCustomImprovements(prev => ({ ...prev, additionalSavings: parseFloat(e.target.value) || 0 }));
+                }}
+                onClick={(e) => e.stopPropagation()}
+                className="w-full p-2 border rounded text-lg font-bold text-emerald-700 bg-white"
+              />
+              <p className="text-xs text-emerald-600">
+                New total: <strong>${(clientInfo.annualSavings + customImprovements.additionalSavings).toLocaleString()}/yr</strong>
+              </p>
+            </div>
+          </div>
+
+          {/* Spend Less in Retirement Option */}
+          <div
+            className={`p-4 rounded-lg border-2 transition-all cursor-pointer ${
+              selectedImprovements.spending
+                ? 'bg-orange-100 border-orange-500 shadow-md'
+                : 'bg-orange-50 border-orange-200 hover:border-orange-400'
+            }`}
+            onClick={() => setSelectedImprovements(prev => ({ ...prev, spending: !prev.spending }))}
+          >
+            <div className="flex items-center justify-between mb-3">
+              <div className="flex items-center gap-2">
+                <input
+                  type="checkbox"
+                  checked={selectedImprovements.spending}
+                  onChange={(e) => {
+                    e.stopPropagation();
+                    setSelectedImprovements(prev => ({ ...prev, spending: e.target.checked }));
+                  }}
+                  className="w-5 h-5 text-orange-600 rounded border-orange-300"
+                />
+                <DollarSign className="w-5 h-5 text-orange-600" />
+                <h4 className="font-bold text-orange-800">Spend Less in Retirement</h4>
+              </div>
+            </div>
+            <div className="space-y-2">
+              <label className="block text-xs text-orange-600 uppercase font-bold">Reduce Monthly Need</label>
+              <FormattedNumberInput
+                value={customImprovements.spendingReduction}
+                onChange={(e) => {
+                  setCustomImprovements(prev => ({ ...prev, spendingReduction: parseFloat(e.target.value) || 0 }));
+                }}
+                onClick={(e) => e.stopPropagation()}
+                className="w-full p-2 border rounded text-lg font-bold text-orange-700 bg-white"
+              />
+              <p className="text-xs text-orange-600">
+                New retirement need: <strong>${Math.max(0, inputs.monthlySpending - customImprovements.spendingReduction).toLocaleString()}/mo</strong>
+              </p>
+            </div>
+          </div>
+        </div>
+
+        {/* Selected Improvements Summary */}
+        {(selectedImprovements.delay || selectedImprovements.savings || selectedImprovements.spending) && (
+          <div className="mt-6 p-4 bg-slate-100 rounded-lg border border-slate-300">
+            <h4 className="font-bold text-slate-800 mb-3">Your Selected Improvements</h4>
+            <div className="space-y-2 text-sm">
+              {selectedImprovements.delay && (
+                <div className="flex items-center gap-2 text-blue-700">
+                  <Clock className="w-4 h-4" />
+                  <span>Delay retirement by <strong>{customImprovements.delayYears} years</strong> (retire at {clientInfo.retirementAge + customImprovements.delayYears})</span>
+                </div>
+              )}
+              {selectedImprovements.savings && (
+                <div className="flex items-center gap-2 text-emerald-700">
+                  <PiggyBank className="w-4 h-4" />
+                  <span>Save an additional <strong>${customImprovements.additionalSavings.toLocaleString()}/year</strong></span>
+                </div>
+              )}
+              {selectedImprovements.spending && (
+                <div className="flex items-center gap-2 text-orange-700">
+                  <DollarSign className="w-4 h-4" />
+                  <span>Reduce retirement monthly need by <strong>${customImprovements.spendingReduction.toLocaleString()}/month</strong> (to ${Math.max(0, inputs.monthlySpending - customImprovements.spendingReduction).toLocaleString()}/mo)</span>
+                </div>
+              )}
+            </div>
+            <p className="text-xs text-slate-500 mt-3 italic">
+              The stat boxes above reflect these improvements. Review the impact before finalizing your plan.
+            </p>
+          </div>
+        )}
+      </Card>
+    ) : (
+      <Card className="p-6 border-t-4 border-emerald-500">
+        <div className="text-center">
+          <Activity className="w-12 h-12 text-emerald-600 mx-auto mb-4" />
+          <h3 className="font-bold text-xl text-slate-800 mb-2">You're On Track!</h3>
+          <p className="text-slate-600">
+            Your retirement plan has a {monteCarloData?.successRate?.toFixed(1)}% probability of success.
+            You're well-positioned for a comfortable retirement.
+          </p>
+        </div>
+      </Card>
+    )}
+  </div>
+);
+
+// Architecture Tab - Detailed portfolio breakdown with pie chart and bucket distributions
+const ArchitectureTab = ({ inputs, basePlan, assumptions, projectionData }) => {
+  // Prepare withdrawal data for the chart
+  const withdrawalData = projectionData.map(row => ({
+    year: row.year,
+    age: row.age,
+    'B1 Short Term': row.w1 || 0,
+    'B2 Mid Term': row.w2 || 0,
+    'B3 Balanced': row.w3 || 0,
+    'B4 Income & Growth': row.w4 || 0,
+    'B5 Long Term': row.w5 || 0,
+  }));
+
+  return (
+    <div className="space-y-6 animate-in fade-in duration-300 mt-6">
+      <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
+        {/* Pie Chart - Target Allocation */}
+        <Card className="p-6">
+          <h3 className="font-bold text-lg text-slate-800 mb-6 flex items-center gap-2">
+            <Layers className="w-5 h-5 text-emerald-600" /> Target Allocation
+          </h3>
+          <div className="h-72 w-full">
+            <ResponsiveContainer width="100%" height="100%">
+              <PieChart>
+                <Pie
+                  data={[
+                    { name: 'Short Term (B1)', value: basePlan.b1Val, color: COLORS.shortTerm },
+                    { name: 'Mid Term (B2)', value: basePlan.b2Val, color: COLORS.midTerm },
+                    { name: 'Balanced 60/40 (B3)', value: basePlan.b3Val, color: COLORS.hedged },
+                    { name: 'Income & Growth (B4)', value: basePlan.b4Val, color: COLORS.income },
+                    { name: 'Long Term (B5)', value: Math.max(0, basePlan.b5Val), color: COLORS.longTerm },
+                  ]}
+                  cx="50%"
+                  cy="50%"
+                  innerRadius={60}
+                  outerRadius={100}
+                  paddingAngle={2}
+                  dataKey="value"
+                  label={({ name, percent }) => `${name.split(' ')[0]} ${(percent * 100).toFixed(0)}%`}
+                  labelLine={false}
+                >
+                  <Cell fill={COLORS.shortTerm} />
+                  <Cell fill={COLORS.midTerm} />
+                  <Cell fill={COLORS.hedged} />
+                  <Cell fill={COLORS.income} />
+                  <Cell fill={COLORS.longTerm} />
+                </Pie>
+                <Tooltip formatter={(value) => `$${value.toLocaleString()}`} />
+                <Legend />
+              </PieChart>
+            </ResponsiveContainer>
+          </div>
+          <div className="mt-4 text-center">
+            <p className="text-2xl font-bold text-slate-800">${inputs.totalPortfolio.toLocaleString()}</p>
+            <p className="text-sm text-slate-500">Total Portfolio at Retirement</p>
+          </div>
+        </Card>
+
+        {/* Bucket Details Table */}
+        <Card className="p-6">
+          <h3 className="font-bold text-lg text-slate-800 mb-6 flex items-center gap-2">
+            <BarChart2 className="w-5 h-5 text-emerald-600" /> Bucket Strategy Details
+          </h3>
+          <div className="space-y-3">
+            <div className="p-3 rounded-lg" style={{ backgroundColor: `${COLORS.shortTerm}20`, borderLeft: `4px solid ${COLORS.shortTerm}` }}>
+              <div className="flex justify-between items-center">
+                <div>
+                  <p className="font-bold text-slate-800">Bucket 1: Short Term</p>
+                  <p className="text-xs text-slate-500">Years 1-3 • Immediate liquidity</p>
+                </div>
+                <div className="text-right">
+                  <p className="font-bold text-lg">${basePlan.b1Val.toLocaleString()}</p>
+                  <p className="text-xs text-slate-500">{((basePlan.b1Val / inputs.totalPortfolio) * 100).toFixed(1)}% • {assumptions.b1.return}% return</p>
+                </div>
+              </div>
+            </div>
+            <div className="p-3 rounded-lg" style={{ backgroundColor: `${COLORS.midTerm}20`, borderLeft: `4px solid ${COLORS.midTerm}` }}>
+              <div className="flex justify-between items-center">
+                <div>
+                  <p className="font-bold text-slate-800">Bucket 2: Mid Term</p>
+                  <p className="text-xs text-slate-500">Years 4-6 • Conservative growth</p>
+                </div>
+                <div className="text-right">
+                  <p className="font-bold text-lg">${basePlan.b2Val.toLocaleString()}</p>
+                  <p className="text-xs text-slate-500">{((basePlan.b2Val / inputs.totalPortfolio) * 100).toFixed(1)}% • {assumptions.b2.return}% return</p>
+                </div>
+              </div>
+            </div>
+            <div className="p-3 rounded-lg" style={{ backgroundColor: `${COLORS.hedged}20`, borderLeft: `4px solid ${COLORS.hedged}` }}>
+              <div className="flex justify-between items-center">
+                <div>
+                  <p className="font-bold text-slate-800">Bucket 3: Balanced 60/40</p>
+                  <p className="text-xs text-slate-500">Years 7-14 • Moderate risk</p>
+                </div>
+                <div className="text-right">
+                  <p className="font-bold text-lg">${basePlan.b3Val.toLocaleString()}</p>
+                  <p className="text-xs text-slate-500">{((basePlan.b3Val / inputs.totalPortfolio) * 100).toFixed(1)}% • {assumptions.b3.return}% return</p>
+                </div>
+              </div>
+            </div>
+            <div className="p-3 rounded-lg" style={{ backgroundColor: `${COLORS.income}20`, borderLeft: `4px solid ${COLORS.income}` }}>
+              <div className="flex justify-between items-center">
+                <div>
+                  <p className="font-bold text-slate-800">Bucket 4: Income & Growth</p>
+                  <p className="text-xs text-slate-500">Fixed 10% • Dividends/yield</p>
+                </div>
+                <div className="text-right">
+                  <p className="font-bold text-lg">${basePlan.b4Val.toLocaleString()}</p>
+                  <p className="text-xs text-slate-500">10.0% • {assumptions.b4.return}% return</p>
+                </div>
+              </div>
+            </div>
+            <div className="p-3 rounded-lg" style={{ backgroundColor: `${COLORS.longTerm}20`, borderLeft: `4px solid ${COLORS.longTerm}` }}>
+              <div className="flex justify-between items-center">
+                <div>
+                  <p className="font-bold text-slate-800">Bucket 5: Long Term</p>
+                  <p className="text-xs text-slate-500">Years 15+ • Growth engine</p>
+                </div>
+                <div className="text-right">
+                  <p className="font-bold text-lg">${Math.max(0, basePlan.b5Val).toLocaleString()}</p>
+                  <p className="text-xs text-slate-500">{((Math.max(0, basePlan.b5Val) / inputs.totalPortfolio) * 100).toFixed(1)}% • {assumptions.b5.return}% return</p>
+                </div>
+              </div>
+            </div>
+          </div>
+        </Card>
+      </div>
+
+      {/* Withdrawals by Bucket Chart */}
+      <Card className="p-6">
+        <h3 className="font-bold text-lg text-slate-800 mb-6 flex items-center gap-2">
+          <TrendingUp className="w-5 h-5 text-emerald-600" /> Withdrawals by Bucket
+        </h3>
+        <div className="h-80 w-full">
+          <ResponsiveContainer width="100%" height="100%">
+            <BarChart data={withdrawalData}>
+              <CartesianGrid strokeDasharray="3 3" vertical={false} />
+              <XAxis dataKey="year" />
+              <YAxis tickFormatter={(val) => val >= 1000000 ? `$${(val / 1000000).toFixed(1)}M` : `$${(val / 1000).toFixed(0)}k`} />
+              <Tooltip formatter={(value) => `$${value.toLocaleString()}`} labelFormatter={(l) => `Year ${l}`} />
+              <Legend />
+              <Bar dataKey="B1 Short Term" stackId="1" fill={COLORS.shortTerm} />
+              <Bar dataKey="B2 Mid Term" stackId="1" fill={COLORS.midTerm} />
+              <Bar dataKey="B3 Balanced" stackId="1" fill={COLORS.hedged} />
+              <Bar dataKey="B4 Income & Growth" stackId="1" fill={COLORS.income} />
+              <Bar dataKey="B5 Long Term" stackId="1" fill={COLORS.longTerm} />
+            </BarChart>
+          </ResponsiveContainer>
+        </div>
+        <p className="text-xs text-slate-500 mt-4">
+          This chart shows which bucket withdrawals come from each year. Sequential distribution takes from B1 first, then B2, B3, B4, and finally B5.
+        </p>
+      </Card>
+    </div>
+  );
+};
+
 const PrintFooter = ({ pageNumber }) => (
   <div className="border-t border-gray-100 pt-4 mt-auto">
     <div className="flex justify-between text-[10px] text-gray-400 mb-2">
@@ -946,7 +1509,7 @@ const PrintClosingPage = ({ clientInfo }) => (
   <div className="hidden print:block break-after-page p-8">
     <div className="flex justify-between items-start mb-8">
       <h2 className="text-3xl font-bold text-slate-900">Thank You</h2>
-      <img src={LOGO_URL} alt="Logo" className="h-8" />
+      <img src={LOGO_URL} alt="Logo" className="h-12" />
     </div>
 
     <p className="text-lg text-slate-700 mb-8">

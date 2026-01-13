@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
-import { collection, doc, setDoc, getDocs, deleteDoc } from 'firebase/firestore';
+import { collection, doc, setDoc, getDocs, deleteDoc, updateDoc } from 'firebase/firestore';
 import { db, appId } from '../constants';
 
 /**
@@ -29,9 +29,13 @@ export const useScenarios = ({ currentUser, userRole }) => {
           scenarios.push({ id: doc.id, ...doc.data() });
         });
 
-        // Filter by advisor if not master
+        // Filter by advisor if not master - check both UID and email
         if (userRole !== 'master') {
-          scenarios = scenarios.filter(s => s.advisorId === currentUser.uid);
+          scenarios = scenarios.filter(s =>
+            s.advisorId === currentUser.uid ||
+            s.advisorEmail?.toLowerCase() === currentUser.email?.toLowerCase() ||
+            s.advisorId?.toLowerCase() === currentUser.email?.toLowerCase()
+          );
         }
 
         scenarios.sort((a, b) => b.updatedAt - a.updatedAt);
@@ -220,11 +224,12 @@ export const useScenarios = ({ currentUser, userRole }) => {
    * Delete a saved scenario
    * @param {Event} e - Click event
    * @param {string} id - Scenario ID to delete
+   * @param {boolean} skipConfirm - Skip confirmation dialog (for bulk operations)
    * @returns {Promise<boolean>} Success status
    */
-  const deleteScenario = useCallback(async (e, id) => {
+  const deleteScenario = useCallback(async (e, id, skipConfirm = false) => {
     e.stopPropagation();
-    if (!confirm("Are you sure you want to delete this saved client?")) return false;
+    if (!skipConfirm && !confirm("Are you sure you want to delete this saved client?")) return false;
 
     try {
       await deleteDoc(doc(db, 'artifacts', appId, 'public', 'data', 'scenarios', id));
@@ -243,6 +248,92 @@ export const useScenarios = ({ currentUser, userRole }) => {
     setSavedScenarios([]);
   }, []);
 
+  /**
+   * Reassign a scenario to a different advisor (master only)
+   * @param {string} scenarioId - Scenario ID to reassign
+   * @param {string} newAdvisorId - New advisor ID (can be email if no UID known)
+   * @param {string} newAdvisorEmail - New advisor email (optional, defaults to ID)
+   * @returns {Promise<boolean>} Success status
+   */
+  const reassignScenario = useCallback(async (scenarioId, newAdvisorId, newAdvisorEmail = null) => {
+    if (!db) return false;
+
+    try {
+      // If email provided, use it; otherwise try to find from existing scenarios
+      let advisorEmail = newAdvisorEmail;
+      let advisorId = newAdvisorId;
+
+      if (!advisorEmail) {
+        const advisorScenario = savedScenarios.find(s => s.advisorId === newAdvisorId);
+        advisorEmail = advisorScenario?.advisorEmail || newAdvisorId;
+      }
+
+      // If the ID looks like an email (contains @), use it as both ID and email
+      // This allows assigning to advisors who haven't created plans yet
+      if (advisorId.includes('@')) {
+        advisorEmail = advisorId;
+        // Keep email as the ID for now - when advisor logs in, their UID will be used
+      }
+
+      await updateDoc(
+        doc(db, 'artifacts', appId, 'public', 'data', 'scenarios', scenarioId),
+        {
+          advisorId: advisorId,
+          advisorEmail: advisorEmail,
+          updatedAt: Date.now()
+        }
+      );
+
+      // Update local state
+      setSavedScenarios(prev =>
+        prev.map(s =>
+          s.id === scenarioId
+            ? { ...s, advisorId: advisorId, advisorEmail: advisorEmail, updatedAt: Date.now() }
+            : s
+        )
+      );
+
+      return true;
+    } catch (error) {
+      console.error("Error reassigning scenario:", error);
+      return false;
+    }
+  }, [savedScenarios]);
+
+  /**
+   * Refresh scenarios from the database
+   */
+  const refreshScenarios = useCallback(async () => {
+    if (!currentUser || !db) return;
+
+    setIsLoadingScenarios(true);
+    try {
+      const querySnapshot = await getDocs(
+        collection(db, 'artifacts', appId, 'public', 'data', 'scenarios')
+      );
+      let scenarios = [];
+      querySnapshot.forEach((doc) => {
+        scenarios.push({ id: doc.id, ...doc.data() });
+      });
+
+      // Filter by advisor if not master - check both UID and email
+      if (userRole !== 'master') {
+        scenarios = scenarios.filter(s =>
+          s.advisorId === currentUser.uid ||
+          s.advisorEmail?.toLowerCase() === currentUser.email?.toLowerCase() ||
+          s.advisorId?.toLowerCase() === currentUser.email?.toLowerCase()
+        );
+      }
+
+      scenarios.sort((a, b) => b.updatedAt - a.updatedAt);
+      setSavedScenarios(scenarios);
+    } catch (error) {
+      console.error("Error refreshing scenarios:", error);
+    } finally {
+      setIsLoadingScenarios(false);
+    }
+  }, [currentUser, userRole]);
+
   return {
     // State
     savedScenarios,
@@ -255,7 +346,9 @@ export const useScenarios = ({ currentUser, userRole }) => {
     submitClientScenario,
     loadScenario,
     deleteScenario,
-    clearScenarios
+    clearScenarios,
+    reassignScenario,
+    refreshScenarios
   };
 };
 

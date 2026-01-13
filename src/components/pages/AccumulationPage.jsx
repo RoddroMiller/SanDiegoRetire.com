@@ -1,10 +1,10 @@
 import React from 'react';
 import { ResponsiveContainer, AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip } from 'recharts';
-import { User, DollarSign, ArrowRight, FolderOpen, Loader, Trash2, LogOut, Info } from 'lucide-react';
+import { User, DollarSign, ArrowRight, FolderOpen, Loader, Trash2, LogOut, Info, Settings } from 'lucide-react';
 
 import { COLORS, LOGO_URL } from '../../constants';
 import { formatPhoneNumber } from '../../utils';
-import { FormattedNumberInput } from '../ui';
+import { FormattedNumberInput, Disclaimer } from '../ui';
 
 /**
  * Accumulation Page - Step 1 of the portfolio planning process
@@ -25,39 +25,50 @@ export const AccumulationPage = ({
   // Chart Data
   accumulationData,
   // Navigation
-  onProceed
+  onProceed,
+  onViewManagement
 }) => {
   return (
-    <div className="min-h-screen bg-slate-50 font-sans text-slate-800 p-6 flex flex-col items-center">
+    <div className="min-h-screen bg-slate-50 font-sans text-slate-800 p-3 sm:p-6 flex flex-col items-center">
       <div className="max-w-4xl w-full bg-white rounded-2xl shadow-xl overflow-hidden">
         {/* Header */}
-        <div className="bg-black p-8 text-white flex items-center justify-between">
-          <div>
-            <h1 className="text-3xl font-bold text-white">Retirement Growth Engine</h1>
-            <p className="text-yellow-500 mt-2">Map your accumulation phase before structuring your income.</p>
-          </div>
-          <div className="flex items-center gap-4">
+        <div className="bg-black p-4 sm:p-8 text-white">
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+            <div className="flex items-center gap-3 sm:gap-4">
+              <img src={LOGO_URL} alt="Logo" className="h-12 sm:h-16 w-auto bg-white p-1 sm:p-2 rounded-lg flex-shrink-0" />
+              <div>
+                <h1 className="text-lg sm:text-2xl md:text-3xl font-bold text-white">Retirement Growth Engine</h1>
+                <p className="text-yellow-500 text-xs sm:text-sm mt-1">Map your accumulation phase before structuring your income.</p>
+              </div>
+            </div>
             {userRole !== 'client' && (
-              <div className="text-right">
-                <p className="text-xs text-gray-400 uppercase">Logged in as</p>
-                <p className="text-sm font-bold text-emerald-400">
-                  {userRole === 'master' ? 'Master Advisor' : 'Advisor'}
-                </p>
+              <div className="flex items-center justify-between sm:justify-end gap-2 sm:gap-4 border-t sm:border-t-0 border-slate-700 pt-3 sm:pt-0">
                 <button
-                  onClick={onLogout}
-                  className="text-[10px] text-white hover:text-red-400 flex items-center gap-1 justify-end mt-1"
+                  onClick={onViewManagement}
+                  className="px-2 sm:px-3 py-1.5 sm:py-2 bg-slate-700 hover:bg-slate-600 text-white text-xs sm:text-sm font-medium rounded-lg transition-all flex items-center gap-1 sm:gap-2"
                 >
-                  <LogOut className="w-3 h-3" /> Logout
+                  <Settings className="w-3 h-3 sm:w-4 sm:h-4" /> <span className="hidden xs:inline">Manage</span> Plans
                 </button>
+                <div className="text-right">
+                  <p className="text-[10px] sm:text-xs text-gray-400 uppercase">Logged in as</p>
+                  <p className="text-xs sm:text-sm font-bold text-emerald-400">
+                    {userRole === 'master' ? 'Master Advisor' : 'Advisor'}
+                  </p>
+                  <button
+                    onClick={onLogout}
+                    className="text-[10px] text-white hover:text-red-400 flex items-center gap-1 justify-end mt-1"
+                  >
+                    <LogOut className="w-3 h-3" /> Logout
+                  </button>
+                </div>
               </div>
             )}
-            <img src={LOGO_URL} alt="Logo" className="h-16 w-auto bg-white p-2 rounded-lg" />
           </div>
         </div>
 
-        <div className="p-8 grid grid-cols-1 md:grid-cols-2 gap-8">
+        <div className="p-4 sm:p-6 md:p-8 grid grid-cols-1 md:grid-cols-2 gap-4 sm:gap-6 md:gap-8">
           {/* Left Column - Inputs */}
-          <div className="space-y-6">
+          <div className="space-y-4 sm:space-y-6">
             {/* Saved Scenarios (Advisor Only) */}
             {userRole !== 'client' && (
               <div className="mb-6 pb-6 border-b border-slate-100">
@@ -334,6 +345,9 @@ export const AccumulationPage = ({
               Proceed to Portfolio Architect <ArrowRight className="w-5 h-5" />
             </button>
           </div>
+        </div>
+        <div className="px-4 sm:px-6 md:px-8 pb-4 sm:pb-6 md:pb-8">
+          <Disclaimer />
         </div>
       </div>
     </div>
