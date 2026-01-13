@@ -92,34 +92,25 @@ export const ClientWizard = ({
     // Estimate annual income gap (what the portfolio needs to cover after other income)
     // Using 4% rule as baseline for sustainable withdrawal
     const sustainableWithdrawal = portfolio * 0.04;
-    const ssIncome = (inputs.ssPIA || 0) * 12; // Will start later but helps overall
-    const pensionIncome = (inputs.monthlyPension || 0) * 12;
 
     // Total income sources (not all start at retirement, but they help overall)
     const projectedIncome = sustainableWithdrawal + additionalIncomeAtRetirement + (oneTimeBoosts * 0.04);
     const incomeGap = Math.max(0, annualSpending - projectedIncome);
 
-    // Scale recommendations based on actual gap and situation
-    // If there's significant additional income, recommendations should be smaller
-    const gapRatio = incomeGap / Math.max(annualSpending, 1);
-    const adjustmentFactor = Math.max(0.2, Math.min(1, gapRatio)); // Between 20% and 100%
+    // Calculate recommendations that would each independently solve the problem
+    // Delay retirement: Each year adds ~4% to success rate through additional savings and portfolio growth
+    const delayYears = Math.min(10, Math.max(1, Math.ceil(successGap / 4)));
 
-    // Delay retirement: Each year of delay adds ~1 year of savings + portfolio growth
-    // More impactful for smaller portfolios
-    const baseDelayYears = Math.ceil(successGap / 4); // ~4% improvement per year
-    const delayYears = Math.min(10, Math.max(1, Math.round(baseDelayYears * adjustmentFactor)));
-
-    // Additional savings: Based on years to retirement and income gap
+    // Additional savings: Calculate how much additional monthly savings would close the income gap
     // Each dollar saved compounds over years to retirement
-    const compoundFactor = Math.pow(1.07, yearsToRetirement); // Assume 7% growth
-    const targetAdditionalPortfolio = incomeGap / 0.04; // What additional portfolio would close the gap
-    const rawAdditionalSavings = targetAdditionalPortfolio / yearsToRetirement / compoundFactor;
-    const additionalSavings = Math.round(Math.max(1000, rawAdditionalSavings * adjustmentFactor) / 1000) * 1000;
+    const compoundFactor = Math.pow(1.07, yearsToRetirement);
+    const targetAdditionalPortfolio = (annualSpending - projectedIncome) / 0.04;
+    const rawAdditionalSavings = Math.max(0, targetAdditionalPortfolio) / yearsToRetirement / compoundFactor;
+    const additionalSavings = Math.round(Math.max(500, rawAdditionalSavings) / 500) * 500;
 
-    // Spending reduction: Direct impact on sustainability
-    // Each $1 less in monthly spending = $12 less annual need = $300 less portfolio needed (at 4%)
-    const spendingReductionNeeded = incomeGap / 12; // Monthly gap
-    const spendingReduction = Math.round(Math.max(100, spendingReductionNeeded * adjustmentFactor) / 50) * 50;
+    // Spending reduction: How much monthly spending reduction would make the plan sustainable
+    const spendingReductionNeeded = Math.max(0, (annualSpending - projectedIncome)) / 12;
+    const spendingReduction = Math.round(Math.max(100, spendingReductionNeeded) / 50) * 50;
 
     return {
       needed: true,
@@ -159,59 +150,59 @@ export const ClientWizard = ({
       };
     }
 
-    // Start with current values
     let adjustedPortfolio = inputs.totalPortfolio || (accumulationData[accumulationData.length - 1]?.balance || 0);
     let adjustedMonthlyNeed = inputs.monthlySpending;
-    let successRateBoost = 0;
 
-    // Delay retirement: more years to save + portfolio growth
     if (selectedImprovements.delay && customImprovements.delayYears > 0) {
       const delayYears = customImprovements.delayYears;
       const annualSavings = clientInfo.annualSavings || 0;
       const growthRate = (clientInfo.expectedReturn || 7) / 100;
-
-      // Additional savings during delay years
       for (let i = 0; i < delayYears; i++) {
         adjustedPortfolio = adjustedPortfolio * (1 + growthRate) + annualSavings;
       }
-
-      // Success rate improvement (~3-4% per year of delay)
-      successRateBoost += delayYears * 3.5;
     }
 
-    // Save more: additional savings compounded to retirement
     if (selectedImprovements.savings && customImprovements.additionalSavings > 0) {
       const yearsToRetirement = Math.max(1, clientInfo.retirementAge - clientInfo.currentAge);
       const growthRate = (clientInfo.expectedReturn || 7) / 100;
-      const additionalSavings = customImprovements.additionalSavings;
-
-      // Future value of additional annual savings
       const fvFactor = (Math.pow(1 + growthRate, yearsToRetirement) - 1) / growthRate;
-      adjustedPortfolio += additionalSavings * fvFactor;
-
-      // Success rate improvement based on portfolio increase
-      const portfolioIncrease = (additionalSavings * fvFactor) / (inputs.totalPortfolio || 1);
-      successRateBoost += Math.min(15, portfolioIncrease * 20);
+      adjustedPortfolio += customImprovements.additionalSavings * fvFactor;
     }
 
-    // Spend less in retirement: direct reduction in monthly need
     if (selectedImprovements.spending && customImprovements.spendingReduction > 0) {
       adjustedMonthlyNeed = Math.max(0, inputs.monthlySpending - customImprovements.spendingReduction);
-
-      // Success rate improvement (~1% per $100 reduction in monthly spending
-      successRateBoost += Math.min(20, customImprovements.spendingReduction / 100);
     }
 
-    // Calculate adjusted success rate (capped at 99%)
-    const baseSuccessRate = monteCarloData?.successRate || 0;
-    const adjustedSuccessRate = Math.min(99, baseSuccessRate + successRateBoost);
+    // Calculate success rate based on distribution rate
+    // Distribution rate = (annual spending / portfolio) * 100
+    const annualSpending = adjustedMonthlyNeed * 12;
+    const distributionRate = adjustedPortfolio > 0 ? (annualSpending / adjustedPortfolio) * 100 : 100;
 
-    // Estimate adjusted legacy balance
-    // Simplified: assume legacy grows proportionally with portfolio increase and spending decrease
+    // Success rate based on distribution rate:
+    // <= 2% = 99%, 3% = 95%, 4% = 90%, 5% = 80%, 6% = 65%, 7% = 50%, 8%+ = declining
+    let adjustedSuccessRate;
+    if (distributionRate <= 2) {
+      adjustedSuccessRate = 99;
+    } else if (distributionRate <= 3) {
+      adjustedSuccessRate = 99 - (distributionRate - 2) * 4; // 99 to 95
+    } else if (distributionRate <= 4) {
+      adjustedSuccessRate = 95 - (distributionRate - 3) * 5; // 95 to 90
+    } else if (distributionRate <= 5) {
+      adjustedSuccessRate = 90 - (distributionRate - 4) * 10; // 90 to 80
+    } else if (distributionRate <= 6) {
+      adjustedSuccessRate = 80 - (distributionRate - 5) * 15; // 80 to 65
+    } else if (distributionRate <= 7) {
+      adjustedSuccessRate = 65 - (distributionRate - 6) * 15; // 65 to 50
+    } else if (distributionRate <= 10) {
+      adjustedSuccessRate = 50 - (distributionRate - 7) * 10; // 50 to 20
+    } else {
+      adjustedSuccessRate = Math.max(5, 20 - (distributionRate - 10) * 5);
+    }
+
     const baseLegacy = projectionData[projectionData.length - 1]?.total || 0;
     const portfolioRatio = adjustedPortfolio / (inputs.totalPortfolio || 1);
     const spendingRatio = adjustedMonthlyNeed / (inputs.monthlySpending || 1);
-    const legacyMultiplier = portfolioRatio * (2 - spendingRatio); // Higher portfolio + lower spending = higher legacy
+    const legacyMultiplier = portfolioRatio * (2 - spendingRatio);
     const adjustedLegacy = Math.max(0, baseLegacy * legacyMultiplier);
 
     return {
@@ -884,13 +875,13 @@ export const ClientWizard = ({
           colorClass={`bg-gray-800 text-white ${adjustedProjections.hasChanges && (selectedImprovements.delay || selectedImprovements.savings) ? 'ring-2 ring-emerald-400' : ''}`}
         />
         <StatBox
-          label="Monthly Need"
+          label="Monthly Distribution"
           value={adjustedProjections.hasChanges && selectedImprovements.spending
             ? `$${adjustedProjections.monthlyNeed.toLocaleString()}`
             : `$${inputs.monthlySpending.toLocaleString()}`}
           subtext={adjustedProjections.hasChanges && selectedImprovements.spending
             ? <><span className="line-through opacity-60">${inputs.monthlySpending.toLocaleString()}</span> → -${(inputs.monthlySpending - adjustedProjections.monthlyNeed).toLocaleString()}/mo</>
-            : "Inflation Adjusted"}
+            : `${((inputs.monthlySpending * 12) / (adjustedProjections.hasChanges ? adjustedProjections.portfolio : inputs.totalPortfolio) * 100).toFixed(1)}% annual rate`}
           icon={DollarSign}
           colorClass={`bg-yellow-500 text-white ${adjustedProjections.hasChanges && selectedImprovements.spending ? 'ring-2 ring-emerald-400' : ''}`}
         />
@@ -1127,7 +1118,7 @@ export const ClientWizard = ({
                 </div>
               </div>
               <div className="space-y-2">
-                <label className="block text-xs text-orange-600 uppercase font-bold">Reduce Monthly Need</label>
+                <label className="block text-xs text-orange-600 uppercase font-bold">Reduce Monthly Distribution</label>
                 <FormattedNumberInput
                   value={customImprovements.spendingReduction}
                   onChange={(e) => {

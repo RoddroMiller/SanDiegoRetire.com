@@ -112,19 +112,21 @@ export const ArchitectPage = ({
     const sustainableWithdrawal = portfolio * 0.04;
     const projectedIncome = sustainableWithdrawal + additionalIncomeAtRetirement + (oneTimeBoosts * 0.04);
     const incomeGap = Math.max(0, annualSpending - projectedIncome);
-    const gapRatio = incomeGap / Math.max(annualSpending, 1);
-    const adjustmentFactor = Math.max(0.2, Math.min(1, gapRatio));
 
-    const baseDelayYears = Math.ceil(successGap / 4);
-    const delayYears = Math.min(10, Math.max(1, Math.round(baseDelayYears * adjustmentFactor)));
+    // Calculate recommendations that would each independently solve the problem
+    // Delay retirement: Each year adds ~4% to success rate through additional savings and portfolio growth
+    const delayYears = Math.min(10, Math.max(1, Math.ceil(successGap / 4)));
 
+    // Additional savings: Calculate how much additional monthly savings would close the income gap
+    // Each dollar saved compounds over years to retirement
     const compoundFactor = Math.pow(1.07, yearsToRetirement);
-    const targetAdditionalPortfolio = incomeGap / 0.04;
-    const rawAdditionalSavings = targetAdditionalPortfolio / yearsToRetirement / compoundFactor;
-    const additionalSavings = Math.round(Math.max(1000, rawAdditionalSavings * adjustmentFactor) / 1000) * 1000;
+    const targetAdditionalPortfolio = (annualSpending - projectedIncome) / 0.04;
+    const rawAdditionalSavings = Math.max(0, targetAdditionalPortfolio) / yearsToRetirement / compoundFactor;
+    const additionalSavings = Math.round(Math.max(500, rawAdditionalSavings) / 500) * 500;
 
-    const spendingReductionNeeded = incomeGap / 12;
-    const spendingReduction = Math.round(Math.max(100, spendingReductionNeeded * adjustmentFactor) / 50) * 50;
+    // Spending reduction: How much monthly spending reduction would make the plan sustainable
+    const spendingReductionNeeded = Math.max(0, (annualSpending - projectedIncome)) / 12;
+    const spendingReduction = Math.round(Math.max(100, spendingReductionNeeded) / 50) * 50;
 
     return {
       needed: true,
@@ -165,7 +167,6 @@ export const ArchitectPage = ({
 
     let adjustedPortfolio = inputs.totalPortfolio || (accumulationData[accumulationData.length - 1]?.balance || 0);
     let adjustedMonthlyNeed = inputs.monthlySpending;
-    let successRateBoost = 0;
 
     if (selectedImprovements.delay && customImprovements.delayYears > 0) {
       const delayYears = customImprovements.delayYears;
@@ -174,7 +175,6 @@ export const ArchitectPage = ({
       for (let i = 0; i < delayYears; i++) {
         adjustedPortfolio = adjustedPortfolio * (1 + growthRate) + annualSavings;
       }
-      successRateBoost += delayYears * 3.5;
     }
 
     if (selectedImprovements.savings && customImprovements.additionalSavings > 0) {
@@ -182,17 +182,37 @@ export const ArchitectPage = ({
       const growthRate = (clientInfo.expectedReturn || 7) / 100;
       const fvFactor = (Math.pow(1 + growthRate, yearsToRetirement) - 1) / growthRate;
       adjustedPortfolio += customImprovements.additionalSavings * fvFactor;
-      const portfolioIncrease = (customImprovements.additionalSavings * fvFactor) / (inputs.totalPortfolio || 1);
-      successRateBoost += Math.min(15, portfolioIncrease * 20);
     }
 
     if (selectedImprovements.spending && customImprovements.spendingReduction > 0) {
       adjustedMonthlyNeed = Math.max(0, inputs.monthlySpending - customImprovements.spendingReduction);
-      successRateBoost += Math.min(20, customImprovements.spendingReduction / 100);
     }
 
-    const baseSuccessRate = monteCarloData?.successRate || 0;
-    const adjustedSuccessRate = Math.min(99, baseSuccessRate + successRateBoost);
+    // Calculate success rate based on distribution rate
+    // Distribution rate = (annual spending / portfolio) * 100
+    const annualSpending = adjustedMonthlyNeed * 12;
+    const distributionRate = adjustedPortfolio > 0 ? (annualSpending / adjustedPortfolio) * 100 : 100;
+
+    // Success rate based on distribution rate:
+    // <= 2% = 99%, 3% = 95%, 4% = 90%, 5% = 80%, 6% = 65%, 7% = 50%, 8%+ = declining
+    let adjustedSuccessRate;
+    if (distributionRate <= 2) {
+      adjustedSuccessRate = 99;
+    } else if (distributionRate <= 3) {
+      adjustedSuccessRate = 99 - (distributionRate - 2) * 4; // 99 to 95
+    } else if (distributionRate <= 4) {
+      adjustedSuccessRate = 95 - (distributionRate - 3) * 5; // 95 to 90
+    } else if (distributionRate <= 5) {
+      adjustedSuccessRate = 90 - (distributionRate - 4) * 10; // 90 to 80
+    } else if (distributionRate <= 6) {
+      adjustedSuccessRate = 80 - (distributionRate - 5) * 15; // 80 to 65
+    } else if (distributionRate <= 7) {
+      adjustedSuccessRate = 65 - (distributionRate - 6) * 15; // 65 to 50
+    } else if (distributionRate <= 10) {
+      adjustedSuccessRate = 50 - (distributionRate - 7) * 10; // 50 to 20
+    } else {
+      adjustedSuccessRate = Math.max(5, 20 - (distributionRate - 10) * 5);
+    }
 
     const baseLegacy = projectionData[projectionData.length - 1]?.total || 0;
     const portfolioRatio = adjustedPortfolio / (inputs.totalPortfolio || 1);
@@ -654,13 +674,13 @@ export const ArchitectPage = ({
               colorClass={`bg-gray-800 text-white ${adjustedProjections.hasChanges && (selectedImprovements.delay || selectedImprovements.savings) ? 'ring-2 ring-emerald-400' : ''}`}
             />
             <StatBox
-              label="Monthly Need"
+              label="Monthly Distribution"
               value={adjustedProjections.hasChanges && selectedImprovements.spending
                 ? `$${adjustedProjections.monthlyNeed.toLocaleString()}`
                 : `$${inputs.monthlySpending.toLocaleString()}`}
               subtext={adjustedProjections.hasChanges && selectedImprovements.spending
                 ? <><span className="line-through opacity-60">${inputs.monthlySpending.toLocaleString()}</span> → -${(inputs.monthlySpending - adjustedProjections.monthlyNeed).toLocaleString()}/mo</>
-                : "Inflation Adjusted"}
+                : `${((inputs.monthlySpending * 12) / (adjustedProjections.hasChanges ? adjustedProjections.portfolio : inputs.totalPortfolio) * 100).toFixed(1)}% annual rate`}
               icon={AlertCircle}
               colorClass={`bg-yellow-500 text-white ${adjustedProjections.hasChanges && selectedImprovements.spending ? 'ring-2 ring-emerald-400' : ''}`}
             />
@@ -1275,7 +1295,7 @@ const ImproveOutcomeTab = ({ clientInfo, inputs, monteCarloData, improvementSolu
               </div>
             </div>
             <div className="space-y-2">
-              <label className="block text-xs text-orange-600 uppercase font-bold">Reduce Monthly Need</label>
+              <label className="block text-xs text-orange-600 uppercase font-bold">Reduce Monthly Distribution</label>
               <FormattedNumberInput
                 value={customImprovements.spendingReduction}
                 onChange={(e) => {
