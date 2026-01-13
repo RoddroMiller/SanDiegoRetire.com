@@ -243,7 +243,7 @@ export const ClientWizard = ({
       // Continue to next step even if save fails
     }
 
-    setWizardStep(prev => Math.min(prev + 1, 4));
+    setWizardStep(prev => Math.min(prev + 1, 2));
     window.scrollTo(0, 0);
   };
 
@@ -252,12 +252,12 @@ export const ClientWizard = ({
     window.scrollTo(0, 0);
   };
 
-  // Page 1: Contact Info + Ages
+  // Page 1: Contact Info + Ages + Portfolio, Spending, Savings + Chart
   const renderPage1 = () => (
     <div className="space-y-6">
       <div className="text-center mb-8">
         <h2 className="text-2xl font-bold text-slate-800">Let's Get Started</h2>
-        <p className="text-slate-500 mt-2">Tell us about yourself and your retirement timeline</p>
+        <p className="text-slate-500 mt-2">Tell us about yourself and your financial picture</p>
       </div>
 
       {validationError && (
@@ -396,19 +396,9 @@ export const ClientWizard = ({
           )}
         </div>
       </div>
-    </div>
-  );
 
-  // Page 2: Portfolio, Spending, Savings + Chart
-  const renderPage2 = () => (
-    <div className="space-y-6">
-      <div className="text-center mb-8">
-        <h2 className="text-2xl font-bold text-slate-800">Your Financial Picture</h2>
-        <p className="text-slate-500 mt-2">Current portfolio, spending, and savings</p>
-      </div>
-
+      {/* Financial Inputs */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-        {/* Left: Inputs */}
         <div className="space-y-4">
           <h3 className="text-lg font-bold text-slate-800 border-b pb-2 flex items-center gap-2">
             <DollarSign className="w-5 h-5 text-emerald-600" /> Financial Inputs
@@ -524,8 +514,8 @@ export const ClientWizard = ({
     </div>
   );
 
-  // Page 3: Retirement Income (SS, Pension)
-  const renderPage3 = () => (
+  // Page 2: Retirement Income (SS, Pension) + Summary + Solutions
+  const renderPage2 = () => (
     <div className="space-y-6">
       <div className="text-center mb-8">
         <h2 className="text-2xl font-bold text-slate-800">Retirement Income Sources</h2>
@@ -850,13 +840,9 @@ export const ClientWizard = ({
           </div>
         </Card>
       </div>
-    </div>
-  );
 
-  // Page 4: Summary + Solutions
-  const renderPage4 = () => (
-    <div className="space-y-6">
-      <div className="text-center mb-8">
+      {/* Summary Section */}
+      <div className="text-center my-8">
         <h2 className="text-2xl font-bold text-slate-800">Your Retirement Outlook</h2>
         <p className="text-slate-500 mt-2">Summary of your retirement plan projection</p>
       </div>
@@ -1201,7 +1187,7 @@ export const ClientWizard = ({
   // Progress indicator
   const renderProgress = () => (
     <div className="flex items-center justify-center gap-1.5 sm:gap-2 mb-6 sm:mb-8">
-      {[1, 2, 3, 4].map((num) => (
+      {[1, 2].map((num) => (
         <div
           key={num}
           className={`w-8 h-8 sm:w-10 sm:h-10 rounded-full flex items-center justify-center font-bold text-xs sm:text-sm transition-all ${
@@ -1238,8 +1224,6 @@ export const ClientWizard = ({
 
           {wizardStep === 1 && renderPage1()}
           {wizardStep === 2 && renderPage2()}
-          {wizardStep === 3 && renderPage3()}
-          {wizardStep === 4 && renderPage4()}
 
           {/* Navigation Buttons */}
           <div className="flex justify-between mt-6 sm:mt-8 pt-4 sm:pt-6 border-t">
@@ -1254,7 +1238,7 @@ export const ClientWizard = ({
               <div />
             )}
 
-            {wizardStep < 4 && (
+            {wizardStep < 2 && (
               <button
                 onClick={handleNext}
                 className="flex items-center gap-1 sm:gap-2 px-4 sm:px-8 py-2 sm:py-3 bg-emerald-700 hover:bg-emerald-800 text-white font-bold rounded-lg transition-all text-sm sm:text-base"
