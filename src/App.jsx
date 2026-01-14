@@ -120,8 +120,8 @@ export default function BucketPortfolioBuilder() {
     });
   };
 
-  const handleDeleteScenario = (e, id) => {
-    deleteScenario(e, id);
+  const handleDeleteScenario = (e, id, skipConfirm = false) => {
+    deleteScenario(e, id, skipConfirm);
   };
 
   const onLogout = () => {
