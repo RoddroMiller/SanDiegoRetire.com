@@ -3,7 +3,7 @@ import { ResponsiveContainer, AreaChart, Area, XAxis, YAxis, CartesianGrid, Tool
 import { User, DollarSign, ArrowRight, ArrowLeft, Shield, Info, Activity, Briefcase, Send, TrendingUp, Clock, PiggyBank, BarChart2, Table as TableIcon, Plus, Trash2, AlertCircle } from 'lucide-react';
 
 import { COLORS, LOGO_URL } from '../../constants';
-import { formatPhoneNumber } from '../../utils';
+import { formatPhoneNumber, getAdjustedSS } from '../../utils';
 import { Card, StatBox, FormattedNumberInput, Disclaimer } from '../ui';
 
 /**
@@ -883,13 +883,19 @@ export const ClientWizard = ({
           colorClass={`bg-gray-800 text-white ${adjustedProjections.hasChanges && (selectedImprovements.delay || selectedImprovements.savings) ? 'ring-2 ring-emerald-400' : ''}`}
         />
         <StatBox
-          label="Monthly Distribution"
+          label="Total Monthly Spend"
           value={adjustedProjections.hasChanges && selectedImprovements.spending
             ? `$${adjustedProjections.monthlyNeed.toLocaleString()}`
             : `$${inputs.monthlySpending.toLocaleString()}`}
-          subtext={adjustedProjections.hasChanges && selectedImprovements.spending
-            ? <><span className="line-through opacity-60">${inputs.monthlySpending.toLocaleString()}</span> → -${(inputs.monthlySpending - adjustedProjections.monthlyNeed).toLocaleString()}/mo</>
-            : `${((inputs.monthlySpending * 12) / (adjustedProjections.hasChanges ? adjustedProjections.portfolio : inputs.totalPortfolio) * 100).toFixed(1)}% annual rate`}
+          subtext={(() => {
+            const monthlySpend = adjustedProjections.hasChanges && selectedImprovements.spending
+              ? adjustedProjections.monthlyNeed
+              : inputs.monthlySpending;
+            const clientSS = getAdjustedSS(inputs.ssPIA, inputs.ssStartAge);
+            const partnerSS = clientInfo.isMarried ? getAdjustedSS(inputs.partnerSSPIA, inputs.partnerSSStartAge) : 0;
+            const portfolioWithdrawal = Math.max(0, monthlySpend - clientSS - partnerSS);
+            return `$${Math.round(portfolioWithdrawal).toLocaleString()}/mo from portfolio`;
+          })()}
           icon={DollarSign}
           colorClass={`bg-yellow-500 text-white ${adjustedProjections.hasChanges && selectedImprovements.spending ? 'ring-2 ring-emerald-400' : ''}`}
         />
@@ -993,200 +999,149 @@ export const ClientWizard = ({
         )}
       </Card>
 
-      {/* Improvement Solutions */}
-      {improvementSolutions.needed && (
-        <Card className="p-6 border-t-4 border-yellow-500">
-          <h3 className="font-bold text-lg text-slate-800 mb-4 flex items-center gap-2">
-            <TrendingUp className="w-5 h-5 text-yellow-600" /> Ways to Improve Your Outcome
-          </h3>
-          <p className="text-sm text-slate-600 mb-4">
-            Your current success probability is <strong>{improvementSolutions.currentRate?.toFixed(1)}%</strong>.
-            Select one or more options below and adjust the amounts to see what works for you:
-          </p>
-          {improvementSolutions.hasAdditionalIncome && (
-            <div className="mb-6 p-3 bg-emerald-50 border border-emerald-200 rounded-lg text-sm text-emerald-700">
-              <strong>Note:</strong> These recommendations already factor in your additional income
-              {improvementSolutions.additionalIncomeAmount > 0 && (
-                <span> (${(improvementSolutions.additionalIncomeAmount / 12).toLocaleString()}/mo recurring)</span>
-              )}
-              {improvementSolutions.oneTimeAmount > 0 && (
-                <span> and one-time events (${improvementSolutions.oneTimeAmount.toLocaleString()})</span>
-              )}
-              .
-            </div>
-          )}
+      {/* Planning Guidance */}
+      {(() => {
+        const successRate = monteCarloData?.successRate || 0;
+        const legacyBalance = projectionData[projectionData.length - 1]?.total || 0;
+        const annualSpending = inputs.monthlySpending * 12;
+        const legacyToSpendingRatio = legacyBalance / annualSpending;
+        const isLowSuccess = successRate < 80;
+        const isVeryHighLegacy = successRate >= 95 && legacyToSpendingRatio > 20;
 
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            {/* Delay Retirement Option */}
-            <div
-              className={`p-4 rounded-lg border-2 transition-all cursor-pointer ${
-                selectedImprovements.delay
-                  ? 'bg-blue-100 border-blue-500 shadow-md'
-                  : 'bg-blue-50 border-blue-200 hover:border-blue-400'
-              }`}
-              onClick={() => setSelectedImprovements(prev => ({ ...prev, delay: !prev.delay }))}
-            >
-              <div className="flex items-center justify-between mb-3">
-                <div className="flex items-center gap-2">
-                  <input
-                    type="checkbox"
-                    checked={selectedImprovements.delay}
-                    onChange={(e) => {
-                      e.stopPropagation();
-                      setSelectedImprovements(prev => ({ ...prev, delay: e.target.checked }));
-                    }}
-                    className="w-5 h-5 text-blue-600 rounded border-blue-300"
-                  />
-                  <Clock className="w-5 h-5 text-blue-600" />
-                  <h4 className="font-bold text-blue-800">Delay Retirement</h4>
-                </div>
-              </div>
-              <div className="space-y-2">
-                <label className="block text-xs text-blue-600 uppercase font-bold">Years to Delay</label>
-                <input
-                  type="number"
-                  min={1}
-                  max={15}
-                  value={customImprovements.delayYears}
-                  onChange={(e) => {
-                    e.stopPropagation();
-                    setCustomImprovements(prev => ({ ...prev, delayYears: parseInt(e.target.value) || 0 }));
-                  }}
-                  onClick={(e) => e.stopPropagation()}
-                  className="w-full p-2 border rounded text-lg font-bold text-blue-700 bg-white"
-                />
-                <p className="text-xs text-blue-600">
-                  New retirement age: <strong>{clientInfo.retirementAge + customImprovements.delayYears}</strong>
-                </p>
-              </div>
-            </div>
-
-            {/* Save More Option */}
-            <div
-              className={`p-4 rounded-lg border-2 transition-all cursor-pointer ${
-                selectedImprovements.savings
-                  ? 'bg-emerald-100 border-emerald-500 shadow-md'
-                  : 'bg-emerald-50 border-emerald-200 hover:border-emerald-400'
-              }`}
-              onClick={() => setSelectedImprovements(prev => ({ ...prev, savings: !prev.savings }))}
-            >
-              <div className="flex items-center justify-between mb-3">
-                <div className="flex items-center gap-2">
-                  <input
-                    type="checkbox"
-                    checked={selectedImprovements.savings}
-                    onChange={(e) => {
-                      e.stopPropagation();
-                      setSelectedImprovements(prev => ({ ...prev, savings: e.target.checked }));
-                    }}
-                    className="w-5 h-5 text-emerald-600 rounded border-emerald-300"
-                  />
-                  <PiggyBank className="w-5 h-5 text-emerald-600" />
-                  <h4 className="font-bold text-emerald-800">Save More</h4>
-                </div>
-              </div>
-              <div className="space-y-2">
-                <label className="block text-xs text-emerald-600 uppercase font-bold">Additional Savings/Year</label>
-                <FormattedNumberInput
-                  value={customImprovements.additionalSavings}
-                  onChange={(e) => {
-                    setCustomImprovements(prev => ({ ...prev, additionalSavings: parseFloat(e.target.value) || 0 }));
-                  }}
-                  onClick={(e) => e.stopPropagation()}
-                  className="w-full p-2 border rounded text-lg font-bold text-emerald-700 bg-white"
-                />
-                <p className="text-xs text-emerald-600">
-                  New total: <strong>${(clientInfo.annualSavings + customImprovements.additionalSavings).toLocaleString()}/yr</strong>
-                </p>
-              </div>
-            </div>
-
-            {/* Spend Less in Retirement Option */}
-            <div
-              className={`p-4 rounded-lg border-2 transition-all cursor-pointer ${
-                selectedImprovements.spending
-                  ? 'bg-orange-100 border-orange-500 shadow-md'
-                  : 'bg-orange-50 border-orange-200 hover:border-orange-400'
-              }`}
-              onClick={() => setSelectedImprovements(prev => ({ ...prev, spending: !prev.spending }))}
-            >
-              <div className="flex items-center justify-between mb-3">
-                <div className="flex items-center gap-2">
-                  <input
-                    type="checkbox"
-                    checked={selectedImprovements.spending}
-                    onChange={(e) => {
-                      e.stopPropagation();
-                      setSelectedImprovements(prev => ({ ...prev, spending: e.target.checked }));
-                    }}
-                    className="w-5 h-5 text-orange-600 rounded border-orange-300"
-                  />
-                  <DollarSign className="w-5 h-5 text-orange-600" />
-                  <h4 className="font-bold text-orange-800">Spend Less in Retirement</h4>
-                </div>
-              </div>
-              <div className="space-y-2">
-                <label className="block text-xs text-orange-600 uppercase font-bold">Reduce Monthly Distribution</label>
-                <FormattedNumberInput
-                  value={customImprovements.spendingReduction}
-                  onChange={(e) => {
-                    setCustomImprovements(prev => ({ ...prev, spendingReduction: parseFloat(e.target.value) || 0 }));
-                  }}
-                  onClick={(e) => e.stopPropagation()}
-                  className="w-full p-2 border rounded text-lg font-bold text-orange-700 bg-white"
-                />
-                <p className="text-xs text-orange-600">
-                  New retirement need: <strong>${Math.max(0, inputs.monthlySpending - customImprovements.spendingReduction).toLocaleString()}/mo</strong>
-                </p>
-              </div>
-            </div>
-          </div>
-
-          {/* Selected Improvements Summary */}
-          {(selectedImprovements.delay || selectedImprovements.savings || selectedImprovements.spending) && (
-            <div className="mt-6 p-4 bg-slate-100 rounded-lg border border-slate-300">
-              <h4 className="font-bold text-slate-800 mb-3">Your Selected Improvements</h4>
-              <div className="space-y-2 text-sm">
-                {selectedImprovements.delay && (
-                  <div className="flex items-center gap-2 text-blue-700">
-                    <Clock className="w-4 h-4" />
-                    <span>Delay retirement by <strong>{customImprovements.delayYears} years</strong> (retire at {clientInfo.retirementAge + customImprovements.delayYears})</span>
-                  </div>
-                )}
-                {selectedImprovements.savings && (
-                  <div className="flex items-center gap-2 text-emerald-700">
-                    <PiggyBank className="w-4 h-4" />
-                    <span>Save an additional <strong>${customImprovements.additionalSavings.toLocaleString()}/year</strong></span>
-                  </div>
-                )}
-                {selectedImprovements.spending && (
-                  <div className="flex items-center gap-2 text-orange-700">
-                    <DollarSign className="w-4 h-4" />
-                    <span>Reduce retirement monthly need by <strong>${customImprovements.spendingReduction.toLocaleString()}/month</strong> (to ${Math.max(0, inputs.monthlySpending - customImprovements.spendingReduction).toLocaleString()}/mo)</span>
-                  </div>
-                )}
-              </div>
-              <p className="text-xs text-slate-500 mt-3 italic">
-                Discuss these options with your advisor to see the impact on your retirement projections.
+        if (isLowSuccess) {
+          return (
+            <Card className="p-6 border-t-4 border-yellow-500">
+              <h3 className="font-bold text-lg text-slate-800 mb-4 flex items-center gap-2">
+                <TrendingUp className="w-5 h-5 text-yellow-600" /> Ways to Improve Your Outcome
+              </h3>
+              <p className="text-sm text-slate-600 mb-4">
+                Your current success probability is <strong>{successRate.toFixed(1)}%</strong>.
+                Here are some strategies to consider that could improve your retirement outlook:
               </p>
-            </div>
-          )}
-        </Card>
-      )}
 
-      {/* Success Message */}
-      {!improvementSolutions.needed && (
-        <Card className="p-6 border-t-4 border-emerald-500">
-          <div className="text-center">
-            <Activity className="w-12 h-12 text-emerald-600 mx-auto mb-4" />
-            <h3 className="font-bold text-xl text-slate-800 mb-2">You're On Track!</h3>
-            <p className="text-slate-600">
-              Your retirement plan has a {monteCarloData?.successRate?.toFixed(1)}% probability of success.
-              You're well-positioned for a comfortable retirement.
-            </p>
-          </div>
-        </Card>
-      )}
+              <div className="space-y-4">
+                <div className="p-4 bg-blue-50 rounded-lg border border-blue-200">
+                  <div className="flex items-start gap-3">
+                    <Clock className="w-5 h-5 text-blue-600 mt-0.5" />
+                    <div>
+                      <h4 className="font-bold text-blue-800">Consider Delaying Retirement</h4>
+                      <p className="text-sm text-blue-700 mt-1">
+                        Working a few more years allows your portfolio to grow longer and reduces the number of years you'll need to draw from it.
+                        To make this change, go back to Step 1 and increase your Retirement Age.
+                      </p>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="p-4 bg-emerald-50 rounded-lg border border-emerald-200">
+                  <div className="flex items-start gap-3">
+                    <PiggyBank className="w-5 h-5 text-emerald-600 mt-0.5" />
+                    <div>
+                      <h4 className="font-bold text-emerald-800">Increase Your Savings</h4>
+                      <p className="text-sm text-emerald-700 mt-1">
+                        Saving more now can significantly boost your retirement portfolio. Even small increases compound over time.
+                        To make this change, go back to Step 1 and increase your Annual Savings.
+                      </p>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="p-4 bg-orange-50 rounded-lg border border-orange-200">
+                  <div className="flex items-start gap-3">
+                    <DollarSign className="w-5 h-5 text-orange-600 mt-0.5" />
+                    <div>
+                      <h4 className="font-bold text-orange-800">Reduce Retirement Spending</h4>
+                      <p className="text-sm text-orange-700 mt-1">
+                        Planning for a more modest retirement lifestyle reduces the strain on your portfolio.
+                        To make this change, go back to Step 1 and reduce your Monthly Spending.
+                      </p>
+                      <button
+                        onClick={() => {
+                          const portfolioWithdrawal = (inputs.totalPortfolio * 0.04) / 12;
+                          const clientSS = getAdjustedSS(inputs.ssPIA, inputs.ssStartAge);
+                          const partnerSS = clientInfo.isMarried ? getAdjustedSS(inputs.partnerSSPIA, inputs.partnerSSStartAge) : 0;
+                          const fourPercentMonthly = Math.round(portfolioWithdrawal + clientSS + partnerSS);
+                          onInputChange({ target: { name: 'monthlySpending', value: fourPercentMonthly, type: 'number' } });
+                        }}
+                        className="mt-3 px-4 py-2 bg-orange-600 text-white text-sm font-medium rounded-lg hover:bg-orange-700 transition-colors"
+                      >
+                        Try the 4% Rule (${(() => {
+                          const portfolioWithdrawal = (inputs.totalPortfolio * 0.04) / 12;
+                          const clientSS = getAdjustedSS(inputs.ssPIA, inputs.ssStartAge);
+                          const partnerSS = clientInfo.isMarried ? getAdjustedSS(inputs.partnerSSPIA, inputs.partnerSSStartAge) : 0;
+                          return Math.round(portfolioWithdrawal + clientSS + partnerSS).toLocaleString();
+                        })()}/mo)
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <p className="text-xs text-slate-500 mt-4 italic">
+                Discuss these options with your financial advisor to determine the best approach for your situation.
+              </p>
+            </Card>
+          );
+        } else if (isVeryHighLegacy) {
+          return (
+            <Card className="p-6 border-t-4 border-purple-500">
+              <h3 className="font-bold text-lg text-slate-800 mb-4 flex items-center gap-2">
+                <TrendingUp className="w-5 h-5 text-purple-600" /> You May Be Leaving a Large Legacy
+              </h3>
+              <p className="text-sm text-slate-600 mb-4">
+                With a <strong>{successRate.toFixed(1)}%</strong> success probability and a projected legacy of
+                <strong> ${(legacyBalance / 1000000).toFixed(2)}M</strong>, you may have more flexibility than you realize.
+                Consider whether you'd prefer to enjoy more of your wealth during retirement:
+              </p>
+
+              <div className="space-y-4">
+                <div className="p-4 bg-purple-50 rounded-lg border border-purple-200">
+                  <div className="flex items-start gap-3">
+                    <Clock className="w-5 h-5 text-purple-600 mt-0.5" />
+                    <div>
+                      <h4 className="font-bold text-purple-800">Consider Retiring Earlier</h4>
+                      <p className="text-sm text-purple-700 mt-1">
+                        With your strong financial position, you may be able to start retirement sooner and enjoy more years of freedom.
+                        To explore this, go back to Step 1 and decrease your Retirement Age.
+                      </p>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="p-4 bg-indigo-50 rounded-lg border border-indigo-200">
+                  <div className="flex items-start gap-3">
+                    <DollarSign className="w-5 h-5 text-indigo-600 mt-0.5" />
+                    <div>
+                      <h4 className="font-bold text-indigo-800">Increase Your Retirement Lifestyle</h4>
+                      <p className="text-sm text-indigo-700 mt-1">
+                        You could afford a more comfortable retirement with additional travel, hobbies, or experiences.
+                        To explore this, go back to Step 1 and increase your Monthly Spending.
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <p className="text-xs text-slate-500 mt-4 italic">
+                Of course, if leaving a legacy is important to you, your current plan accomplishes that goal beautifully.
+              </p>
+            </Card>
+          );
+        } else {
+          return (
+            <Card className="p-6 border-t-4 border-emerald-500">
+              <div className="text-center">
+                <Activity className="w-12 h-12 text-emerald-600 mx-auto mb-4" />
+                <h3 className="font-bold text-xl text-slate-800 mb-2">You're On Track!</h3>
+                <p className="text-slate-600">
+                  Your retirement plan has a {successRate.toFixed(1)}% probability of success.
+                  You're well-positioned for a comfortable retirement.
+                </p>
+              </div>
+            </Card>
+          );
+        }
+      })()}
 
       {/* Talk to Advisor CTA */}
       <div className="bg-black text-white p-8 rounded-xl text-center">

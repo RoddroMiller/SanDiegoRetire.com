@@ -229,7 +229,9 @@ export const useScenarios = ({ currentUser, userRole }) => {
    */
   const deleteScenario = useCallback(async (e, id, skipConfirm = false) => {
     e.stopPropagation();
-    if (!skipConfirm && !confirm("Are you sure you want to delete this saved client?")) return false;
+    if (!skipConfirm) {
+      if (!confirm("Are you sure you want to delete this saved client?")) return false;
+    }
 
     try {
       await deleteDoc(doc(db, 'artifacts', appId, 'public', 'data', 'scenarios', id));
