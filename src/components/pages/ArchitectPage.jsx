@@ -233,15 +233,21 @@ export const ArchitectPage = ({
   return (
     <div className={`min-h-screen bg-slate-50 font-sans text-slate-800 ${isGeneratingReport ? 'print-mode' : 'p-4 sm:p-6 lg:p-8'}`}>
 
-      {/* REPORT HEADER (Print Only) */}
-      <div className="hidden print:flex flex-col h-screen break-after-page items-center justify-center text-center p-12">
-        <img src={LOGO_URL} alt="Logo" className="h-48 mb-8" />
-        <h1 className="text-5xl font-bold text-slate-900 mb-4">Retirement Illustration Strategy</h1>
-        <p className="text-2xl text-slate-500 mb-12">Prepared for {clientInfo.name || "Valued Client"}</p>
-        <div className="text-left border-t pt-8 w-full max-w-md mx-auto space-y-2 text-slate-600">
-          <p><strong>Email:</strong> {clientInfo.email}</p>
-          <p><strong>Phone:</strong> {clientInfo.phone}</p>
-          <p><strong>Date:</strong> {new Date().toLocaleDateString()}</p>
+      {/* PRINT PAGE 1: Cover Page */}
+      <div className="hidden print:flex flex-col h-screen break-after-page items-center justify-center text-center p-12 bg-white">
+        <img src={LOGO_URL} alt="Logo" className="h-32 mb-6" />
+        <h1 className="text-4xl font-bold text-slate-900 mb-2">Retirement Strategy Illustration</h1>
+        <div className="w-24 h-1 bg-emerald-600 mx-auto mb-8"></div>
+        <p className="text-2xl text-slate-600 mb-2">Prepared for</p>
+        <p className="text-3xl font-bold text-emerald-700 mb-12">{clientInfo.name || "Valued Client"}</p>
+        <div className="text-left border-t border-slate-200 pt-8 w-full max-w-md mx-auto space-y-3 text-slate-600">
+          <p><strong>Email:</strong> {clientInfo.email || 'Not provided'}</p>
+          <p><strong>Phone:</strong> {clientInfo.phone || 'Not provided'}</p>
+          <p><strong>Prepared:</strong> {new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' })}</p>
+        </div>
+        <div className="mt-auto pt-12 text-xs text-slate-400">
+          <p>Miller Wealth Management</p>
+          <p>www.millerwm.com | (480) 613-7400</p>
         </div>
       </div>
 
@@ -297,69 +303,81 @@ export const ArchitectPage = ({
         </div>
       </div>
 
-      {/* PAGE 1: About Us (Print Only) */}
-      <div className="hidden print:block break-after-page p-8">
-        <h2 className="text-3xl font-bold text-slate-900 mb-6">About Miller Wealth Management</h2>
-        <div className="bg-slate-50 p-8 rounded-xl border border-slate-100">
-          <h3 className="text-xl font-bold text-emerald-700 mb-4">COMPANY & FOUNDER OVERVIEW</h3>
-          <p className="mb-4 text-slate-700"><strong>Helping individuals, families, and businesses identify, plan, and pursue their financial goals since 2011.</strong></p>
-          <p className="mb-6 text-slate-600 leading-relaxed">Miller Wealth Management is a full-service wealth planning and investment advisory firm providing customized guidance and unmatched service to a select number of individuals, families, and business owners. Our mission is to become our clients' most trusted advisor by leveraging an understandable, tailored process that aims to help our clients reach their stated goals while building a lasting relationship based on trust.</p>
+      {/* PRINT PAGE 2: Phase 1 - Accumulation */}
+      <div className="hidden print:block break-after-page p-6">
+        <div className="flex justify-between items-start mb-3">
+          <div>
+            <h2 className="text-2xl font-bold text-slate-900">Phase 1 - Accumulation</h2>
+            <p className="text-sm text-slate-500">Building your retirement portfolio</p>
+          </div>
+          <img src={LOGO_URL} alt="Logo" className="h-10" />
+        </div>
+        <div className="border rounded-xl p-3 mb-4">
+          <AreaChart width={680} height={200} data={accumulationData}>
+            <CartesianGrid strokeDasharray="3 3" vertical={false} />
+            <XAxis dataKey="age" tick={{ fontSize: 10 }} />
+            <YAxis tickFormatter={(val) => `$${val / 1000}k`} tick={{ fontSize: 10 }} />
+            <Area type="monotone" dataKey="balance" stroke={COLORS.hedged} fill={COLORS.hedged} fillOpacity={0.2} />
+          </AreaChart>
+        </div>
+        <div className="grid grid-cols-4 gap-3 text-sm mb-4">
+          <div className="bg-slate-50 p-2 rounded-lg">
+            <p className="text-slate-500 text-[10px]">Current Age</p>
+            <p className="font-bold text-base">{clientInfo.currentAge}</p>
+          </div>
+          <div className="bg-slate-50 p-2 rounded-lg">
+            <p className="text-slate-500 text-[10px]">Retirement Age</p>
+            <p className="font-bold text-base">{clientInfo.retirementAge}</p>
+          </div>
+          <div className="bg-slate-50 p-2 rounded-lg">
+            <p className="text-slate-500 text-[10px]">Current Portfolio</p>
+            <p className="font-bold text-base">${clientInfo.currentPortfolio.toLocaleString()}</p>
+          </div>
+          <div className="bg-slate-50 p-2 rounded-lg">
+            <p className="text-slate-500 text-[10px]">Annual Savings</p>
+            <p className="font-bold text-base">${clientInfo.annualSavings.toLocaleString()}</p>
+          </div>
+        </div>
 
-          <div className="grid grid-cols-2 gap-8 mb-8">
+        {/* Cash Flow Table for Accumulation Phase */}
+        <div className="border rounded-lg p-3 mb-4">
+          <h3 className="font-bold text-sm text-slate-800 mb-2">Accumulation Cash Flow</h3>
+          <table className="w-full text-[9px]">
+            <thead>
+              <tr className="bg-slate-100">
+                <th className="p-1 text-left">Age</th>
+                <th className="p-1 text-right">Start Balance</th>
+                <th className="p-1 text-right text-emerald-600">Savings</th>
+                <th className="p-1 text-right text-blue-600">Growth</th>
+                <th className="p-1 text-right font-bold">End Balance</th>
+              </tr>
+            </thead>
+            <tbody>
+              {accumulationData.map((row, i) => {
+                const prevBalance = i > 0 ? accumulationData[i - 1].balance : clientInfo.currentPortfolio;
+                const savings = i > 0 ? Math.round(clientInfo.annualSavings * Math.pow(1 + (inputs.inflationRate / 100), i - 1)) : 0;
+                const growth = i > 0 ? row.balance - prevBalance - savings : 0;
+                return (
+                  <tr key={i} className={i % 2 === 0 ? 'bg-white' : 'bg-slate-50'}>
+                    <td className="p-1">{row.age}</td>
+                    <td className="p-1 text-right">${prevBalance.toLocaleString()}</td>
+                    <td className="p-1 text-right text-emerald-600">{savings > 0 ? `+$${savings.toLocaleString()}` : '-'}</td>
+                    <td className="p-1 text-right text-blue-600">{growth > 0 ? `+$${Math.round(growth).toLocaleString()}` : '-'}</td>
+                    <td className="p-1 text-right font-bold">${row.balance.toLocaleString()}</td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+
+        <div className="bg-emerald-50 p-3 rounded-xl border border-emerald-200">
+          <div className="flex items-center justify-between">
             <div>
-              <h4 className="font-bold text-slate-800 border-b border-slate-300 pb-1 mb-2">INDIVIDUALS & FAMILIES</h4>
-              <ul className="list-disc pl-5 text-sm text-slate-600 space-y-1">
-                <li>Investment Management</li>
-                <li>Retirement Planning</li>
-                <li>Holistic Financial Planning</li>
-                <li>Risk Management & Insurance</li>
-              </ul>
+              <p className="text-emerald-800 font-bold text-sm">Projected Portfolio at Retirement (Age {clientInfo.retirementAge})</p>
+              <p className="text-xs text-emerald-600">Based on {clientInfo.expectedReturn}% expected return</p>
             </div>
-            <div>
-              <h4 className="font-bold text-slate-800 border-b border-slate-300 pb-1 mb-2">BUSINESS SERVICES</h4>
-              <ul className="list-disc pl-5 text-sm text-slate-600 space-y-1">
-                <li>Corporate Retirement Plans</li>
-                <li>Key Employment Incentives</li>
-                <li>Employer-Sponsored 529 Plans</li>
-                <li>Succession & Exit Planning</li>
-              </ul>
-            </div>
-          </div>
-
-          <h3 className="text-xl font-bold text-emerald-700 mb-2">FOUNDER - RODD R. MILLER</h3>
-          <p className="text-slate-600 leading-relaxed text-sm">Miller Wealth Management was founded in 2011 by Rodd R. Miller. Rodd visualized an independent wealth management firm that was dedicated to helping clients strategize and pursue important milestones throughout their financial lives. Rodd is an Arizona native and a graduate of the University of San Diego where he received his Bachelor of Business Administration degree and earned the magna cum laude honor. He has committed a lifetime to finance, with a career that spans private equity, real estate development finance, and ultimately wealth management. Rodd is a Certified Financial Planner™ (CFP®).</p>
-        </div>
-        <PrintFooter pageNumber={1} />
-      </div>
-
-      {/* PAGE 2: ACCUMULATION SUMMARY (Print Only) */}
-      <div className="hidden print:block break-after-page p-8">
-        <div className="flex justify-between items-start mb-4">
-          <h2 className="text-3xl font-bold text-slate-900 mb-6">Phase 1: Accumulation</h2>
-          <img src={LOGO_URL} alt="Logo" className="h-12" />
-        </div>
-        <div className="h-[500px] w-full border rounded-xl p-4 mb-8">
-          <ResponsiveContainer width="100%" height="100%">
-            <AreaChart data={accumulationData}>
-              <CartesianGrid strokeDasharray="3 3" vertical={false} />
-              <XAxis dataKey="age" />
-              <YAxis tickFormatter={(val) => `$${val / 1000}k`} />
-              <Area type="monotone" dataKey="balance" stroke={COLORS.hedged} fill={COLORS.hedged} fillOpacity={0.2} />
-            </AreaChart>
-          </ResponsiveContainer>
-        </div>
-        <div className="grid grid-cols-2 gap-8 text-lg">
-          <div>
-            <p className="text-slate-500">Current Portfolio</p>
-            <p className="font-bold">${clientInfo.currentPortfolio.toLocaleString()}</p>
-          </div>
-          <div>
-            <p className="text-slate-500">Annual Savings</p>
-            <p className="font-bold">${clientInfo.annualSavings.toLocaleString()}</p>
-          </div>
-          <div>
-            <p className="text-slate-500">Projected Retirement Value</p>
-            <p className="font-bold text-emerald-600">${inputs.totalPortfolio.toLocaleString()}</p>
+            <p className="text-2xl font-bold text-emerald-700">${inputs.totalPortfolio.toLocaleString()}</p>
           </div>
         </div>
         <PrintFooter pageNumber={2} />
@@ -810,8 +828,345 @@ export const ArchitectPage = ({
         </div>
       </div>
 
-      {/* Print-only pages for additional content would go here */}
-      <PrintClosingPage clientInfo={clientInfo} />
+      {/* PRINT PAGE 3: Phase 2 - Distribution Phase */}
+      <div className="hidden print:block break-after-page p-6">
+        <div className="flex justify-between items-start mb-3">
+          <div>
+            <h2 className="text-2xl font-bold text-slate-900">Phase 2 - Distribution</h2>
+            <p className="text-sm text-slate-500">Retirement income sustainability</p>
+          </div>
+          <img src={LOGO_URL} alt="Logo" className="h-10" />
+        </div>
+
+        {/* Key Metrics */}
+        <div className="grid grid-cols-4 gap-3 mb-4">
+          <div className="bg-gray-800 text-white p-3 rounded-lg">
+            <p className="text-xs text-gray-400">Retirement Portfolio</p>
+            <p className="text-xl font-bold">${inputs.totalPortfolio.toLocaleString()}</p>
+          </div>
+          <div className="bg-yellow-500 text-white p-3 rounded-lg">
+            <p className="text-xs text-yellow-100">Monthly Spend</p>
+            <p className="text-xl font-bold">${inputs.monthlySpending.toLocaleString()}</p>
+          </div>
+          <div className={`${monteCarloData.successRate > 85 ? 'bg-emerald-500' : 'bg-orange-500'} text-white p-3 rounded-lg`}>
+            <p className="text-xs opacity-80">Success Rate</p>
+            <p className="text-xl font-bold">{monteCarloData.successRate.toFixed(1)}%</p>
+          </div>
+          <div className="bg-indigo-600 text-white p-3 rounded-lg">
+            <p className="text-xs text-indigo-200">Projected Legacy</p>
+            <p className="text-xl font-bold">${Math.round(projectionData[projectionData.length - 1]?.total || 0).toLocaleString()}</p>
+          </div>
+        </div>
+
+        {/* Portfolio Sustainability Chart with Benchmark and Distribution Rate */}
+        <div className="border rounded-lg p-4 mb-4">
+          <h3 className="font-bold text-sm text-slate-800 mb-2">Portfolio Sustainability (30 Years)</h3>
+          <ComposedChart width={680} height={280} data={projectionData}>
+            <CartesianGrid strokeDasharray="3 3" vertical={false} />
+            <XAxis dataKey="year" tick={{ fontSize: 9 }} />
+            <YAxis tickFormatter={(val) => val >= 2000000 ? `$${Math.round(val / 1000000)}M` : `$${Math.round(val / 1000)}k`} tick={{ fontSize: 9 }} />
+            <YAxis yAxisId="right" orientation="right" tickFormatter={(val) => `${val.toFixed(1)}%`} domain={[0, 'auto']} tick={{ fontSize: 9 }} />
+            <Legend wrapperStyle={{ fontSize: '9px' }} />
+            <Area type="monotone" dataKey="total" name="Miller Portfolio Strategy" fill={COLORS.areaFill} stroke={COLORS.areaFill} fillOpacity={0.8} />
+            <Line type="monotone" dataKey="benchmark" name="Benchmark 60/40" stroke={COLORS.benchmark} strokeDasharray="5 5" strokeWidth={2} dot={false} />
+            <Line yAxisId="right" type="monotone" dataKey="distRate" name="Distribution Rate" stroke={COLORS.distRate} strokeWidth={2} dot={false} />
+          </ComposedChart>
+        </div>
+
+        {/* Legend Explanation */}
+        <div className="bg-slate-50 p-3 rounded-lg border border-slate-200 text-[10px] text-slate-600">
+          <div className="grid grid-cols-3 gap-4">
+            <div className="flex items-center gap-2">
+              <div className="w-4 h-3 rounded" style={{ backgroundColor: COLORS.areaFill }}></div>
+              <span><strong>Grey Area:</strong> Miller Portfolio Strategy</span>
+            </div>
+            <div className="flex items-center gap-2">
+              <div className="w-4 h-0.5" style={{ backgroundColor: COLORS.benchmark, borderStyle: 'dashed' }}></div>
+              <span><strong>Gold Line:</strong> Benchmark 60/40 (Annual Rebalance)</span>
+            </div>
+            <div className="flex items-center gap-2">
+              <div className="w-4 h-0.5" style={{ backgroundColor: COLORS.distRate }}></div>
+              <span><strong>Red Line:</strong> Distribution Rate (%)</span>
+            </div>
+          </div>
+        </div>
+        <PrintFooter pageNumber={3} />
+      </div>
+
+      {/* PRINT PAGE 4: Cash Flows */}
+      <div className="hidden print:block break-after-page p-6">
+        <div className="flex justify-between items-start mb-4">
+          <div>
+            <h2 className="text-2xl font-bold text-slate-900">Portfolio Cash Flows</h2>
+            <p className="text-sm text-slate-500">Year-by-year projection</p>
+          </div>
+          <img src={LOGO_URL} alt="Logo" className="h-10" />
+        </div>
+        <div className="overflow-hidden">
+          <table className="w-full text-[8px]">
+            <thead>
+              <tr className="bg-slate-100">
+                <th className="p-1 text-left">Yr</th>
+                <th className="p-1 text-left">Age</th>
+                <th className="p-1 text-right">B1</th>
+                <th className="p-1 text-right">B2</th>
+                <th className="p-1 text-right">B3</th>
+                <th className="p-1 text-right">B4</th>
+                <th className="p-1 text-right">B5</th>
+                <th className="p-1 text-right">Total</th>
+                <th className="p-1 text-right">Withdraw</th>
+                <th className="p-1 text-right">Income</th>
+              </tr>
+            </thead>
+            <tbody>
+              {projectionData.slice(0, 30).map((row, i) => (
+                <tr key={i} className={i % 2 === 0 ? 'bg-white' : 'bg-slate-50'}>
+                  <td className="p-1">{row.year}</td>
+                  <td className="p-1">{row.age}</td>
+                  <td className="p-1 text-right">${Math.round(row.b1 / 1000)}k</td>
+                  <td className="p-1 text-right">${Math.round(row.b2 / 1000)}k</td>
+                  <td className="p-1 text-right">${Math.round(row.b3 / 1000)}k</td>
+                  <td className="p-1 text-right">${Math.round(row.b4 / 1000)}k</td>
+                  <td className="p-1 text-right">${Math.round(row.b5 / 1000)}k</td>
+                  <td className="p-1 text-right font-bold">${Math.round(row.total / 1000)}k</td>
+                  <td className="p-1 text-right text-red-600">${Math.round((row.w1 + row.w2 + row.w3 + row.w4 + row.w5) / 1000)}k</td>
+                  <td className="p-1 text-right text-emerald-600">${Math.round((row.ssIncome || 0) / 1000)}k</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+        <p className="text-[9px] text-slate-500 mt-2">
+          Values shown in thousands. Withdraw = amount taken from portfolio. Income = Social Security and other income sources.
+        </p>
+        <PrintFooter pageNumber={4} />
+      </div>
+
+      {/* PRINT PAGE 5: Social Security Optimization */}
+      <div className="hidden print:block break-after-page p-6">
+        <div className="flex justify-between items-start mb-4">
+          <div>
+            <h2 className="text-2xl font-bold text-slate-900">Social Security Optimization</h2>
+            <p className="text-sm text-slate-500">Optimal claiming strategy analysis</p>
+          </div>
+          <img src={LOGO_URL} alt="Logo" className="h-10" />
+        </div>
+
+        {/* Primary Recommendation */}
+        <div className="bg-black text-white p-4 rounded-xl mb-4">
+          <div className="flex items-center gap-3">
+            <CheckCircle className="w-8 h-8 text-emerald-400" />
+            <div>
+              <p className="text-sm text-gray-400">Primary Client Recommendation</p>
+              <p className="text-xl font-bold">
+                Claim at Age <span className="text-emerald-400">{ssAnalysis.winner.age}</span> to maximize portfolio at age {targetMaxPortfolioAge}
+              </p>
+            </div>
+          </div>
+        </div>
+
+        {/* Claiming Scenarios */}
+        <div className="grid grid-cols-4 gap-3 mb-6">
+          {ssAnalysis.outcomes.map((outcome) => (
+            <div key={outcome.age} className={`p-3 rounded-lg border ${outcome.age === ssAnalysis.winner.age ? 'border-emerald-500 bg-emerald-50' : 'border-slate-200 bg-slate-50'}`}>
+              <p className="text-xs font-bold text-slate-500">Claim at {outcome.age}</p>
+              <p className={`text-lg font-bold ${outcome.age === ssAnalysis.winner.age ? 'text-emerald-700' : 'text-slate-700'}`}>
+                ${Math.round(outcome.balance).toLocaleString()}
+              </p>
+              <p className="text-[10px] text-slate-400">Portfolio @ Age {targetMaxPortfolioAge}</p>
+            </div>
+          ))}
+        </div>
+
+        {/* Partner Section if married */}
+        {clientInfo.isMarried && ssPartnerAnalysis && (
+          <>
+            <div className="bg-slate-800 text-white p-4 rounded-xl mb-4">
+              <div className="flex items-center gap-3">
+                <Users className="w-8 h-8 text-yellow-500" />
+                <div>
+                  <p className="text-sm text-gray-400">Partner Recommendation</p>
+                  <p className="text-xl font-bold">
+                    Claim at Age <span className="text-yellow-500">{ssPartnerAnalysis.winner.age}</span>
+                  </p>
+                </div>
+              </div>
+            </div>
+            <div className="grid grid-cols-4 gap-3 mb-6">
+              {ssPartnerAnalysis.outcomes.map((outcome) => (
+                <div key={outcome.age} className={`p-3 rounded-lg border ${outcome.age === ssPartnerAnalysis.winner.age ? 'border-yellow-500 bg-yellow-50' : 'border-slate-200 bg-slate-50'}`}>
+                  <p className="text-xs font-bold text-slate-500">Claim at {outcome.age}</p>
+                  <p className={`text-lg font-bold ${outcome.age === ssPartnerAnalysis.winner.age ? 'text-yellow-700' : 'text-slate-700'}`}>
+                    ${Math.round(outcome.balance).toLocaleString()}
+                  </p>
+                </div>
+              ))}
+            </div>
+          </>
+        )}
+
+        {/* Breakeven Chart */}
+        <div className="border rounded-lg p-4">
+          <h3 className="font-bold text-sm text-slate-800 mb-2">Breakeven Analysis (Cumulative Benefits)</h3>
+          <LineChart width={680} height={140} data={ssAnalysis.breakevenData}>
+            <CartesianGrid strokeDasharray="3 3" vertical={false} />
+            <XAxis dataKey="age" tick={{ fontSize: 9 }} />
+            <YAxis tickFormatter={(val) => `$${val / 1000}k`} tick={{ fontSize: 9 }} />
+            <Legend wrapperStyle={{ fontSize: '10px' }} />
+            <Line type="monotone" dataKey="claim62" name="@ 62" stroke="#f87171" strokeWidth={2} dot={false} />
+            <Line type="monotone" dataKey="claim67" name="@ 67" stroke="#eab308" strokeWidth={2} dot={false} />
+            <Line type="monotone" dataKey="claim70" name="@ 70" stroke="#059669" strokeWidth={2} dot={false} />
+          </LineChart>
+        </div>
+        <PrintFooter pageNumber={5} />
+      </div>
+
+      {/* PRINT PAGE 6: Monte Carlo Simulation */}
+      <div className="hidden print:block break-after-page p-6">
+        <div className="flex justify-between items-start mb-4">
+          <div>
+            <h2 className="text-2xl font-bold text-slate-900">Monte Carlo Simulation</h2>
+            <p className="text-sm text-slate-500">Probability analysis based on 500 market scenarios</p>
+          </div>
+          <img src={LOGO_URL} alt="Logo" className="h-10" />
+        </div>
+
+        {/* Success Rate */}
+        <div className={`${monteCarloData.successRate > 85 ? 'bg-emerald-500' : 'bg-orange-500'} text-white p-6 rounded-xl mb-6`}>
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-sm opacity-80">Success Probability</p>
+              <p className="text-4xl font-bold">{monteCarloData.successRate.toFixed(1)}%</p>
+              <p className="text-sm opacity-80 mt-1">of simulations maintain positive portfolio balance</p>
+            </div>
+            <Activity className="w-16 h-16 opacity-50" />
+          </div>
+        </div>
+
+        {/* Simulation Chart */}
+        <div className="border rounded-lg p-4 mb-4">
+          <h3 className="font-bold text-sm text-slate-800 mb-2">Portfolio Outcome Range (30 Years)</h3>
+          <ComposedChart width={680} height={220} data={monteCarloData.data}>
+            <CartesianGrid strokeDasharray="3 3" vertical={false} />
+            <XAxis dataKey="year" tick={{ fontSize: 9 }} />
+            <YAxis tickFormatter={(val) => val >= 2000000 ? `$${Math.round(val / 1000000)}M` : `$${Math.round(val / 1000)}k`} tick={{ fontSize: 9 }} />
+            <Legend wrapperStyle={{ fontSize: '10px' }} />
+            <Area type="monotone" dataKey="p90" name="90th Percentile (Upside)" stroke="#166534" fill={COLORS.midTerm} fillOpacity={0.3} />
+            <Area type="monotone" dataKey="p10" name="10th Percentile (Downside)" stroke="#dc2626" fill="white" fillOpacity={1} />
+            <Line type="monotone" dataKey="median" name="Median Outcome" stroke={COLORS.longTerm} strokeWidth={3} dot={false} />
+          </ComposedChart>
+        </div>
+
+        <div className="bg-slate-100 p-4 rounded-lg text-sm">
+          <p className="text-slate-700">
+            <strong>How to interpret:</strong> This simulation runs 500 random market scenarios using historical return patterns.
+            The shaded area shows the range between best (90th percentile) and worst (10th percentile) outcomes.
+            A success rate above 85% indicates a robust retirement plan.
+          </p>
+        </div>
+        <PrintFooter pageNumber={6} />
+      </div>
+
+      {/* PRINT PAGE 7: Planning Guidance */}
+      <div className="hidden print:block break-after-page p-6">
+        <div className="flex justify-between items-start mb-4">
+          <div>
+            <h2 className="text-2xl font-bold text-slate-900">Planning Guidance</h2>
+            <p className="text-sm text-slate-500">Recommendations based on your analysis</p>
+          </div>
+          <img src={LOGO_URL} alt="Logo" className="h-10" />
+        </div>
+
+        {(() => {
+          const successRate = monteCarloData?.successRate || 0;
+          const legacyBalance = projectionData[projectionData.length - 1]?.total || 0;
+          const annualSpending = inputs.monthlySpending * 12;
+          const legacyToSpendingRatio = annualSpending > 0 ? legacyBalance / annualSpending : 0;
+          const isLowSuccess = successRate < 80;
+          const isVeryHighLegacy = successRate >= 95 && legacyToSpendingRatio > 20;
+
+          if (isLowSuccess) {
+            return (
+              <div className="border-l-4 border-yellow-500 bg-yellow-50 p-6 rounded-r-lg">
+                <h3 className="font-bold text-lg text-yellow-800 mb-4">Consider These Improvements</h3>
+                <p className="text-sm text-yellow-700 mb-4">
+                  Your current success probability is {successRate.toFixed(1)}%, which is below the recommended 80% threshold.
+                </p>
+                <div className="space-y-4">
+                  <div className="bg-white p-4 rounded-lg">
+                    <h4 className="font-bold text-blue-800">Delay Retirement</h4>
+                    <p className="text-sm text-slate-600">Working a few more years allows your portfolio to grow while reducing retirement years to fund.</p>
+                  </div>
+                  <div className="bg-white p-4 rounded-lg">
+                    <h4 className="font-bold text-emerald-800">Increase Savings</h4>
+                    <p className="text-sm text-slate-600">Boosting annual savings will increase your retirement portfolio and improve success rate.</p>
+                  </div>
+                  <div className="bg-white p-4 rounded-lg">
+                    <h4 className="font-bold text-orange-800">Reduce Spending</h4>
+                    <p className="text-sm text-slate-600">Lowering planned monthly distribution reduces withdrawal rate and extends portfolio longevity.</p>
+                  </div>
+                </div>
+              </div>
+            );
+          } else if (isVeryHighLegacy) {
+            return (
+              <div className="border-l-4 border-purple-500 bg-purple-50 p-6 rounded-r-lg">
+                <h3 className="font-bold text-lg text-purple-800 mb-4">You May Be Leaving Too Large a Legacy</h3>
+                <p className="text-sm text-purple-700 mb-4">
+                  With a {successRate.toFixed(1)}% success rate and projected legacy of ${legacyBalance.toLocaleString()},
+                  you have more flexibility than you may realize.
+                </p>
+                <div className="space-y-4">
+                  <div className="bg-white p-4 rounded-lg">
+                    <h4 className="font-bold text-purple-800">Consider Retiring Earlier</h4>
+                    <p className="text-sm text-slate-600">Your strong financial position may allow you to start retirement sooner.</p>
+                  </div>
+                  <div className="bg-white p-4 rounded-lg">
+                    <h4 className="font-bold text-purple-800">Increase Retirement Lifestyle</h4>
+                    <p className="text-sm text-slate-600">You could afford a more comfortable retirement with additional travel, hobbies, or experiences.</p>
+                  </div>
+                </div>
+              </div>
+            );
+          } else {
+            return (
+              <div className="border-l-4 border-emerald-500 bg-emerald-50 p-6 rounded-r-lg">
+                <h3 className="font-bold text-lg text-emerald-800 mb-4">You're On Track!</h3>
+                <p className="text-sm text-emerald-700 mb-4">
+                  Your retirement plan has a {successRate.toFixed(1)}% probability of success.
+                  You're well-positioned for a comfortable retirement.
+                </p>
+                <div className="bg-white p-4 rounded-lg">
+                  <h4 className="font-bold text-slate-800">Key Metrics Summary</h4>
+                  <div className="grid grid-cols-2 gap-4 mt-3 text-sm">
+                    <div>
+                      <p className="text-slate-500">Retirement Portfolio</p>
+                      <p className="font-bold">${inputs.totalPortfolio.toLocaleString()}</p>
+                    </div>
+                    <div>
+                      <p className="text-slate-500">Monthly Distribution</p>
+                      <p className="font-bold">${inputs.monthlySpending.toLocaleString()}</p>
+                    </div>
+                    <div>
+                      <p className="text-slate-500">Success Probability</p>
+                      <p className="font-bold text-emerald-600">{successRate.toFixed(1)}%</p>
+                    </div>
+                    <div>
+                      <p className="text-slate-500">Projected Legacy</p>
+                      <p className="font-bold">${legacyBalance.toLocaleString()}</p>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            );
+          }
+        })()}
+
+        <div className="mt-6 bg-slate-100 p-4 rounded-lg text-sm text-slate-600">
+          <p><strong>Disclaimer:</strong> All projections are hypothetical and based on the assumptions outlined in this document. Actual results may vary based on market conditions, changes in personal circumstances, and other factors. Please consult with your financial advisor before making any decisions.</p>
+        </div>
+        <PrintFooter pageNumber={7} />
+      </div>
     </div>
   );
 };
@@ -1458,7 +1813,7 @@ const PrintFooter = ({ pageNumber }) => (
   <div className="border-t border-gray-100 pt-4 mt-auto">
     <div className="flex justify-between text-[10px] text-gray-400 mb-2">
       <span>Miller Wealth Management | Confidential</span>
-      <span>Page {pageNumber} of 8</span>
+      <span>Page {pageNumber} of 7</span>
     </div>
     <p className="text-[8px] text-gray-400 text-center leading-tight">
       Securities offered through LPL Financial, Member FINRA/SIPC. Investment Advice offered through Miller Wealth Management, a Registered Investment Advisor. Miller Wealth Management is a separate entity from LPL Financial.
@@ -1466,44 +1821,6 @@ const PrintFooter = ({ pageNumber }) => (
   </div>
 );
 
-const PrintClosingPage = ({ clientInfo }) => (
-  <div className="hidden print:block break-after-page p-8">
-    <div className="flex justify-between items-start mb-8">
-      <h2 className="text-3xl font-bold text-slate-900">Thank You</h2>
-      <img src={LOGO_URL} alt="Logo" className="h-12" />
-    </div>
-
-    <p className="text-lg text-slate-700 mb-8">
-      Dear {clientInfo.name || "Valued Client"},
-    </p>
-    <p className="text-slate-600 mb-6 leading-relaxed">
-      Thank you for taking the time to explore your retirement strategy with Miller Wealth Management. This illustration is designed to provide a framework for understanding the potential outcomes of different planning decisions.
-    </p>
-    <p className="text-slate-600 mb-6 leading-relaxed">
-      Please remember that all projections are hypothetical and based on the assumptions outlined in this document. Actual results may vary based on market conditions, changes in personal circumstances, and other factors.
-    </p>
-    <p className="text-slate-600 mb-6 leading-relaxed">
-      We encourage you to review this information carefully and reach out with any questions. Our team is here to help you navigate the complexities of retirement planning and work toward your financial goals.
-    </p>
-
-    <div className="mt-8 mb-12">
-      <p className="font-bold text-slate-800">Warm regards,</p>
-      <div className="h-12"></div>
-      <p className="font-bold text-slate-900">Rodd R. Miller, CFP®</p>
-      <p className="text-slate-600 text-xs">Founder & President<br />Miller Wealth Management</p>
-    </div>
-
-    <div className="mt-auto bg-slate-50 p-6 rounded-xl border border-slate-200">
-      <p className="text-center font-bold text-slate-800 mb-4 text-sm">We invite you to work with a firm that is committed to providing customized financial guidance and unmatched personal service. Please contact us to schedule a no-obligation consultation.</p>
-      <div className="flex justify-around text-xs font-bold text-emerald-700">
-        <span>(480) 613-7400</span>
-        <span>info@millerwm.com</span>
-        <span>www.millerwm.com</span>
-      </div>
-    </div>
-
-    <PrintFooter pageNumber={7} />
-  </div>
-);
+// Closing page removed - not in user's 8-page requirements
 
 export default ArchitectPage;

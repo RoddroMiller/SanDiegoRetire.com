@@ -1,3 +1,49 @@
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+
+/* Print styles for PDF report */
+@media print {
+  @page {
+    size: letter;
+    margin: 0.4in;
+  }
+
+  body {
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+  }
+
+  /* Ensure charts fit within page width */
+  .recharts-responsive-container {
+    width: 100% !important;
+    max-width: 7.5in !important;
+  }
+
+  /* Hide scrollbars in print */
+  ::-webkit-scrollbar {
+    display: none;
+  }
+
+  /* Ensure page breaks work properly */
+  .break-after-page {
+    page-break-after: always;
+    break-after: page;
+  }
+
+  .break-before-page {
+    page-break-before: always;
+    break-before: page;
+  }
+
+  /* Prevent orphaned content */
+  h1, h2, h3, h4, h5, h6 {
+    page-break-after: avoid;
+    break-after: avoid;
+  }
+
+  /* Ensure tables don't break awkwardly */
+  table, tr, td, th {
+    page-break-inside: avoid;
+  }
+}
