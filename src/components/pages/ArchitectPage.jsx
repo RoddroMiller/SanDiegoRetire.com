@@ -1113,7 +1113,7 @@ export const ArchitectPage = ({
               <div className="border-l-4 border-purple-500 bg-purple-50 p-6 rounded-r-lg">
                 <h3 className="font-bold text-lg text-purple-800 mb-4">You May Be Leaving Too Large a Legacy</h3>
                 <p className="text-sm text-purple-700 mb-4">
-                  With a {successRate.toFixed(1)}% success rate and projected legacy of ${legacyBalance.toLocaleString()},
+                  With a {successRate.toFixed(1)}% success rate and projected legacy of ${Math.round(legacyBalance).toLocaleString()},
                   you have more flexibility than you may realize.
                 </p>
                 <div className="space-y-4">
@@ -1153,7 +1153,7 @@ export const ArchitectPage = ({
                     </div>
                     <div>
                       <p className="text-slate-500">Projected Legacy</p>
-                      <p className="font-bold">${legacyBalance.toLocaleString()}</p>
+                      <p className="font-bold">${Math.round(legacyBalance).toLocaleString()}</p>
                     </div>
                   </div>
                 </div>
@@ -1609,7 +1609,7 @@ const ImproveOutcomeTab = ({ clientInfo, inputs, monteCarloData, projectionData,
           </h3>
           <p className="text-sm text-slate-600 mb-4">
             Your plan shows a <strong>{successRate.toFixed(1)}%</strong> success rate with a projected legacy
-            of <strong>${legacyBalance.toLocaleString()}</strong> - that's over {legacyToSpendingRatio.toFixed(0)}x your annual spending!
+            of <strong>${Math.round(legacyBalance).toLocaleString()}</strong> - that's over {legacyToSpendingRatio.toFixed(0)}x your annual spending!
           </p>
 
           <div className="p-4 rounded-lg bg-purple-50 border border-purple-200 mb-6">
