@@ -1212,13 +1212,19 @@ export const ClientWizard = ({
       {[1, 2].map((num) => (
         <div
           key={num}
+          onClick={() => {
+            if (num <= wizardStep) {
+              setWizardStep(num);
+              window.scrollTo(0, 0);
+            }
+          }}
           className={`w-8 h-8 sm:w-10 sm:h-10 rounded-full flex items-center justify-center font-bold text-xs sm:text-sm transition-all ${
             wizardStep === num
               ? 'bg-emerald-600 text-white scale-110'
               : wizardStep > num
-              ? 'bg-emerald-200 text-emerald-800'
+              ? 'bg-emerald-200 text-emerald-800 cursor-pointer hover:bg-emerald-300'
               : 'bg-slate-200 text-slate-500'
-          }`}
+          } ${num <= wizardStep ? 'cursor-pointer' : ''}`}
         >
           {num}
         </div>
@@ -1235,7 +1241,7 @@ export const ClientWizard = ({
             <img src={LOGO_URL} alt="Logo" className="h-10 sm:h-12 md:h-[72px] w-auto bg-white p-1 sm:p-2 rounded-lg flex-shrink-0" />
             <div>
               <h1 className="text-lg sm:text-xl md:text-2xl font-bold">Retirement Planning</h1>
-              <p className="text-yellow-500 text-xs sm:text-sm mt-1">Step {wizardStep} of 4</p>
+              <p className="text-yellow-500 text-xs sm:text-sm mt-1">Step {wizardStep} of 2</p>
             </div>
           </div>
         </div>
