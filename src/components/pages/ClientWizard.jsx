@@ -4,7 +4,7 @@ import { User, DollarSign, ArrowRight, ArrowLeft, Shield, Info, Activity, Briefc
 
 import { COLORS, LOGO_URL } from '../../constants';
 import { formatPhoneNumber, getAdjustedSS } from '../../utils';
-import { Card, StatBox, FormattedNumberInput, Disclaimer } from '../ui';
+import { Card, StatBox, FormattedNumberInput, Disclaimer, ImportantDisclosures } from '../ui';
 
 /**
  * Client Wizard - Multi-step flow for prospects/clients
@@ -511,6 +511,8 @@ export const ClientWizard = ({
           </div>
         </div>
       </div>
+
+      <ImportantDisclosures />
     </div>
   );
 
@@ -999,6 +1001,100 @@ export const ClientWizard = ({
         )}
       </Card>
 
+      {/* Adjust Your Plan - Always visible */}
+      <Card className="p-6 border-t-4 border-slate-400">
+        <h3 className="font-bold text-lg text-slate-800 mb-4 flex items-center gap-2">
+          <TrendingUp className="w-5 h-5 text-slate-600" /> Adjust Your Plan
+        </h3>
+        <p className="text-sm text-slate-600 mb-4">
+          Fine-tune your retirement assumptions to see how changes affect your outlook.
+        </p>
+
+        <div className="space-y-4">
+          <div className="p-4 bg-blue-50 rounded-lg border border-blue-200">
+            <div className="flex items-start gap-3">
+              <Clock className="w-5 h-5 text-blue-600 mt-0.5" />
+              <div className="flex-1">
+                <h4 className="font-bold text-blue-800">Retirement Age</h4>
+                <p className="text-sm text-blue-700 mt-1">
+                  Working longer allows your portfolio to grow and reduces years drawing from it.
+                </p>
+                <div className="mt-3 flex items-center gap-2">
+                  <label className="text-xs font-bold text-blue-700 uppercase">Age</label>
+                  <FormattedNumberInput
+                    name="retirementAge"
+                    value={clientInfo.retirementAge}
+                    onChange={onClientChange}
+                    className="p-2 border border-blue-300 rounded-lg w-20 text-center font-bold text-blue-800 bg-white"
+                  />
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div className="p-4 bg-emerald-50 rounded-lg border border-emerald-200">
+            <div className="flex items-start gap-3">
+              <PiggyBank className="w-5 h-5 text-emerald-600 mt-0.5" />
+              <div className="flex-1">
+                <h4 className="font-bold text-emerald-800">Annual Savings</h4>
+                <p className="text-sm text-emerald-700 mt-1">
+                  Saving more now boosts your retirement portfolio through compounding.
+                </p>
+                <div className="mt-3 flex items-center gap-2">
+                  <label className="text-xs font-bold text-emerald-700 uppercase">Per Year</label>
+                  <FormattedNumberInput
+                    name="annualSavings"
+                    value={clientInfo.annualSavings}
+                    onChange={onClientChange}
+                    className="p-2 border border-emerald-300 rounded-lg w-28 text-center font-bold text-emerald-800 bg-white"
+                  />
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div className="p-4 bg-orange-50 rounded-lg border border-orange-200">
+            <div className="flex items-start gap-3">
+              <DollarSign className="w-5 h-5 text-orange-600 mt-0.5" />
+              <div className="flex-1">
+                <h4 className="font-bold text-orange-800">Monthly Spending in Retirement</h4>
+                <p className="text-sm text-orange-700 mt-1">
+                  Adjusting your retirement lifestyle changes how much you need from your portfolio.
+                </p>
+                <div className="mt-3 flex flex-wrap items-center gap-3">
+                  <div className="flex items-center gap-2">
+                    <label className="text-xs font-bold text-orange-700 uppercase">Per Month</label>
+                    <FormattedNumberInput
+                      name="monthlySpending"
+                      value={inputs.monthlySpending}
+                      onChange={onInputChange}
+                      className="p-2 border border-orange-300 rounded-lg w-28 text-center font-bold text-orange-800 bg-white"
+                    />
+                  </div>
+                  <button
+                    onClick={() => {
+                      const portfolioWithdrawal = (inputs.totalPortfolio * 0.04) / 12;
+                      const clientSS = getAdjustedSS(inputs.ssPIA, inputs.ssStartAge);
+                      const partnerSS = clientInfo.isMarried ? getAdjustedSS(inputs.partnerSSPIA, inputs.partnerSSStartAge) : 0;
+                      const fourPercentMonthly = Math.round(portfolioWithdrawal + clientSS + partnerSS);
+                      onInputChange({ target: { name: 'monthlySpending', value: fourPercentMonthly, type: 'number' } });
+                    }}
+                    className="px-4 py-2 bg-orange-600 text-white text-sm font-medium rounded-lg hover:bg-orange-700 transition-colors"
+                  >
+                    Try 4% Rule (${(() => {
+                      const portfolioWithdrawal = (inputs.totalPortfolio * 0.04) / 12;
+                      const clientSS = getAdjustedSS(inputs.ssPIA, inputs.ssStartAge);
+                      const partnerSS = clientInfo.isMarried ? getAdjustedSS(inputs.partnerSSPIA, inputs.partnerSSStartAge) : 0;
+                      return Math.round(portfolioWithdrawal + clientSS + partnerSS).toLocaleString();
+                    })()}/mo)
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </Card>
+
       {/* Planning Guidance */}
       {(() => {
         const successRate = monteCarloData?.successRate || 0;
@@ -1014,69 +1110,10 @@ export const ClientWizard = ({
               <h3 className="font-bold text-lg text-slate-800 mb-4 flex items-center gap-2">
                 <TrendingUp className="w-5 h-5 text-yellow-600" /> Ways to Improve Your Outcome
               </h3>
-              <p className="text-sm text-slate-600 mb-4">
+              <p className="text-sm text-slate-600">
                 Your current success probability is <strong>{successRate.toFixed(1)}%</strong>.
-                Here are some strategies to consider that could improve your retirement outlook:
+                Consider delaying retirement, increasing savings, or reducing spending using the controls above.
               </p>
-
-              <div className="space-y-4">
-                <div className="p-4 bg-blue-50 rounded-lg border border-blue-200">
-                  <div className="flex items-start gap-3">
-                    <Clock className="w-5 h-5 text-blue-600 mt-0.5" />
-                    <div>
-                      <h4 className="font-bold text-blue-800">Consider Delaying Retirement</h4>
-                      <p className="text-sm text-blue-700 mt-1">
-                        Working a few more years allows your portfolio to grow longer and reduces the number of years you'll need to draw from it.
-                        To make this change, go back to Step 1 and increase your Retirement Age.
-                      </p>
-                    </div>
-                  </div>
-                </div>
-
-                <div className="p-4 bg-emerald-50 rounded-lg border border-emerald-200">
-                  <div className="flex items-start gap-3">
-                    <PiggyBank className="w-5 h-5 text-emerald-600 mt-0.5" />
-                    <div>
-                      <h4 className="font-bold text-emerald-800">Increase Your Savings</h4>
-                      <p className="text-sm text-emerald-700 mt-1">
-                        Saving more now can significantly boost your retirement portfolio. Even small increases compound over time.
-                        To make this change, go back to Step 1 and increase your Annual Savings.
-                      </p>
-                    </div>
-                  </div>
-                </div>
-
-                <div className="p-4 bg-orange-50 rounded-lg border border-orange-200">
-                  <div className="flex items-start gap-3">
-                    <DollarSign className="w-5 h-5 text-orange-600 mt-0.5" />
-                    <div>
-                      <h4 className="font-bold text-orange-800">Reduce Retirement Spending</h4>
-                      <p className="text-sm text-orange-700 mt-1">
-                        Planning for a more modest retirement lifestyle reduces the strain on your portfolio.
-                        To make this change, go back to Step 1 and reduce your Monthly Spending.
-                      </p>
-                      <button
-                        onClick={() => {
-                          const portfolioWithdrawal = (inputs.totalPortfolio * 0.04) / 12;
-                          const clientSS = getAdjustedSS(inputs.ssPIA, inputs.ssStartAge);
-                          const partnerSS = clientInfo.isMarried ? getAdjustedSS(inputs.partnerSSPIA, inputs.partnerSSStartAge) : 0;
-                          const fourPercentMonthly = Math.round(portfolioWithdrawal + clientSS + partnerSS);
-                          onInputChange({ target: { name: 'monthlySpending', value: fourPercentMonthly, type: 'number' } });
-                        }}
-                        className="mt-3 px-4 py-2 bg-orange-600 text-white text-sm font-medium rounded-lg hover:bg-orange-700 transition-colors"
-                      >
-                        Try the 4% Rule (${(() => {
-                          const portfolioWithdrawal = (inputs.totalPortfolio * 0.04) / 12;
-                          const clientSS = getAdjustedSS(inputs.ssPIA, inputs.ssStartAge);
-                          const partnerSS = clientInfo.isMarried ? getAdjustedSS(inputs.partnerSSPIA, inputs.partnerSSStartAge) : 0;
-                          return Math.round(portfolioWithdrawal + clientSS + partnerSS).toLocaleString();
-                        })()}/mo)
-                      </button>
-                    </div>
-                  </div>
-                </div>
-              </div>
-
               <p className="text-xs text-slate-500 mt-4 italic">
                 Discuss these options with your financial advisor to determine the best approach for your situation.
               </p>
@@ -1158,6 +1195,8 @@ export const ClientWizard = ({
           {saveStatus === 'saving' ? 'Saving...' : 'Talk to an Advisor About My Plan'}
         </button>
       </div>
+
+      <ImportantDisclosures />
     </div>
   );
 

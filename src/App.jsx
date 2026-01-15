@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 
 // --- Local Imports ---
 import { formatPhoneNumber, calculateAccumulation, calculateBasePlan, runSimulation, calculateSSAnalysis, calculateSSPartnerAnalysis, getAdjustedSS } from './utils';
@@ -129,7 +129,7 @@ export default function BucketPortfolioBuilder() {
   };
 
   // --- Calculations (using imported utilities) ---
-  const accumulationData = useMemo(() => calculateAccumulation(clientInfo, inputs.inflationRate), [clientInfo, inputs.inflationRate]);
+  const accumulationData = useMemo(() => calculateAccumulation(clientInfo, inputs.inflationRate, inputs.additionalIncomes), [clientInfo, inputs.inflationRate, inputs.additionalIncomes]);
   const basePlan = useMemo(() => calculateBasePlan(inputs, assumptions, clientInfo), [inputs, assumptions, clientInfo]);
 
   const ssAnalysis = useMemo(() => calculateSSAnalysis({
@@ -149,6 +149,20 @@ export default function BucketPortfolioBuilder() {
 
   const projectionData = useMemo(() => runSimulation(basePlan, assumptions, inputs, rebalanceFreq, false), [basePlan, assumptions, inputs, rebalanceFreq]);
   const monteCarloData = useMemo(() => runSimulation(basePlan, assumptions, inputs, rebalanceFreq, true), [basePlan, assumptions, inputs, rebalanceFreq]);
+
+  // Keep totalPortfolio in sync with accumulation data
+  const finalAccumulationBalance = accumulationData.length > 0 ? accumulationData[accumulationData.length - 1].balance : 0;
+
+  useEffect(() => {
+    if (finalAccumulationBalance > 0) {
+      setInputs(prev => {
+        if (prev.totalPortfolio !== finalAccumulationBalance) {
+          return { ...prev, totalPortfolio: finalAccumulationBalance };
+        }
+        return prev;
+      });
+    }
+  }, [finalAccumulationBalance]);
 
   // --- Handlers ---
   const handleClientChange = (e) => {

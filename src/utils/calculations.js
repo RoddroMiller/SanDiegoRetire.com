@@ -42,16 +42,31 @@ export const getAdjustedSS = (pia, startAge) => {
  * Calculate accumulation phase data (portfolio growth before retirement)
  * @param {object} clientInfo - Client information object
  * @param {number} inflationRate - Annual inflation rate for savings adjustment
+ * @param {Array} additionalIncomes - Additional income streams including one-time events
  * @returns {Array} Array of yearly balance data points
  */
-export const calculateAccumulation = (clientInfo, inflationRate = 0) => {
+export const calculateAccumulation = (clientInfo, inflationRate = 0, additionalIncomes = []) => {
   const { currentAge, retirementAge, currentPortfolio, annualSavings, expectedReturn } = clientInfo;
   const years = Math.max(0, retirementAge - currentAge);
   const data = [];
   let balance = currentPortfolio;
 
   for (let i = 0; i <= years; i++) {
-    data.push({ age: currentAge + i, balance: Math.round(balance) });
+    const currentSimAge = currentAge + i;
+
+    // Add one-time events that occur at this age BEFORE retirement
+    // Events AT retirement age are handled in the distribution phase
+    additionalIncomes.forEach(income => {
+      if (income.isOneTime && income.startAge === currentSimAge && currentSimAge < retirementAge) {
+        let amount = income.amount;
+        if (income.inflationAdjusted) {
+          amount *= Math.pow(1 + (inflationRate / 100), i);
+        }
+        balance += amount;
+      }
+    });
+
+    data.push({ age: currentSimAge, balance: Math.round(balance) });
     if (i < years) {
       const inflationAdjustedSavings = annualSavings * Math.pow(1 + (inflationRate / 100), i);
       balance += inflationAdjustedSavings;
