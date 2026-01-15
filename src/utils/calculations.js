@@ -103,13 +103,18 @@ export const calculateBasePlan = (inputs, assumptions, clientInfo) => {
     inflationRate, personalInflationRate, additionalIncomes
   } = inputs;
 
-  const clientSS = getAdjustedSS(ssPIA, ssStartAge);
-  const partnerSS = getAdjustedSS(partnerSSPIA, partnerSSStartAge);
+  // If already retired (currentAge > retirementAge), start simulation from currentAge
+  const simulationStartAge = Math.max(clientInfo.currentAge, clientInfo.retirementAge);
+
+  // For clients over FRA who entered current SS benefit, use the value directly (no adjustment)
+  // For clients under FRA, apply the standard adjustment based on claiming age
+  const clientSS = clientInfo.currentAge >= 67 ? ssPIA : getAdjustedSS(ssPIA, ssStartAge);
+  const partnerSS = clientInfo.partnerAge >= 67 ? partnerSSPIA : getAdjustedSS(partnerSSPIA, partnerSSStartAge);
   const totalSS = clientSS + partnerSS;
 
   // Get detailed cash flow numbers for a specific year
   const getAnnualDetails = (yearIndex) => {
-    const simAge = clientInfo.retirementAge + yearIndex;
+    const simAge = simulationStartAge + yearIndex;
     const currentPartnerAge = clientInfo.partnerAge + (simAge - clientInfo.currentAge);
     // Expenses use personal inflation rate
     const expenseInflationFactor = Math.pow(1 + (personalInflationRate / 100), yearIndex);
@@ -118,8 +123,11 @@ export const calculateBasePlan = (inputs, assumptions, clientInfo) => {
     const expenses = monthlySpending * 12 * expenseInflationFactor;
 
     let income = 0;
-    if (simAge >= ssStartAge) income += clientSS * 12 * incomeInflationFactor;
-    if (clientInfo.isMarried && currentPartnerAge >= partnerSSStartAge) {
+    // For clients 67+, assume already collecting SS; otherwise check start age
+    if (clientInfo.currentAge >= 67 || simAge >= ssStartAge) {
+      income += clientSS * 12 * incomeInflationFactor;
+    }
+    if (clientInfo.isMarried && (clientInfo.partnerAge >= 67 || currentPartnerAge >= partnerSSStartAge)) {
       income += partnerSS * 12 * incomeInflationFactor;
     }
 

@@ -164,6 +164,22 @@ export default function BucketPortfolioBuilder() {
     }
   }, [finalAccumulationBalance]);
 
+  // Auto-set SS start age to current age for clients over FRA (already collecting)
+  useEffect(() => {
+    if (clientInfo.currentAge >= 67) {
+      setInputs(prev => {
+        const updates = {};
+        if (prev.ssStartAge !== clientInfo.currentAge) {
+          updates.ssStartAge = clientInfo.currentAge;
+        }
+        if (clientInfo.isMarried && clientInfo.partnerAge >= 67 && prev.partnerSSStartAge !== clientInfo.partnerAge) {
+          updates.partnerSSStartAge = clientInfo.partnerAge;
+        }
+        return Object.keys(updates).length > 0 ? { ...prev, ...updates } : prev;
+      });
+    }
+  }, [clientInfo.currentAge, clientInfo.partnerAge, clientInfo.isMarried]);
+
   // --- Handlers ---
   const handleClientChange = (e) => {
     const { name, value, type, checked } = e.target;

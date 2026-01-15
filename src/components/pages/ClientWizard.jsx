@@ -545,64 +545,50 @@ export const ClientWizard = ({
         </h3>
 
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-          <div className="relative group">
-            <label className="block text-xs font-bold text-slate-500 uppercase mb-1 flex items-center gap-1">
-              Your Benefit @ FRA <Info className="w-3 h-3 text-slate-400" />
-            </label>
-            <div className="absolute left-0 bottom-full mb-2 hidden group-hover:block w-56 bg-slate-800 text-white text-xs p-2 rounded shadow-lg z-10">
-              Your Social Security benefit at Full Retirement Age (67) from your SSA statement.
+          {clientInfo.currentAge >= 67 ? (
+            // Over FRA - ask for current benefit amount
+            <div className="relative group">
+              <label className="block text-xs font-bold text-slate-500 uppercase mb-1 flex items-center gap-1">
+                Your Monthly SS Benefit <Info className="w-3 h-3 text-slate-400" />
+              </label>
+              <div className="absolute left-0 bottom-full mb-2 hidden group-hover:block w-56 bg-slate-800 text-white text-xs p-2 rounded shadow-lg z-10">
+                Your current monthly Social Security benefit amount.
+              </div>
+              <FormattedNumberInput
+                name="ssPIA"
+                value={inputs.ssPIA}
+                onChange={onInputChange}
+                className="p-3 border rounded-lg w-full"
+              />
             </div>
-            <FormattedNumberInput
-              name="ssPIA"
-              value={inputs.ssPIA}
-              onChange={onInputChange}
-              className="p-3 border rounded-lg w-full"
-            />
-          </div>
-          <div className="relative group">
-            <label className="block text-xs font-bold text-slate-500 uppercase mb-1 flex items-center gap-1">
-              Start Age <Info className="w-3 h-3 text-slate-400" />
-            </label>
-            <div className="absolute left-0 bottom-full mb-2 hidden group-hover:block w-56 bg-slate-800 text-white text-xs p-2 rounded shadow-lg z-10">
-              The age you plan to begin collecting Social Security benefits (62-70).
-            </div>
-            <input
-              type="number"
-              name="ssStartAge"
-              value={inputs.ssStartAge}
-              onChange={onInputChange}
-              min={62}
-              max={70}
-              className="p-3 border rounded-lg w-full"
-            />
-          </div>
-          {clientInfo.isMarried && (
+          ) : (
+            // Under FRA - ask for PIA and start age
             <>
               <div className="relative group">
                 <label className="block text-xs font-bold text-slate-500 uppercase mb-1 flex items-center gap-1">
-                  Partner Benefit <Info className="w-3 h-3 text-slate-400" />
+                  Your Benefit @ FRA <Info className="w-3 h-3 text-slate-400" />
                 </label>
                 <div className="absolute left-0 bottom-full mb-2 hidden group-hover:block w-56 bg-slate-800 text-white text-xs p-2 rounded shadow-lg z-10">
-                  Your partner's Social Security benefit at Full Retirement Age.
+                  Your Social Security benefit at Full Retirement Age (67) from your SSA statement.
                 </div>
                 <FormattedNumberInput
-                  name="partnerSSPIA"
-                  value={inputs.partnerSSPIA}
+                  name="ssPIA"
+                  value={inputs.ssPIA}
                   onChange={onInputChange}
                   className="p-3 border rounded-lg w-full"
                 />
               </div>
               <div className="relative group">
                 <label className="block text-xs font-bold text-slate-500 uppercase mb-1 flex items-center gap-1">
-                  Partner Start Age <Info className="w-3 h-3 text-slate-400" />
+                  Start Age <Info className="w-3 h-3 text-slate-400" />
                 </label>
                 <div className="absolute left-0 bottom-full mb-2 hidden group-hover:block w-56 bg-slate-800 text-white text-xs p-2 rounded shadow-lg z-10">
-                  The age your partner plans to begin collecting Social Security.
+                  The age you plan to begin collecting Social Security benefits (62-70).
                 </div>
                 <input
                   type="number"
-                  name="partnerSSStartAge"
-                  value={inputs.partnerSSStartAge}
+                  name="ssStartAge"
+                  value={inputs.ssStartAge}
                   onChange={onInputChange}
                   min={62}
                   max={70}
@@ -611,98 +597,156 @@ export const ClientWizard = ({
               </div>
             </>
           )}
+          {clientInfo.isMarried && (
+            <>
+              {clientInfo.partnerAge >= 67 ? (
+                // Partner over FRA - ask for current benefit amount
+                <div className="relative group">
+                  <label className="block text-xs font-bold text-slate-500 uppercase mb-1 flex items-center gap-1">
+                    Partner Monthly SS <Info className="w-3 h-3 text-slate-400" />
+                  </label>
+                  <div className="absolute left-0 bottom-full mb-2 hidden group-hover:block w-56 bg-slate-800 text-white text-xs p-2 rounded shadow-lg z-10">
+                    Your partner's current monthly Social Security benefit amount.
+                  </div>
+                  <FormattedNumberInput
+                    name="partnerSSPIA"
+                    value={inputs.partnerSSPIA}
+                    onChange={onInputChange}
+                    className="p-3 border rounded-lg w-full"
+                  />
+                </div>
+              ) : (
+                // Partner under FRA - ask for PIA and start age
+                <>
+                  <div className="relative group">
+                    <label className="block text-xs font-bold text-slate-500 uppercase mb-1 flex items-center gap-1">
+                      Partner Benefit @ FRA <Info className="w-3 h-3 text-slate-400" />
+                    </label>
+                    <div className="absolute left-0 bottom-full mb-2 hidden group-hover:block w-56 bg-slate-800 text-white text-xs p-2 rounded shadow-lg z-10">
+                      Your partner's Social Security benefit at Full Retirement Age.
+                    </div>
+                    <FormattedNumberInput
+                      name="partnerSSPIA"
+                      value={inputs.partnerSSPIA}
+                      onChange={onInputChange}
+                      className="p-3 border rounded-lg w-full"
+                    />
+                  </div>
+                  <div className="relative group">
+                    <label className="block text-xs font-bold text-slate-500 uppercase mb-1 flex items-center gap-1">
+                      Partner Start Age <Info className="w-3 h-3 text-slate-400" />
+                    </label>
+                    <div className="absolute left-0 bottom-full mb-2 hidden group-hover:block w-56 bg-slate-800 text-white text-xs p-2 rounded shadow-lg z-10">
+                      The age your partner plans to begin collecting Social Security.
+                    </div>
+                    <input
+                      type="number"
+                      name="partnerSSStartAge"
+                      value={inputs.partnerSSStartAge}
+                      onChange={onInputChange}
+                      min={62}
+                      max={70}
+                      className="p-3 border rounded-lg w-full"
+                    />
+                  </div>
+                </>
+              )}
+            </>
+          )}
         </div>
       </Card>
 
-      {/* Claiming Strategy Options */}
-      <div className="p-4 bg-yellow-50 rounded-lg border border-yellow-200">
-        <div className="relative group inline-block mb-3">
-          <p className="text-xs font-bold text-yellow-800 uppercase flex items-center gap-1 cursor-help">
-            Claiming Strategy Options <Info className="w-3 h-3 text-yellow-600" />
-          </p>
-          <div className="absolute left-0 bottom-full mb-2 hidden group-hover:block w-72 bg-slate-800 text-white text-xs p-3 rounded shadow-lg z-20">
-            <p className="font-bold mb-1">How is the recommendation calculated?</p>
-            <p>We analyze each claiming age (62-70) by simulating your portfolio through retirement. The recommended age is the one that results in the largest portfolio balance at age 80, considering your spending needs and other income sources.</p>
+      {/* Claiming Strategy Options - Only show if under FRA */}
+      {clientInfo.currentAge < 67 && (
+        <div className="p-4 bg-yellow-50 rounded-lg border border-yellow-200">
+          <div className="relative group inline-block mb-3">
+            <p className="text-xs font-bold text-yellow-800 uppercase flex items-center gap-1 cursor-help">
+              Claiming Strategy Options <Info className="w-3 h-3 text-yellow-600" />
+            </p>
+            <div className="absolute left-0 bottom-full mb-2 hidden group-hover:block w-72 bg-slate-800 text-white text-xs p-3 rounded shadow-lg z-20">
+              <p className="font-bold mb-1">How is the recommendation calculated?</p>
+              <p>We analyze each claiming age (62-70) by simulating your portfolio through retirement. The recommended age is the one that results in the largest portfolio balance at age 80, considering your spending needs and other income sources.</p>
+            </div>
           </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+            {/* Option 1: Maximize Legacy */}
+            <div
+              className={`p-3 rounded-lg border-2 cursor-pointer transition-all ${inputs.ssStartAge === 70 ? 'border-emerald-500 bg-emerald-50' : 'border-slate-200 bg-white hover:border-emerald-300'}`}
+              onClick={() => onUpdateSSStartAge(70)}
+            >
+              <div className="flex justify-between items-center">
+                <div>
+                  <p className="text-sm font-bold text-slate-800">Maximize Legacy</p>
+                  <p className="text-xs text-slate-500">Delay claiming for highest lifetime benefits</p>
+                </div>
+                <span className="text-lg font-bold text-emerald-700">Age 70</span>
+              </div>
+            </div>
+
+            {/* Option 2: Full Retirement Age */}
+            <div
+              className={`p-3 rounded-lg border-2 cursor-pointer transition-all ${inputs.ssStartAge === 67 ? 'border-emerald-500 bg-emerald-50' : 'border-slate-200 bg-white hover:border-emerald-300'}`}
+              onClick={() => onUpdateSSStartAge(67)}
+            >
+              <div className="flex justify-between items-center">
+                <div>
+                  <p className="text-sm font-bold text-slate-800">Full Retirement Age</p>
+                  <p className="text-xs text-slate-500">Claim at FRA with no reduction or increase</p>
+                </div>
+                <span className="text-lg font-bold text-emerald-700">Age 67</span>
+              </div>
+            </div>
+
+            {/* Option 3: Optimized / Recommended */}
+            <div
+              className={`p-3 rounded-lg border-2 cursor-pointer transition-all ${inputs.ssStartAge === (ssAnalysis?.winner?.age || 67) && inputs.ssStartAge !== 70 && inputs.ssStartAge !== 67 && inputs.ssStartAge !== 62 ? 'border-emerald-500 bg-emerald-50' : 'border-slate-200 bg-white hover:border-emerald-300'}`}
+              onClick={() => onUpdateSSStartAge(ssAnalysis?.winner?.age || 67)}
+            >
+              <div className="flex justify-between items-center">
+                <div>
+                  <p className="text-sm font-bold text-slate-800">Optimized (Recommended)</p>
+                  <p className="text-xs text-slate-500">Maximizes portfolio at age 80</p>
+                </div>
+                <span className="text-lg font-bold text-emerald-700">Age {ssAnalysis?.winner?.age || 67}</span>
+              </div>
+            </div>
+
+            {/* Option 4: Maximize Early Portfolio */}
+            <div
+              className={`p-3 rounded-lg border-2 cursor-pointer transition-all ${inputs.ssStartAge === 62 ? 'border-emerald-500 bg-emerald-50' : 'border-slate-200 bg-white hover:border-emerald-300'}`}
+              onClick={() => onUpdateSSStartAge(62)}
+            >
+              <div className="flex justify-between items-center">
+                <div>
+                  <p className="text-sm font-bold text-slate-800">Maximize Early Portfolio</p>
+                  <p className="text-xs text-slate-500">Start benefits early, preserve investments</p>
+                </div>
+                <span className="text-lg font-bold text-emerald-700">Age 62</span>
+              </div>
+            </div>
+          </div>
+
+          {clientInfo.isMarried && clientInfo.partnerAge < 67 && ssPartnerAnalysis && (
+            <div className="mt-4 pt-3 border-t border-yellow-200">
+              <div className="flex justify-between items-center">
+                <div>
+                  <p className="text-xs font-bold text-yellow-800 uppercase mb-1">Partner Recommendation</p>
+                  <p className="text-sm text-slate-700">
+                    Partner optimal claiming age: <strong className="text-emerald-700">{ssPartnerAnalysis?.winner?.age || 67}</strong>
+                  </p>
+                </div>
+                <button
+                  onClick={() => onUpdatePartnerSSStartAge(ssPartnerAnalysis?.winner?.age || 67)}
+                  className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold rounded-lg transition-all"
+                >
+                  Apply Age {ssPartnerAnalysis?.winner?.age || 67}
+                </button>
+              </div>
+            </div>
+          )}
         </div>
-
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
-          {/* Option 1: Maximize Legacy */}
-          <div
-            className={`p-3 rounded-lg border-2 cursor-pointer transition-all ${inputs.ssStartAge === 70 ? 'border-emerald-500 bg-emerald-50' : 'border-slate-200 bg-white hover:border-emerald-300'}`}
-            onClick={() => onUpdateSSStartAge(70)}
-          >
-            <div className="flex justify-between items-center">
-              <div>
-                <p className="text-sm font-bold text-slate-800">Maximize Legacy</p>
-                <p className="text-xs text-slate-500">Delay claiming for highest lifetime benefits</p>
-              </div>
-              <span className="text-lg font-bold text-emerald-700">Age 70</span>
-            </div>
-          </div>
-
-          {/* Option 2: Full Retirement Age */}
-          <div
-            className={`p-3 rounded-lg border-2 cursor-pointer transition-all ${inputs.ssStartAge === 67 ? 'border-emerald-500 bg-emerald-50' : 'border-slate-200 bg-white hover:border-emerald-300'}`}
-            onClick={() => onUpdateSSStartAge(67)}
-          >
-            <div className="flex justify-between items-center">
-              <div>
-                <p className="text-sm font-bold text-slate-800">Full Retirement Age</p>
-                <p className="text-xs text-slate-500">Claim at FRA with no reduction or increase</p>
-              </div>
-              <span className="text-lg font-bold text-emerald-700">Age 67</span>
-            </div>
-          </div>
-
-          {/* Option 3: Optimized / Recommended */}
-          <div
-            className={`p-3 rounded-lg border-2 cursor-pointer transition-all ${inputs.ssStartAge === (ssAnalysis?.winner?.age || 67) && inputs.ssStartAge !== 70 && inputs.ssStartAge !== 67 && inputs.ssStartAge !== 62 ? 'border-emerald-500 bg-emerald-50' : 'border-slate-200 bg-white hover:border-emerald-300'}`}
-            onClick={() => onUpdateSSStartAge(ssAnalysis?.winner?.age || 67)}
-          >
-            <div className="flex justify-between items-center">
-              <div>
-                <p className="text-sm font-bold text-slate-800">Optimized (Recommended)</p>
-                <p className="text-xs text-slate-500">Maximizes portfolio at age 80</p>
-              </div>
-              <span className="text-lg font-bold text-emerald-700">Age {ssAnalysis?.winner?.age || 67}</span>
-            </div>
-          </div>
-
-          {/* Option 4: Maximize Early Portfolio */}
-          <div
-            className={`p-3 rounded-lg border-2 cursor-pointer transition-all ${inputs.ssStartAge === 62 ? 'border-emerald-500 bg-emerald-50' : 'border-slate-200 bg-white hover:border-emerald-300'}`}
-            onClick={() => onUpdateSSStartAge(62)}
-          >
-            <div className="flex justify-between items-center">
-              <div>
-                <p className="text-sm font-bold text-slate-800">Maximize Early Portfolio</p>
-                <p className="text-xs text-slate-500">Start benefits early, preserve investments</p>
-              </div>
-              <span className="text-lg font-bold text-emerald-700">Age 62</span>
-            </div>
-          </div>
-        </div>
-
-        {clientInfo.isMarried && ssPartnerAnalysis && (
-          <div className="mt-4 pt-3 border-t border-yellow-200">
-            <div className="flex justify-between items-center">
-              <div>
-                <p className="text-xs font-bold text-yellow-800 uppercase mb-1">Partner Recommendation</p>
-                <p className="text-sm text-slate-700">
-                  Partner optimal claiming age: <strong className="text-emerald-700">{ssPartnerAnalysis?.winner?.age || 67}</strong>
-                </p>
-              </div>
-              <button
-                onClick={() => onUpdatePartnerSSStartAge(ssPartnerAnalysis?.winner?.age || 67)}
-                className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold rounded-lg transition-all"
-              >
-                Apply Age {ssPartnerAnalysis?.winner?.age || 67}
-              </button>
-            </div>
-          </div>
-        )}
-      </div>
+      )}
 
       {/* Pension / Other Income */}
       <Card className="p-6">
