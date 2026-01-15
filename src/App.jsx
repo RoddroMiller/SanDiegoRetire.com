@@ -65,6 +65,7 @@ export default function BucketPortfolioBuilder() {
     email: '',
     phone: '',
     isMarried: false,
+    isRetired: false,
     currentAge: 55,
     retirementAge: 65,
     partnerAge: 55,
@@ -85,6 +86,7 @@ export default function BucketPortfolioBuilder() {
     partnerSSStartAge: 67,
     monthlyPension: 0,
     pensionStartAge: 65,
+    pensionCOLA: false,
     inflationRate: 2.5,
     personalInflationRate: 1.5,
     ssReinvestRate: 4.5,
@@ -179,6 +181,13 @@ export default function BucketPortfolioBuilder() {
       });
     }
   }, [clientInfo.currentAge, clientInfo.partnerAge, clientInfo.isMarried]);
+
+  // Sync retirementAge to currentAge when isRetired is checked
+  useEffect(() => {
+    if (clientInfo.isRetired && clientInfo.retirementAge !== clientInfo.currentAge) {
+      setClientInfo(prev => ({ ...prev, retirementAge: prev.currentAge }));
+    }
+  }, [clientInfo.isRetired, clientInfo.currentAge, clientInfo.retirementAge]);
 
   // --- Handlers ---
   const handleClientChange = (e) => {

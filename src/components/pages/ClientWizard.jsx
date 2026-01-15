@@ -55,19 +55,19 @@ export const ClientWizard = ({
     spendingReduction: 0
   });
 
-  // Auto-save when on page 2 and data changes (every 30 seconds max)
+  // Auto-save every 30 seconds while on page 2
   useEffect(() => {
     if (wizardStep === 2 && onSaveProgress) {
-      const timeoutId = setTimeout(() => {
+      const intervalId = setInterval(() => {
         try {
           onSaveProgress();
         } catch (error) {
           console.error('Auto-save error:', error);
         }
       }, 30000);
-      return () => clearTimeout(timeoutId);
+      return () => clearInterval(intervalId);
     }
-  }, [wizardStep, inputs, clientInfo, onSaveProgress]);
+  }, [wizardStep, onSaveProgress]);
 
   // Calculate improvement solutions based on actual financial picture
   const improvementSolutions = useMemo(() => {
@@ -364,18 +364,36 @@ export const ClientWizard = ({
           </div>
           <div className="relative group">
             <label className="block text-xs font-bold text-slate-500 uppercase mb-1 flex items-center gap-1">
-              Retirement Age <Info className="w-3 h-3 text-slate-400" />
+              Retirement Status
             </label>
-            <div className="absolute left-0 bottom-full mb-2 hidden group-hover:block w-48 bg-slate-800 text-white text-xs p-2 rounded shadow-lg z-10">
-              The age you plan to stop working and begin taking distributions.
-            </div>
-            <FormattedNumberInput
-              name="retirementAge"
-              value={clientInfo.retirementAge}
-              onChange={onClientChange}
-              className="p-3 border rounded-lg w-full font-bold text-slate-700"
-            />
+            <button
+              type="button"
+              onClick={() => onClientChange({ target: { name: 'isRetired', type: 'checkbox', checked: !clientInfo.isRetired } })}
+              className={`w-full p-3 rounded-lg font-bold transition-all ${
+                clientInfo.isRetired
+                  ? 'bg-emerald-600 text-white border-2 border-emerald-600'
+                  : 'bg-white text-slate-600 border-2 border-slate-300 hover:border-emerald-400'
+              }`}
+            >
+              {clientInfo.isRetired ? '✓ Already Retired' : 'Already Retired?'}
+            </button>
           </div>
+          {!clientInfo.isRetired && (
+            <div className="relative group">
+              <label className="block text-xs font-bold text-slate-500 uppercase mb-1 flex items-center gap-1">
+                Retirement Age <Info className="w-3 h-3 text-slate-400" />
+              </label>
+              <div className="absolute left-0 bottom-full mb-2 hidden group-hover:block w-48 bg-slate-800 text-white text-xs p-2 rounded shadow-lg z-10">
+                The age you plan to stop working and begin taking distributions.
+              </div>
+              <FormattedNumberInput
+                name="retirementAge"
+                value={clientInfo.retirementAge}
+                onChange={onClientChange}
+                className="p-3 border rounded-lg w-full font-bold text-slate-700"
+              />
+            </div>
+          )}
           {clientInfo.isMarried && (
             <>
               <div className="relative group">
@@ -756,7 +774,7 @@ export const ClientWizard = ({
 
           <div className="space-y-4">
             {/* Primary Pension */}
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-3 gap-4">
               <div className="relative group">
                 <label className="block text-xs font-bold text-slate-500 uppercase mb-1 flex items-center gap-1">
                   Monthly Pension <Info className="w-3 h-3 text-slate-400" />
@@ -787,6 +805,25 @@ export const ClientWizard = ({
                   max={80}
                   className="p-3 border rounded-lg w-full"
                 />
+              </div>
+              <div className="relative group">
+                <label className="block text-xs font-bold text-slate-500 uppercase mb-1 flex items-center gap-1">
+                  COLA <Info className="w-3 h-3 text-slate-400" />
+                </label>
+                <div className="absolute left-0 bottom-full mb-2 hidden group-hover:block w-56 bg-slate-800 text-white text-xs p-2 rounded shadow-lg z-10">
+                  Does your pension have a Cost of Living Adjustment (inflation increase)?
+                </div>
+                <button
+                  type="button"
+                  onClick={() => onInputChange({ target: { name: 'pensionCOLA', type: 'checkbox', checked: !inputs.pensionCOLA } })}
+                  className={`w-full p-3 rounded-lg font-bold transition-all ${
+                    inputs.pensionCOLA
+                      ? 'bg-emerald-600 text-white border-2 border-emerald-600'
+                      : 'bg-white text-slate-600 border-2 border-slate-300 hover:border-emerald-400'
+                  }`}
+                >
+                  {inputs.pensionCOLA ? '✓ Yes' : 'No'}
+                </button>
               </div>
             </div>
 
@@ -1064,47 +1101,51 @@ export const ClientWizard = ({
         </p>
 
         <div className="space-y-4">
-          <div className="p-4 bg-blue-50 rounded-lg border border-blue-200">
-            <div className="flex items-start gap-3">
-              <Clock className="w-5 h-5 text-blue-600 mt-0.5" />
-              <div className="flex-1">
-                <h4 className="font-bold text-blue-800">Retirement Age</h4>
-                <p className="text-sm text-blue-700 mt-1">
-                  Working longer allows your portfolio to grow and reduces years drawing from it.
-                </p>
-                <div className="mt-3 flex items-center gap-2">
-                  <label className="text-xs font-bold text-blue-700 uppercase">Age</label>
-                  <FormattedNumberInput
-                    name="retirementAge"
-                    value={clientInfo.retirementAge}
-                    onChange={onClientChange}
-                    className="p-2 border border-blue-300 rounded-lg w-20 text-center font-bold text-blue-800 bg-white"
-                  />
+          {!clientInfo.isRetired && (
+            <div className="p-4 bg-blue-50 rounded-lg border border-blue-200">
+              <div className="flex items-start gap-3">
+                <Clock className="w-5 h-5 text-blue-600 mt-0.5" />
+                <div className="flex-1">
+                  <h4 className="font-bold text-blue-800">Retirement Age</h4>
+                  <p className="text-sm text-blue-700 mt-1">
+                    Working longer allows your portfolio to grow and reduces years drawing from it.
+                  </p>
+                  <div className="mt-3 flex items-center gap-2">
+                    <label className="text-xs font-bold text-blue-700 uppercase">Age</label>
+                    <FormattedNumberInput
+                      name="retirementAge"
+                      value={clientInfo.retirementAge}
+                      onChange={onClientChange}
+                      className="p-2 border border-blue-300 rounded-lg w-20 text-center font-bold text-blue-800 bg-white"
+                    />
+                  </div>
                 </div>
               </div>
             </div>
-          </div>
+          )}
 
-          <div className="p-4 bg-emerald-50 rounded-lg border border-emerald-200">
-            <div className="flex items-start gap-3">
-              <PiggyBank className="w-5 h-5 text-emerald-600 mt-0.5" />
-              <div className="flex-1">
-                <h4 className="font-bold text-emerald-800">Annual Savings</h4>
-                <p className="text-sm text-emerald-700 mt-1">
-                  Saving more now boosts your retirement portfolio through compounding.
-                </p>
-                <div className="mt-3 flex items-center gap-2">
-                  <label className="text-xs font-bold text-emerald-700 uppercase">Per Year</label>
-                  <FormattedNumberInput
-                    name="annualSavings"
-                    value={clientInfo.annualSavings}
-                    onChange={onClientChange}
-                    className="p-2 border border-emerald-300 rounded-lg w-28 text-center font-bold text-emerald-800 bg-white"
-                  />
+          {!clientInfo.isRetired && (
+            <div className="p-4 bg-emerald-50 rounded-lg border border-emerald-200">
+              <div className="flex items-start gap-3">
+                <PiggyBank className="w-5 h-5 text-emerald-600 mt-0.5" />
+                <div className="flex-1">
+                  <h4 className="font-bold text-emerald-800">Annual Savings</h4>
+                  <p className="text-sm text-emerald-700 mt-1">
+                    Saving more now boosts your retirement portfolio through compounding.
+                  </p>
+                  <div className="mt-3 flex items-center gap-2">
+                    <label className="text-xs font-bold text-emerald-700 uppercase">Per Year</label>
+                    <FormattedNumberInput
+                      name="annualSavings"
+                      value={clientInfo.annualSavings}
+                      onChange={onClientChange}
+                      className="p-2 border border-emerald-300 rounded-lg w-28 text-center font-bold text-emerald-800 bg-white"
+                    />
+                  </div>
                 </div>
               </div>
             </div>
-          </div>
+          )}
 
           <div className="p-4 bg-orange-50 rounded-lg border border-orange-200">
             <div className="flex items-start gap-3">

@@ -99,7 +99,7 @@ export const calculateWeightedReturn = (assumptions) => {
 export const calculateBasePlan = (inputs, assumptions, clientInfo) => {
   const {
     totalPortfolio, monthlySpending, ssPIA, partnerSSPIA,
-    ssStartAge, partnerSSStartAge, monthlyPension, pensionStartAge,
+    ssStartAge, partnerSSStartAge, monthlyPension, pensionStartAge, pensionCOLA,
     inflationRate, personalInflationRate, additionalIncomes
   } = inputs;
 
@@ -131,7 +131,9 @@ export const calculateBasePlan = (inputs, assumptions, clientInfo) => {
       income += partnerSS * 12 * incomeInflationFactor;
     }
 
-    if (simAge >= pensionStartAge) income += monthlyPension * 12 * incomeInflationFactor;
+    if (simAge >= pensionStartAge) {
+      income += monthlyPension * 12 * (pensionCOLA ? incomeInflationFactor : 1);
+    }
 
     // Recurring additional incomes (monthly * 12)
     additionalIncomes.forEach(stream => {
