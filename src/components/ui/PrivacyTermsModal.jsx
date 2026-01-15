@@ -83,6 +83,15 @@ export const PrivacyTermsModal = ({ isOpen, onAccept, onClose }) => {
                 you provide. The quality of the analysis depends on the completeness and accuracy of your inputs.
               </p>
               <p>
+                <strong>Inflation Assumptions:</strong> This tool uses two inflation rates in its projections.
+                The general inflation rate (default 2.5%) is applied to income sources such as Social Security
+                benefits and pension payments, reflecting cost-of-living adjustments these income streams typically
+                receive. The personal inflation rate (default 1.5%) is applied to your spending needs, reflecting
+                research suggesting that retiree spending often grows more slowly than general inflation due to
+                lifestyle changes in retirement. Both rates can be adjusted in the Advanced Assumptions section
+                to match your personal expectations.
+              </p>
+              <p>
                 <strong>Limitation of Liability:</strong> Miller Wealth Management and its affiliates shall not
                 be liable for any losses or damages resulting from your use of this tool or reliance on the
                 projections provided.

@@ -117,7 +117,7 @@ export const useScenarios = ({ currentUser, userRole }) => {
 
     const isClient = role === 'client';
     const docId = isClient
-      ? `progress_${clientInfo.name || clientInfo.email || 'client'}_${Date.now()}`
+      ? `progress_${clientInfo.name || clientInfo.email || 'client'}`
       : (clientInfo.email || clientInfo.name || `scenario_${Date.now()}`);
     const safeDocId = docId.replace(/[^a-zA-Z0-9_-]/g, '_');
 
