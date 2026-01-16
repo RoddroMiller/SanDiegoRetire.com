@@ -1,7 +1,7 @@
 import React, { useState, useMemo, useEffect } from 'react';
 
 // --- Local Imports ---
-import { formatPhoneNumber, calculateAccumulation, calculateBasePlan, runSimulation, calculateSSAnalysis, calculateSSPartnerAnalysis, getAdjustedSS } from './utils';
+import { formatPhoneNumber, calculateAccumulation, calculateBasePlan, runSimulation, calculateSSAnalysis, calculateSSPartnerAnalysis, getAdjustedSS, calculateAlternativeAllocations, runOptimizedSimulation } from './utils';
 import { GateScreen, LoginScreen, AccumulationPage, ArchitectPage, ClientWizard, PlanManagement } from './components';
 import { useAuth, useScenarios, useAdvisors } from './hooks';
 
@@ -151,6 +151,25 @@ export default function BucketPortfolioBuilder() {
 
   const projectionData = useMemo(() => runSimulation(basePlan, assumptions, inputs, rebalanceFreq, false), [basePlan, assumptions, inputs, rebalanceFreq]);
   const monteCarloData = useMemo(() => runSimulation(basePlan, assumptions, inputs, rebalanceFreq, true), [basePlan, assumptions, inputs, rebalanceFreq]);
+
+  // Optimizer data - compare three allocation strategies
+  const optimizerData = useMemo(() => {
+    try {
+      const allocations = calculateAlternativeAllocations(inputs, basePlan);
+      return {
+        strategy1: runOptimizedSimulation(allocations.strategy1, assumptions, inputs, clientInfo),
+        strategy2: runOptimizedSimulation(allocations.strategy2, assumptions, inputs, clientInfo),
+        strategy3: {
+          ...allocations.strategy3,
+          successRate: monteCarloData?.successRate || 0,
+          medianLegacy: projectionData[projectionData.length - 1]?.total || 0
+        }
+      };
+    } catch (error) {
+      console.error('Optimizer calculation error:', error);
+      return null;
+    }
+  }, [inputs, basePlan, assumptions, clientInfo, monteCarloData, projectionData]);
 
   // Keep totalPortfolio in sync with accumulation data
   const finalAccumulationBalance = accumulationData.length > 0 ? accumulationData[accumulationData.length - 1].balance : 0;
@@ -427,6 +446,7 @@ export default function BucketPortfolioBuilder() {
       accumulationData={accumulationData}
       projectionData={projectionData}
       monteCarloData={monteCarloData}
+      optimizerData={optimizerData}
       ssAnalysis={ssAnalysis}
       ssPartnerAnalysis={ssPartnerAnalysis}
       targetMaxPortfolioAge={targetMaxPortfolioAge}

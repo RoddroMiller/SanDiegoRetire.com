@@ -8,7 +8,7 @@ import {
   ChevronDown, ChevronUp, Activity, BarChart2, Briefcase, Download, Lock,
   RefreshCw, Percent, Plus, Trash2, History, User, Users, FileText, ArrowRight,
   Info, CheckCircle, RefreshCcw, MousePointerClick, Save, FolderOpen, Loader,
-  LogIn, LogOut, UserCheck, Send, Table as TableIcon, PiggyBank, Layers
+  LogIn, LogOut, UserCheck, Send, Table as TableIcon, PiggyBank, Layers, Target
 } from 'lucide-react';
 
 import { COLORS, LOGO_URL } from '../../constants';
@@ -52,6 +52,7 @@ export const ArchitectPage = ({
   accumulationData,
   projectionData,
   monteCarloData,
+  optimizerData,
   ssAnalysis,
   ssPartnerAnalysis,
   // SS Settings
@@ -509,7 +510,7 @@ export const ArchitectPage = ({
               <div className="border-t border-slate-100 pt-4">
                 <h4 className="text-xs font-bold text-slate-700 uppercase flex items-center gap-1 mb-3"><DollarSign className="w-3 h-3" /> Pension / Other Income</h4>
                 <div className="space-y-3">
-                  <div className="grid grid-cols-2 gap-2">
+                  <div className="grid grid-cols-3 gap-2">
                     <div className="relative group">
                       <label className="text-[10px] text-slate-500 uppercase flex items-center gap-1">
                         Monthly Pension <Info className="w-3 h-3 text-slate-400" />
@@ -521,12 +522,31 @@ export const ArchitectPage = ({
                     </div>
                     <div className="relative group">
                       <label className="text-[10px] text-slate-500 uppercase flex items-center gap-1">
-                        Pension Start Age <Info className="w-3 h-3 text-slate-400" />
+                        Start Age <Info className="w-3 h-3 text-slate-400" />
                       </label>
                       <div className="absolute left-0 bottom-full mb-1 hidden group-hover:block w-48 bg-slate-800 text-white text-xs p-2 rounded shadow-lg z-10">
                         The age your pension payments begin.
                       </div>
                       <input type="number" name="pensionStartAge" value={inputs.pensionStartAge} onChange={onInputChange} min={55} max={80} className="w-full px-2 py-1 border rounded-md text-sm" />
+                    </div>
+                    <div className="relative group">
+                      <label className="text-[10px] text-slate-500 uppercase flex items-center gap-1">
+                        COLA <Info className="w-3 h-3 text-slate-400" />
+                      </label>
+                      <div className="absolute left-0 bottom-full mb-1 hidden group-hover:block w-48 bg-slate-800 text-white text-xs p-2 rounded shadow-lg z-10">
+                        Does the pension have a Cost of Living Adjustment?
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => onInputChange({ target: { name: 'pensionCOLA', type: 'checkbox', checked: !inputs.pensionCOLA } })}
+                        className={`w-full px-2 py-1 rounded-md text-sm font-medium transition-all ${
+                          inputs.pensionCOLA
+                            ? 'bg-emerald-600 text-white'
+                            : 'bg-white text-slate-600 border border-slate-300 hover:border-emerald-400'
+                        }`}
+                      >
+                        {inputs.pensionCOLA ? '✓ Yes' : 'No'}
+                      </button>
                     </div>
                   </div>
 
@@ -766,6 +786,12 @@ export const ArchitectPage = ({
               >
                 <Layers className="w-3 h-3 sm:w-4 sm:h-4" /> <span className="hidden sm:inline">Architecture</span><span className="sm:hidden">Arch</span>
               </button>
+              <button
+                onClick={() => onSetActiveTab('optimizer')}
+                className={`${activeTab === 'optimizer' ? 'border-emerald-500 text-emerald-700' : 'border-transparent text-slate-500 hover:text-slate-700 hover:border-slate-300'} whitespace-nowrap py-3 sm:py-4 px-1 border-b-2 font-medium text-xs sm:text-sm flex items-center gap-1 sm:gap-2`}
+              >
+                <Target className="w-3 h-3 sm:w-4 sm:h-4" /> Optimizer
+              </button>
             </nav>
           </div>
 
@@ -819,6 +845,16 @@ export const ArchitectPage = ({
               inputs={inputs}
               basePlan={basePlan}
               assumptions={assumptions}
+              projectionData={projectionData}
+            />
+          )}
+
+          {activeTab === 'optimizer' && (
+            <OptimizerTab
+              optimizerData={optimizerData}
+              inputs={inputs}
+              basePlan={basePlan}
+              monteCarloData={monteCarloData}
               projectionData={projectionData}
             />
           )}
@@ -1804,6 +1840,217 @@ const ArchitectureTab = ({ inputs, basePlan, assumptions, projectionData }) => {
         <p className="text-xs text-slate-500 mt-4">
           This chart shows which bucket withdrawals come from each year. Sequential distribution takes from B1 first, then B2, B3, B4, and finally B5.
         </p>
+      </Card>
+    </div>
+  );
+};
+
+const OptimizerTab = ({ optimizerData, inputs, basePlan, monteCarloData, projectionData }) => {
+  // Safety check - if optimizerData isn't ready yet, show loading
+  if (!optimizerData || !optimizerData.strategy1 || !optimizerData.strategy2 || !optimizerData.strategy3) {
+    return (
+      <div className="flex items-center justify-center p-12">
+        <Loader className="w-8 h-8 animate-spin text-emerald-600" />
+        <span className="ml-3 text-slate-600">Calculating optimization strategies...</span>
+      </div>
+    );
+  }
+
+  const annualSpending = inputs.monthlySpending * 12;
+  const distributionRate = inputs.totalPortfolio > 0 ? (annualSpending / inputs.totalPortfolio) * 100 : 0;
+  const isHighDistribution = distributionRate >= 6;
+
+  // Helper to format allocation as percentages
+  const getAllocationPercentages = (allocationData) => {
+    const total = inputs.totalPortfolio;
+    if (total === 0 || !allocationData) return { b1: '0', b2: '0', b3: '0', b4: '0', b5: '0' };
+    return {
+      b1: (((allocationData.b1Val || 0) / total) * 100).toFixed(0),
+      b2: (((allocationData.b2Val || 0) / total) * 100).toFixed(0),
+      b3: (((allocationData.b3Val || 0) / total) * 100).toFixed(0),
+      b4: (((allocationData.b4Val || 0) / total) * 100).toFixed(0),
+      b5: (((allocationData.b5Val || 0) / total) * 100).toFixed(0),
+    };
+  };
+
+  // Build strategies array - runOptimizedSimulation returns { successRate, medianLegacy, allocation }
+  // strategy3 comes from calculateAlternativeAllocations directly with b1Val etc at top level
+  const strategies = [
+    {
+      key: 'strategy1',
+      name: 'Conservative Equity Tilt',
+      successRate: optimizerData?.strategy1?.successRate || 0,
+      medianLegacy: optimizerData?.strategy1?.medianLegacy || 0,
+      allocation: optimizerData?.strategy1?.allocation || {}
+    },
+    {
+      key: 'strategy2',
+      name: 'Barbell Strategy',
+      successRate: optimizerData?.strategy2?.successRate || 0,
+      medianLegacy: optimizerData?.strategy2?.medianLegacy || 0,
+      allocation: optimizerData?.strategy2?.allocation || {}
+    },
+    {
+      key: 'strategy3',
+      name: 'Current Model',
+      successRate: optimizerData?.strategy3?.successRate || 0,
+      medianLegacy: optimizerData?.strategy3?.medianLegacy || 0,
+      allocation: {
+        b1Val: optimizerData?.strategy3?.b1Val || 0,
+        b2Val: optimizerData?.strategy3?.b2Val || 0,
+        b3Val: optimizerData?.strategy3?.b3Val || 0,
+        b4Val: optimizerData?.strategy3?.b4Val || 0,
+        b5Val: optimizerData?.strategy3?.b5Val || 0,
+      },
+      isCurrent: true
+    },
+  ];
+
+  const sortedStrategies = [...strategies].sort((a, b) => (b.successRate || 0) - (a.successRate || 0));
+  const bestStrategy = sortedStrategies[0];
+
+  const StrategyCard = ({ strategy, isBest }) => {
+    const pct = getAllocationPercentages(strategy.allocation);
+    const successRate = strategy.successRate || 0;
+    const legacy = strategy.medianLegacy || 0;
+
+    return (
+      <Card className={`p-5 ${isBest ? 'ring-2 ring-emerald-500 bg-emerald-50' : ''}`}>
+        <div className="flex justify-between items-start mb-4">
+          <div>
+            <h4 className="font-bold text-slate-800 flex items-center gap-2">
+              {strategy.name}
+              {isBest && <span className="text-xs bg-emerald-500 text-white px-2 py-0.5 rounded">Best</span>}
+            </h4>
+            {strategy.isCurrent && <span className="text-xs text-slate-500">Your current allocation</span>}
+          </div>
+        </div>
+
+        {/* Success Rate */}
+        <div className="mb-4">
+          <div className="flex justify-between items-center mb-1">
+            <span className="text-sm text-slate-600">Success Rate</span>
+            <span className={`font-bold text-lg ${successRate >= 85 ? 'text-emerald-600' : successRate >= 70 ? 'text-yellow-600' : 'text-red-600'}`}>
+              {successRate.toFixed(1)}%
+            </span>
+          </div>
+          <div className="w-full bg-slate-200 rounded-full h-2">
+            <div
+              className={`h-2 rounded-full ${successRate >= 85 ? 'bg-emerald-500' : successRate >= 70 ? 'bg-yellow-500' : 'bg-red-500'}`}
+              style={{ width: `${Math.min(100, successRate)}%` }}
+            />
+          </div>
+        </div>
+
+        {/* Projected Legacy */}
+        <div className="mb-4 p-3 bg-slate-100 rounded-lg">
+          <p className="text-xs text-slate-500">Projected Legacy (Year 30)</p>
+          <p className="font-bold text-lg text-slate-800">${Math.round(legacy).toLocaleString()}</p>
+        </div>
+
+        {/* Allocation Breakdown */}
+        <div className="space-y-2">
+          <p className="text-xs font-medium text-slate-600">Allocation</p>
+          <div className="flex gap-1 h-4 rounded overflow-hidden">
+            {pct.b1 > 0 && <div style={{ width: `${pct.b1}%`, backgroundColor: COLORS.shortTerm }} title={`B1: ${pct.b1}%`} />}
+            {pct.b2 > 0 && <div style={{ width: `${pct.b2}%`, backgroundColor: COLORS.midTerm }} title={`B2: ${pct.b2}%`} />}
+            {pct.b3 > 0 && <div style={{ width: `${pct.b3}%`, backgroundColor: COLORS.hedged }} title={`B3: ${pct.b3}%`} />}
+            {pct.b4 > 0 && <div style={{ width: `${pct.b4}%`, backgroundColor: COLORS.income }} title={`B4: ${pct.b4}%`} />}
+            {pct.b5 > 0 && <div style={{ width: `${pct.b5}%`, backgroundColor: COLORS.longTerm }} title={`B5: ${pct.b5}%`} />}
+          </div>
+          <div className="grid grid-cols-5 gap-1 text-[10px] text-center">
+            <div><span className="inline-block w-2 h-2 rounded-full mr-1" style={{ backgroundColor: COLORS.shortTerm }}></span>B1: {pct.b1}%</div>
+            <div><span className="inline-block w-2 h-2 rounded-full mr-1" style={{ backgroundColor: COLORS.midTerm }}></span>B2: {pct.b2}%</div>
+            <div><span className="inline-block w-2 h-2 rounded-full mr-1" style={{ backgroundColor: COLORS.hedged }}></span>B3: {pct.b3}%</div>
+            <div><span className="inline-block w-2 h-2 rounded-full mr-1" style={{ backgroundColor: COLORS.income }}></span>B4: {pct.b4}%</div>
+            <div><span className="inline-block w-2 h-2 rounded-full mr-1" style={{ backgroundColor: COLORS.longTerm }}></span>B5: {pct.b5}%</div>
+          </div>
+        </div>
+      </Card>
+    );
+  };
+
+  return (
+    <div className="space-y-6 animate-in fade-in duration-300 mt-6">
+      {/* Distribution Rate Alert */}
+      {isHighDistribution && (
+        <div className="bg-amber-50 border border-amber-200 rounded-lg p-4 flex items-start gap-3">
+          <AlertCircle className="w-5 h-5 text-amber-600 flex-shrink-0 mt-0.5" />
+          <div>
+            <h4 className="font-bold text-amber-800">High Distribution Rate Detected</h4>
+            <p className="text-sm text-amber-700">
+              Your distribution rate of {distributionRate.toFixed(1)}% is above 6%. Research from JP Morgan suggests
+              that higher equity allocations may improve success rates for higher distribution scenarios.
+            </p>
+          </div>
+        </div>
+      )}
+
+      {/* Strategy Comparison Header */}
+      <div className="text-center">
+        <h3 className="text-xl font-bold text-slate-800 flex items-center justify-center gap-2">
+          <Target className="w-6 h-6 text-emerald-600" /> Allocation Strategy Comparison
+        </h3>
+        <p className="text-slate-600 mt-1">Compare different bucket allocation strategies based on Monte Carlo simulations</p>
+      </div>
+
+      {/* Strategy Cards */}
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+        {strategies.map(strategy => (
+          <StrategyCard
+            key={strategy.key}
+            strategy={strategy}
+            isBest={strategy.key === bestStrategy.key}
+          />
+        ))}
+      </div>
+
+      {/* Recommendation Box */}
+      <Card className="p-5 bg-gradient-to-r from-emerald-50 to-teal-50 border-emerald-200">
+        <div className="flex items-start gap-4">
+          <div className="p-3 bg-emerald-100 rounded-full">
+            <CheckCircle className="w-6 h-6 text-emerald-600" />
+          </div>
+          <div>
+            <h4 className="font-bold text-slate-800">Recommendation</h4>
+            <p className="text-slate-700 mt-1">
+              {bestStrategy.isCurrent ? (
+                <>Your current allocation is optimal for your situation with a {bestStrategy.successRate?.toFixed(1)}% success rate.</>
+              ) : (
+                <>The <strong>{bestStrategy.name}</strong> strategy shows the highest success rate at {bestStrategy.successRate?.toFixed(1)}%.
+                This could improve your portfolio sustainability by {((bestStrategy.successRate || 0) - (monteCarloData?.successRate || 0)).toFixed(1)} percentage points.</>
+              )}
+            </p>
+          </div>
+        </div>
+      </Card>
+
+      {/* Strategy Explanations */}
+      <Card className="p-5">
+        <h4 className="font-bold text-slate-800 mb-4">Strategy Descriptions</h4>
+        <div className="space-y-4">
+          <div className="border-l-4 border-blue-500 pl-4">
+            <h5 className="font-medium text-slate-800">Conservative Equity Tilt</h5>
+            <p className="text-sm text-slate-600">
+              Allocates 10% to B1, 10% to B2, 30% to B3, eliminates B4, and maximizes B5 at 50%.
+              This approach reduces fixed income drag while maintaining 2-year liquidity cushion.
+            </p>
+          </div>
+          <div className="border-l-4 border-purple-500 pl-4">
+            <h5 className="font-medium text-slate-800">Barbell Strategy</h5>
+            <p className="text-sm text-slate-600">
+              Places 3 years of spending needs in cash (B1) with everything else in long-term growth (B5).
+              Extreme approach that maximizes equity exposure while maintaining near-term liquidity.
+            </p>
+          </div>
+          <div className="border-l-4 border-emerald-500 pl-4">
+            <h5 className="font-medium text-slate-800">Current Model</h5>
+            <p className="text-sm text-slate-600">
+              Your existing bucket allocation based on the spending gap analysis. Balances liquidity needs
+              across multiple time horizons with a 10% allocation to income-generating assets.
+            </p>
+          </div>
+        </div>
       </Card>
     </div>
   );

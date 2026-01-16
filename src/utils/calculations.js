@@ -386,3 +386,186 @@ export const runSimulation = (basePlan, assumptions, inputs, rebalanceFreq, isMo
 
   return results[0];
 };
+
+/**
+ * Calculate alternative allocation strategies for the optimizer
+ * @param {object} inputs - Client inputs (portfolio, spending, etc.)
+ * @param {object} basePlan - Current model allocation
+ * @returns {object} Three allocation strategies
+ */
+export const calculateAlternativeAllocations = (inputs, basePlan) => {
+  const { totalPortfolio, monthlySpending } = inputs;
+  const annualDistribution = monthlySpending * 12;
+
+  // Strategy 1: Conservative Equity Tilt (10% B1, 10% B2, 30% B3, 0% B4, 50% B5)
+  const strategy1 = {
+    name: 'Conservative Equity Tilt',
+    description: 'B1+B2 limited to 20%, no B4, 50% in long-term growth',
+    b1Val: Math.round(totalPortfolio * 0.10),
+    b2Val: Math.round(totalPortfolio * 0.10),
+    b3Val: Math.round(totalPortfolio * 0.30),
+    b4Val: 0,
+    b5Val: Math.round(totalPortfolio * 0.50)
+  };
+
+  // Strategy 2: Barbell (3 years cash in B1, rest in B5)
+  const cashNeeded = annualDistribution * 3;
+  const strategy2 = {
+    name: 'Barbell Strategy',
+    description: '3 years cash reserve, remainder in long-term growth',
+    b1Val: Math.min(Math.round(cashNeeded), totalPortfolio),
+    b2Val: 0,
+    b3Val: 0,
+    b4Val: 0,
+    b5Val: Math.max(0, totalPortfolio - Math.round(cashNeeded))
+  };
+
+  // Strategy 3: Current Model (from basePlan)
+  const strategy3 = {
+    name: 'Current Model',
+    description: 'Time-segmented bucket strategy with B4 income allocation',
+    b1Val: basePlan.b1Val,
+    b2Val: basePlan.b2Val,
+    b3Val: basePlan.b3Val,
+    b4Val: basePlan.b4Val,
+    b5Val: basePlan.b5Val
+  };
+
+  return { strategy1, strategy2, strategy3 };
+};
+
+/**
+ * Run Monte Carlo simulation with a custom allocation
+ * @param {object} allocation - Custom bucket allocation (b1Val-b5Val)
+ * @param {object} assumptions - Return assumptions for each bucket
+ * @param {object} inputs - Client inputs
+ * @param {object} clientInfo - Client information
+ * @returns {object} Simulation results with successRate and finalBalance
+ */
+export const runOptimizedSimulation = (allocation, assumptions, inputs, clientInfo) => {
+  const { monthlySpending, ssPIA, partnerSSPIA, ssStartAge, partnerSSStartAge,
+    monthlyPension, pensionStartAge, pensionCOLA, inflationRate, personalInflationRate,
+    additionalIncomes } = inputs;
+
+  const simulationStartAge = Math.max(clientInfo.currentAge, clientInfo.retirementAge);
+  const years = 30;
+  const iterations = 500;
+
+  // Calculate SS values
+  const clientSS = clientInfo.currentAge >= 67 ? ssPIA : getAdjustedSS(ssPIA, ssStartAge);
+  const partnerSS = clientInfo.partnerAge >= 67 ? partnerSSPIA : getAdjustedSS(partnerSSPIA, partnerSSStartAge);
+
+  // Helper to get annual details
+  const getAnnualDetails = (yearIndex) => {
+    const simAge = simulationStartAge + yearIndex;
+    const currentPartnerAge = clientInfo.partnerAge + (simAge - clientInfo.currentAge);
+    const expenseInflationFactor = Math.pow(1 + (personalInflationRate / 100), yearIndex);
+    const incomeInflationFactor = Math.pow(1 + (inflationRate / 100), yearIndex);
+    const expenses = monthlySpending * 12 * expenseInflationFactor;
+
+    let income = 0;
+    if (clientInfo.currentAge >= 67 || simAge >= ssStartAge) {
+      income += clientSS * 12 * incomeInflationFactor;
+    }
+    if (clientInfo.isMarried && (clientInfo.partnerAge >= 67 || currentPartnerAge >= partnerSSStartAge)) {
+      income += partnerSS * 12 * incomeInflationFactor;
+    }
+    if (simAge >= pensionStartAge) {
+      income += monthlyPension * 12 * (pensionCOLA ? incomeInflationFactor : 1);
+    }
+
+    // Recurring additional incomes
+    (additionalIncomes || []).forEach(stream => {
+      if (!stream.isOneTime && simAge >= stream.startAge && simAge <= (stream.endAge || 100)) {
+        let streamAmount = stream.amount * 12;
+        if (stream.inflationAdjusted) streamAmount *= incomeInflationFactor;
+        income += streamAmount;
+      }
+    });
+
+    // One-time contributions
+    let oneTimeContributions = 0;
+    (additionalIncomes || []).forEach(stream => {
+      if (stream.isOneTime && simAge === stream.startAge) {
+        let streamAmount = stream.amount;
+        if (stream.inflationAdjusted) streamAmount *= incomeInflationFactor;
+        oneTimeContributions += streamAmount;
+      }
+    });
+
+    const gap = Math.max(0, expenses - income);
+    return { expenses, income, gap, simAge, oneTimeContributions };
+  };
+
+  let failureCount = 0;
+  const finalBalances = [];
+
+  for (let iter = 0; iter < iterations; iter++) {
+    const balances = {
+      b1: allocation.b1Val,
+      b2: allocation.b2Val,
+      b3: allocation.b3Val,
+      b4: allocation.b4Val,
+      b5: allocation.b5Val
+    };
+
+    for (let i = 0; i < years; i++) {
+      // Generate random returns
+      const rates = {
+        b1: (assumptions.b1.return + assumptions.b1.stdDev * randn_bm()) / 100,
+        b2: (assumptions.b2.return + assumptions.b2.stdDev * randn_bm()) / 100,
+        b3: (assumptions.b3.return + assumptions.b3.stdDev * randn_bm()) / 100,
+        b4: (assumptions.b4.return + assumptions.b4.stdDev * randn_bm()) / 100,
+        b5: (assumptions.b5.return + assumptions.b5.stdDev * randn_bm()) / 100
+      };
+
+      // Apply returns
+      balances.b1 *= (1 + rates.b1);
+      balances.b2 *= (1 + rates.b2);
+      balances.b3 *= (1 + rates.b3);
+      balances.b4 *= (1 + rates.b4);
+      balances.b5 *= (1 + rates.b5);
+
+      // Add one-time contributions
+      const details = getAnnualDetails(i);
+      balances.b5 += details.oneTimeContributions;
+
+      // Withdraw for spending gap
+      let withdrawalAmount = details.gap;
+      const withdrawOrder = ['b1', 'b2', 'b3', 'b4', 'b5'];
+      for (let b of withdrawOrder) {
+        if (withdrawalAmount <= 0) break;
+        if (balances[b] >= withdrawalAmount) {
+          balances[b] -= withdrawalAmount;
+          withdrawalAmount = 0;
+        } else {
+          withdrawalAmount -= balances[b];
+          balances[b] = 0;
+        }
+      }
+
+      const total = balances.b1 + balances.b2 + balances.b3 + balances.b4 + balances.b5;
+      if (total <= 0) {
+        failureCount++;
+        break;
+      }
+    }
+
+    const finalTotal = balances.b1 + balances.b2 + balances.b3 + balances.b4 + balances.b5;
+    if (finalTotal > 0) {
+      finalBalances.push(finalTotal);
+    }
+  }
+
+  // Calculate median legacy from successful iterations
+  finalBalances.sort((a, b) => a - b);
+  const medianLegacy = finalBalances.length > 0
+    ? finalBalances[Math.floor(finalBalances.length / 2)]
+    : 0;
+
+  return {
+    successRate: ((iterations - failureCount) / iterations) * 100,
+    medianLegacy: Math.round(medianLegacy),
+    allocation
+  };
+};

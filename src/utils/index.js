@@ -5,7 +5,9 @@ export {
   calculateAccumulation,
   calculateWeightedReturn,
   calculateBasePlan,
-  runSimulation
+  runSimulation,
+  calculateAlternativeAllocations,
+  runOptimizedSimulation
 } from './calculations';
 export {
   calculateSSAnalysis,
