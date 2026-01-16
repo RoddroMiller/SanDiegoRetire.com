@@ -2,7 +2,8 @@ import React, { useState, useMemo } from 'react';
 import {
   Search, Trash2, UserCheck, Users, FileText, Calendar, Mail, Phone,
   ChevronDown, ChevronUp, Filter, RefreshCw, AlertCircle, Loader,
-  DollarSign, TrendingUp, LogOut, UserPlus, X, Check, ArrowLeft
+  DollarSign, TrendingUp, LogOut, UserPlus, X, Check, ArrowLeft,
+  Link2, UserX, Send, Copy, CheckCircle
 } from 'lucide-react';
 
 import { COLORS, LOGO_URL } from '../../constants';
@@ -27,7 +28,10 @@ export const PlanManagement = ({
   isLoadingAdvisors,
   onAddAdvisor,
   onDeleteAdvisor,
-  onRefreshAdvisors
+  onRefreshAdvisors,
+  // Client assignment
+  onAssignPlanToClient,
+  onRemoveClientAssignment
 }) => {
   const [searchTerm, setSearchTerm] = useState('');
   const [sortField, setSortField] = useState('updatedAt');
@@ -43,6 +47,13 @@ export const PlanManagement = ({
   const [addAdvisorError, setAddAdvisorError] = useState('');
   const [isAddingAdvisor, setIsAddingAdvisor] = useState(false);
   const [showManageAdvisors, setShowManageAdvisors] = useState(false);
+
+  // Client assignment state
+  const [assigningClientPlanId, setAssigningClientPlanId] = useState(null);
+  const [clientAssignEmail, setClientAssignEmail] = useState('');
+  const [isAssigningClient, setIsAssigningClient] = useState(false);
+  const [clientAssignMessage, setClientAssignMessage] = useState({ type: '', text: '', email: '' });
+  const [copiedInvite, setCopiedInvite] = useState(false);
 
   // Filter and sort scenarios
   const filteredScenarios = useMemo(() => {
@@ -182,6 +193,78 @@ export const PlanManagement = ({
     }
   };
 
+  // Handle assigning a plan to a client
+  const handleAssignClientToPlan = async (planId) => {
+    if (!clientAssignEmail || !onAssignPlanToClient) return;
+    setIsAssigningClient(true);
+    setClientAssignMessage({ type: '', text: '', email: '' });
+    setCopiedInvite(false);
+
+    try {
+      const result = await onAssignPlanToClient(planId, clientAssignEmail);
+      if (result.success) {
+        setClientAssignMessage({
+          type: 'success',
+          text: result.message,
+          email: result.clientEmail || clientAssignEmail
+        });
+        setClientAssignEmail('');
+        setAssigningClientPlanId(null);
+        // Don't auto-clear - let user dismiss after copying invite
+      } else {
+        setClientAssignMessage({ type: 'error', text: result.message, email: '' });
+      }
+    } catch (error) {
+      console.error('Error assigning client:', error);
+      setClientAssignMessage({ type: 'error', text: 'Failed to assign client. Please try again.', email: '' });
+    } finally {
+      setIsAssigningClient(false);
+    }
+  };
+
+  // Generate invite message for client
+  const getInviteMessage = (email) => {
+    const siteUrl = window.location.origin;
+    return `Hi,
+
+Your retirement plan is ready for review! To access it:
+
+1. Go to: ${siteUrl}
+2. Click "I am a Client"
+3. Sign up using this email: ${email}
+
+Once you create your account, you'll be able to view and explore your personalized retirement plan.
+
+Best regards,
+Your Financial Advisor`;
+  };
+
+  // Copy invite to clipboard
+  const handleCopyInvite = async () => {
+    const message = getInviteMessage(clientAssignMessage.email);
+    try {
+      await navigator.clipboard.writeText(message);
+      setCopiedInvite(true);
+      setTimeout(() => setCopiedInvite(false), 2000);
+    } catch (err) {
+      console.error('Failed to copy:', err);
+    }
+  };
+
+  // Handle removing client assignment
+  const handleRemoveClientAssignment = async (planId) => {
+    if (!onRemoveClientAssignment) return;
+    if (!confirm('Remove client access to this plan?')) return;
+
+    try {
+      await onRemoveClientAssignment(planId);
+      setClientAssignMessage({ type: 'success', text: 'Client access removed.' });
+      setTimeout(() => setClientAssignMessage({ type: '', text: '' }), 3000);
+    } catch (error) {
+      console.error('Error removing client assignment:', error);
+    }
+  };
+
   // Get advisor name by email
   const getAdvisorName = (email) => {
     if (!email) return 'Unassigned';
@@ -228,9 +311,13 @@ export const PlanManagement = ({
           <div className="flex items-center gap-2 sm:gap-3">
             <img src={LOGO_URL} alt="Logo" className="h-10 sm:h-12 md:h-[72px] w-auto object-contain" />
             <div>
-              <h1 className="text-xl sm:text-2xl md:text-3xl font-bold text-slate-900">Plan Management</h1>
+              <h1 className="text-xl sm:text-2xl md:text-3xl font-bold text-slate-900">
+                {userRole === 'registeredClient' ? 'Your Plans' : 'Plan Management'}
+              </h1>
               <p className="text-slate-500 text-xs sm:text-sm">
-                {userRole === 'master' ? 'All Plans (Master View)' : 'Your Client Plans'}
+                {userRole === 'master' ? 'All Plans (Master View)' :
+                 userRole === 'registeredClient' ? 'Plans assigned to you by your advisor' :
+                 'Your Client Plans'}
               </p>
             </div>
           </div>
@@ -243,12 +330,14 @@ export const PlanManagement = ({
                 <Users className="w-3 h-3 sm:w-4 sm:h-4" /> <span className="hidden sm:inline">{showManageAdvisors ? 'Hide' : 'Manage'}</span> Advisors
               </button>
             )}
-            <button
-              onClick={onBackToPlanning}
-              className="flex items-center gap-1 sm:gap-2 px-2 sm:px-4 py-1.5 sm:py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg transition-all text-xs sm:text-sm"
-            >
-              <ArrowLeft className="w-3 h-3 sm:w-4 sm:h-4" /> <span className="hidden sm:inline">Back to</span> Planning
-            </button>
+            {userRole !== 'registeredClient' && (
+              <button
+                onClick={onBackToPlanning}
+                className="flex items-center gap-1 sm:gap-2 px-2 sm:px-4 py-1.5 sm:py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg transition-all text-xs sm:text-sm"
+              >
+                <ArrowLeft className="w-3 h-3 sm:w-4 sm:h-4" /> <span className="hidden sm:inline">Back to</span> Planning
+              </button>
+            )}
             <button
               onClick={() => { onRefreshScenarios(); onRefreshAdvisors && onRefreshAdvisors(); }}
               className="flex items-center gap-1 sm:gap-2 px-2 sm:px-4 py-1.5 sm:py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg transition-all text-xs sm:text-sm"
@@ -266,53 +355,55 @@ export const PlanManagement = ({
       </div>
 
       <div className="max-w-7xl mx-auto">
-        {/* Stats Cards */}
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
-          <Card className="p-4">
-            <div className="flex items-center gap-3">
-              <div className="p-2 bg-slate-100 rounded-lg">
-                <FileText className="w-5 h-5 text-slate-600" />
+        {/* Stats Cards - hidden for registered clients */}
+        {userRole !== 'registeredClient' && (
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+            <Card className="p-4">
+              <div className="flex items-center gap-3">
+                <div className="p-2 bg-slate-100 rounded-lg">
+                  <FileText className="w-5 h-5 text-slate-600" />
+                </div>
+                <div>
+                  <p className="text-2xl font-bold text-slate-800">{stats.total}</p>
+                  <p className="text-xs text-slate-500">Total Plans</p>
+                </div>
               </div>
-              <div>
-                <p className="text-2xl font-bold text-slate-800">{stats.total}</p>
-                <p className="text-xs text-slate-500">Total Plans</p>
+            </Card>
+            <Card className="p-4">
+              <div className="flex items-center gap-3">
+                <div className="p-2 bg-emerald-100 rounded-lg">
+                  <UserCheck className="w-5 h-5 text-emerald-600" />
+                </div>
+                <div>
+                  <p className="text-2xl font-bold text-emerald-700">{stats.submissions}</p>
+                  <p className="text-xs text-slate-500">New Leads</p>
+                </div>
               </div>
-            </div>
-          </Card>
-          <Card className="p-4">
-            <div className="flex items-center gap-3">
-              <div className="p-2 bg-emerald-100 rounded-lg">
-                <UserCheck className="w-5 h-5 text-emerald-600" />
+            </Card>
+            <Card className="p-4">
+              <div className="flex items-center gap-3">
+                <div className="p-2 bg-yellow-100 rounded-lg">
+                  <TrendingUp className="w-5 h-5 text-yellow-600" />
+                </div>
+                <div>
+                  <p className="text-2xl font-bold text-yellow-700">{stats.inProgress}</p>
+                  <p className="text-xs text-slate-500">In Progress</p>
+                </div>
               </div>
-              <div>
-                <p className="text-2xl font-bold text-emerald-700">{stats.submissions}</p>
-                <p className="text-xs text-slate-500">New Leads</p>
+            </Card>
+            <Card className="p-4">
+              <div className="flex items-center gap-3">
+                <div className="p-2 bg-blue-100 rounded-lg">
+                  <DollarSign className="w-5 h-5 text-blue-600" />
+                </div>
+                <div>
+                  <p className="text-2xl font-bold text-blue-700">${(stats.totalPortfolio / 1000000).toFixed(1)}M</p>
+                  <p className="text-xs text-slate-500">Total AUM</p>
+                </div>
               </div>
-            </div>
-          </Card>
-          <Card className="p-4">
-            <div className="flex items-center gap-3">
-              <div className="p-2 bg-yellow-100 rounded-lg">
-                <TrendingUp className="w-5 h-5 text-yellow-600" />
-              </div>
-              <div>
-                <p className="text-2xl font-bold text-yellow-700">{stats.inProgress}</p>
-                <p className="text-xs text-slate-500">In Progress</p>
-              </div>
-            </div>
-          </Card>
-          <Card className="p-4">
-            <div className="flex items-center gap-3">
-              <div className="p-2 bg-blue-100 rounded-lg">
-                <DollarSign className="w-5 h-5 text-blue-600" />
-              </div>
-              <div>
-                <p className="text-2xl font-bold text-blue-700">${(stats.totalPortfolio / 1000000).toFixed(1)}M</p>
-                <p className="text-xs text-slate-500">Total AUM</p>
-              </div>
-            </div>
-          </Card>
-        </div>
+            </Card>
+          </div>
+        )}
 
         {/* Manage Advisors Panel */}
         {showManageAdvisors && userRole === 'master' && (
@@ -414,84 +505,131 @@ export const PlanManagement = ({
           </Card>
         )}
 
-        {/* Filters and Search */}
-        <Card className="p-4 mb-6">
-          <div className="flex flex-col lg:flex-row gap-4 items-start lg:items-center justify-between">
-            <div className="flex flex-wrap gap-2">
-              <button
-                onClick={() => setFilterType('all')}
-                className={`px-3 py-1.5 text-sm font-medium rounded-lg transition-all ${filterType === 'all' ? 'bg-slate-800 text-white' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'}`}
-              >
-                All ({savedScenarios.length})
-              </button>
-              <button
-                onClick={() => setFilterType('submissions')}
-                className={`px-3 py-1.5 text-sm font-medium rounded-lg transition-all ${filterType === 'submissions' ? 'bg-emerald-600 text-white' : 'bg-emerald-50 text-emerald-700 hover:bg-emerald-100'}`}
-              >
-                New Leads ({stats.submissions})
-              </button>
-              <button
-                onClick={() => setFilterType('progress')}
-                className={`px-3 py-1.5 text-sm font-medium rounded-lg transition-all ${filterType === 'progress' ? 'bg-yellow-500 text-white' : 'bg-yellow-50 text-yellow-700 hover:bg-yellow-100'}`}
-              >
-                In Progress ({stats.inProgress})
-              </button>
-              <button
-                onClick={() => setFilterType('advisor')}
-                className={`px-3 py-1.5 text-sm font-medium rounded-lg transition-all ${filterType === 'advisor' ? 'bg-blue-600 text-white' : 'bg-blue-50 text-blue-700 hover:bg-blue-100'}`}
-              >
-                Advisor Saved
-              </button>
+        {/* Filters and Search - hidden for registered clients */}
+        {userRole !== 'registeredClient' && (
+          <Card className="p-4 mb-6">
+            <div className="flex flex-col lg:flex-row gap-4 items-start lg:items-center justify-between">
+              <div className="flex flex-wrap gap-2">
+                <button
+                  onClick={() => setFilterType('all')}
+                  className={`px-3 py-1.5 text-sm font-medium rounded-lg transition-all ${filterType === 'all' ? 'bg-slate-800 text-white' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'}`}
+                >
+                  All ({savedScenarios.length})
+                </button>
+                <button
+                  onClick={() => setFilterType('submissions')}
+                  className={`px-3 py-1.5 text-sm font-medium rounded-lg transition-all ${filterType === 'submissions' ? 'bg-emerald-600 text-white' : 'bg-emerald-50 text-emerald-700 hover:bg-emerald-100'}`}
+                >
+                  New Leads ({stats.submissions})
+                </button>
+                <button
+                  onClick={() => setFilterType('progress')}
+                  className={`px-3 py-1.5 text-sm font-medium rounded-lg transition-all ${filterType === 'progress' ? 'bg-yellow-500 text-white' : 'bg-yellow-50 text-yellow-700 hover:bg-yellow-100'}`}
+                >
+                  In Progress ({stats.inProgress})
+                </button>
+                <button
+                  onClick={() => setFilterType('advisor')}
+                  className={`px-3 py-1.5 text-sm font-medium rounded-lg transition-all ${filterType === 'advisor' ? 'bg-blue-600 text-white' : 'bg-blue-50 text-blue-700 hover:bg-blue-100'}`}
+                >
+                  Advisor Saved
+                </button>
+              </div>
+
+              <div className="relative w-full lg:w-72">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+                <input
+                  type="text"
+                  placeholder="Search by name, email, phone..."
+                  value={searchTerm}
+                  onChange={(e) => setSearchTerm(e.target.value)}
+                  className="w-full pl-10 pr-4 py-2 border rounded-lg text-sm focus:ring-emerald-500 focus:border-emerald-500"
+                />
+              </div>
             </div>
 
-            <div className="relative w-full lg:w-72">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
-              <input
-                type="text"
-                placeholder="Search by name, email, phone..."
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-                className="w-full pl-10 pr-4 py-2 border rounded-lg text-sm focus:ring-emerald-500 focus:border-emerald-500"
-              />
+            {/* Bulk Actions */}
+            {selectedPlans.length > 0 && (
+              <div className="mt-4 pt-4 border-t flex flex-wrap items-center gap-4">
+                <span className="text-sm font-medium text-slate-600">
+                  {selectedPlans.length} selected
+                </span>
+                <button
+                  onClick={handleBulkDelete}
+                  className="flex items-center gap-1 px-3 py-1.5 text-sm bg-red-50 text-red-700 rounded-lg hover:bg-red-100 transition-all"
+                >
+                  <Trash2 className="w-4 h-4" /> Delete Selected
+                </button>
+                {userRole === 'master' && (
+                  <div className="flex items-center gap-2">
+                    <select
+                      value={reassignAdvisor}
+                      onChange={(e) => setReassignAdvisor(e.target.value)}
+                      className="text-sm border rounded-lg px-2 py-1.5"
+                    >
+                      <option value="">Select advisor...</option>
+                      {advisors.map(a => (
+                        <option key={a.id} value={a.email}>{a.name}</option>
+                      ))}
+                    </select>
+                    <button
+                      onClick={handleBulkReassign}
+                      disabled={!reassignAdvisor}
+                      className="flex items-center gap-1 px-3 py-1.5 text-sm bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                      <UserPlus className="w-4 h-4" /> Assign Selected
+                    </button>
+                  </div>
+                )}
+              </div>
+            )}
+          </Card>
+        )}
+
+        {/* Client Assignment Message */}
+        {clientAssignMessage.text && (
+          <div className={`mb-4 p-4 rounded-lg ${
+            clientAssignMessage.type === 'success'
+              ? 'bg-emerald-50 border border-emerald-200 text-emerald-700'
+              : 'bg-red-50 border border-red-200 text-red-700'
+          }`}>
+            <div className="flex items-center gap-2">
+              {clientAssignMessage.type === 'success' ? <CheckCircle className="w-5 h-5" /> : <AlertCircle className="w-5 h-5" />}
+              <span className="text-sm font-medium">{clientAssignMessage.text}</span>
+              <button
+                onClick={() => setClientAssignMessage({ type: '', text: '', email: '' })}
+                className="ml-auto p-1 hover:bg-white/50 rounded transition-all"
+              >
+                <X className="w-4 h-4" />
+              </button>
             </div>
+            {clientAssignMessage.type === 'success' && clientAssignMessage.email && (
+              <div className="mt-3 pt-3 border-t border-emerald-200">
+                <p className="text-xs text-emerald-600 mb-2">
+                  Copy the invite message below to send to your client via email:
+                </p>
+                <button
+                  onClick={handleCopyInvite}
+                  className={`flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-medium transition-all ${
+                    copiedInvite
+                      ? 'bg-emerald-600 text-white'
+                      : 'bg-emerald-100 text-emerald-700 hover:bg-emerald-200'
+                  }`}
+                >
+                  {copiedInvite ? (
+                    <>
+                      <Check className="w-4 h-4" /> Copied to Clipboard!
+                    </>
+                  ) : (
+                    <>
+                      <Copy className="w-4 h-4" /> Copy Invite Message
+                    </>
+                  )}
+                </button>
+              </div>
+            )}
           </div>
-
-          {/* Bulk Actions */}
-          {selectedPlans.length > 0 && (
-            <div className="mt-4 pt-4 border-t flex flex-wrap items-center gap-4">
-              <span className="text-sm font-medium text-slate-600">
-                {selectedPlans.length} selected
-              </span>
-              <button
-                onClick={handleBulkDelete}
-                className="flex items-center gap-1 px-3 py-1.5 text-sm bg-red-50 text-red-700 rounded-lg hover:bg-red-100 transition-all"
-              >
-                <Trash2 className="w-4 h-4" /> Delete Selected
-              </button>
-              {userRole === 'master' && (
-                <div className="flex items-center gap-2">
-                  <select
-                    value={reassignAdvisor}
-                    onChange={(e) => setReassignAdvisor(e.target.value)}
-                    className="text-sm border rounded-lg px-2 py-1.5"
-                  >
-                    <option value="">Select advisor...</option>
-                    {advisors.map(a => (
-                      <option key={a.id} value={a.email}>{a.name}</option>
-                    ))}
-                  </select>
-                  <button
-                    onClick={handleBulkReassign}
-                    disabled={!reassignAdvisor}
-                    className="flex items-center gap-1 px-3 py-1.5 text-sm bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
-                  >
-                    <UserPlus className="w-4 h-4" /> Assign Selected
-                  </button>
-                </div>
-              )}
-            </div>
-          )}
-        </Card>
+        )}
 
         {/* Plans Table */}
         <Card className="overflow-hidden">
@@ -503,32 +641,42 @@ export const PlanManagement = ({
           ) : filteredScenarios.length === 0 ? (
             <div className="flex flex-col items-center justify-center p-12 text-slate-500">
               <AlertCircle className="w-12 h-12 mb-4 text-slate-300" />
-              <p className="text-lg font-medium">No plans found</p>
-              <p className="text-sm">Try adjusting your search or filters</p>
+              <p className="text-lg font-medium">
+                {userRole === 'registeredClient' ? 'No plans assigned yet' : 'No plans found'}
+              </p>
+              <p className="text-sm">
+                {userRole === 'registeredClient'
+                  ? 'Contact your advisor to have a plan assigned to your account'
+                  : 'Try adjusting your search or filters'}
+              </p>
             </div>
           ) : (
             <div className="overflow-x-auto">
               <table className="w-full text-sm">
                 <thead>
                   <tr className="bg-slate-50 border-b border-slate-200">
-                    <th className="p-3 text-left">
-                      <input
-                        type="checkbox"
-                        checked={selectedPlans.length === filteredScenarios.length && filteredScenarios.length > 0}
-                        onChange={handleSelectAll}
-                        className="w-4 h-4 rounded"
-                      />
-                    </th>
+                    {userRole !== 'registeredClient' && (
+                      <th className="p-3 text-left">
+                        <input
+                          type="checkbox"
+                          checked={selectedPlans.length === filteredScenarios.length && filteredScenarios.length > 0}
+                          onChange={handleSelectAll}
+                          className="w-4 h-4 rounded"
+                        />
+                      </th>
+                    )}
                     <th className="p-3 text-left">
                       <button onClick={() => handleSort('name')} className="flex items-center gap-1 font-bold text-slate-600 hover:text-slate-800">
-                        Client {sortField === 'name' && (sortDirection === 'asc' ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />)}
+                        {userRole === 'registeredClient' ? 'Plan' : 'Client'} {sortField === 'name' && (sortDirection === 'asc' ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />)}
                       </button>
                     </th>
-                    <th className="p-3 text-left">
-                      <button onClick={() => handleSort('email')} className="flex items-center gap-1 font-bold text-slate-600 hover:text-slate-800">
-                        Contact {sortField === 'email' && (sortDirection === 'asc' ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />)}
-                      </button>
-                    </th>
+                    {userRole !== 'registeredClient' && (
+                      <th className="p-3 text-left">
+                        <button onClick={() => handleSort('email')} className="flex items-center gap-1 font-bold text-slate-600 hover:text-slate-800">
+                          Contact {sortField === 'email' && (sortDirection === 'asc' ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />)}
+                        </button>
+                      </th>
+                    )}
                     <th className="p-3 text-left">
                       <button onClick={() => handleSort('portfolio')} className="flex items-center gap-1 font-bold text-slate-600 hover:text-slate-800">
                         Portfolio {sortField === 'portfolio' && (sortDirection === 'asc' ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />)}
@@ -541,13 +689,24 @@ export const PlanManagement = ({
                         </button>
                       </th>
                     )}
-                    <th className="p-3 text-left">Status</th>
+                    {userRole !== 'registeredClient' && (
+                      <th className="p-3 text-left">Status</th>
+                    )}
+                    {(userRole === 'advisor' || userRole === 'master') && (
+                      <th className="p-3 text-left">
+                        <span className="flex items-center gap-1 font-bold text-slate-600">
+                          <Link2 className="w-4 h-4" /> Client Access
+                        </span>
+                      </th>
+                    )}
                     <th className="p-3 text-left">
                       <button onClick={() => handleSort('updatedAt')} className="flex items-center gap-1 font-bold text-slate-600 hover:text-slate-800">
                         Updated {sortField === 'updatedAt' && (sortDirection === 'asc' ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />)}
                       </button>
                     </th>
-                    <th className="p-3 text-right">Actions</th>
+                    {userRole !== 'registeredClient' && (
+                      <th className="p-3 text-right">Actions</th>
+                    )}
                   </tr>
                 </thead>
                 <tbody>
@@ -557,26 +716,30 @@ export const PlanManagement = ({
                       className="border-b border-slate-100 hover:bg-slate-50 transition-colors cursor-pointer"
                       onClick={() => onLoadScenario(scenario)}
                     >
-                      <td className="p-3" onClick={(e) => e.stopPropagation()}>
-                        <input
-                          type="checkbox"
-                          checked={selectedPlans.includes(scenario.id)}
-                          onChange={() => handleSelectPlan(scenario.id)}
-                          className="w-4 h-4 rounded"
-                        />
-                      </td>
+                      {userRole !== 'registeredClient' && (
+                        <td className="p-3" onClick={(e) => e.stopPropagation()}>
+                          <input
+                            type="checkbox"
+                            checked={selectedPlans.includes(scenario.id)}
+                            onChange={() => handleSelectPlan(scenario.id)}
+                            className="w-4 h-4 rounded"
+                          />
+                        </td>
+                      )}
                       <td className="p-3">
                         <div className="font-medium text-slate-800">{scenario.clientInfo?.name || 'Unnamed'}</div>
                         <div className="text-xs text-slate-500">Age {scenario.clientInfo?.currentAge || '-'}</div>
                       </td>
-                      <td className="p-3">
-                        <div className="flex items-center gap-1 text-slate-600">
-                          <Mail className="w-3 h-3" /> {scenario.clientInfo?.email || '-'}
-                        </div>
-                        <div className="flex items-center gap-1 text-xs text-slate-500">
-                          <Phone className="w-3 h-3" /> {scenario.clientInfo?.phone || '-'}
-                        </div>
-                      </td>
+                      {userRole !== 'registeredClient' && (
+                        <td className="p-3">
+                          <div className="flex items-center gap-1 text-slate-600">
+                            <Mail className="w-3 h-3" /> {scenario.clientInfo?.email || '-'}
+                          </div>
+                          <div className="flex items-center gap-1 text-xs text-slate-500">
+                            <Phone className="w-3 h-3" /> {scenario.clientInfo?.phone || '-'}
+                          </div>
+                        </td>
+                      )}
                       <td className="p-3">
                         <div className="font-bold text-emerald-700">
                           ${((scenario.inputs?.totalPortfolio || 0) / 1000000).toFixed(2)}M
@@ -604,24 +767,83 @@ export const PlanManagement = ({
                           </select>
                         </td>
                       )}
-                      <td className="p-3">
-                        {getStatusBadge(scenario)}
-                      </td>
+                      {userRole !== 'registeredClient' && (
+                        <td className="p-3">
+                          {getStatusBadge(scenario)}
+                        </td>
+                      )}
+                      {(userRole === 'advisor' || userRole === 'master') && (
+                        <td className="p-3" onClick={(e) => e.stopPropagation()}>
+                          {scenario.assignedClientEmail ? (
+                            <div className="flex items-center gap-2">
+                              <span className="text-xs bg-blue-100 text-blue-700 px-2 py-1 rounded-full truncate max-w-[150px]" title={scenario.assignedClientEmail}>
+                                {scenario.assignedClientEmail}
+                              </span>
+                              <button
+                                onClick={() => handleRemoveClientAssignment(scenario.id)}
+                                className="p-1 text-red-500 hover:bg-red-50 rounded transition-all"
+                                title="Remove client access"
+                              >
+                                <UserX className="w-3 h-3" />
+                              </button>
+                            </div>
+                          ) : assigningClientPlanId === scenario.id ? (
+                            <div className="flex items-center gap-1">
+                              <input
+                                type="email"
+                                placeholder="client@email.com"
+                                value={clientAssignEmail}
+                                onChange={(e) => setClientAssignEmail(e.target.value)}
+                                className="text-xs border rounded px-2 py-1 w-32 focus:ring-blue-500 focus:border-blue-500"
+                                onKeyDown={(e) => {
+                                  if (e.key === 'Enter') handleAssignClientToPlan(scenario.id);
+                                  if (e.key === 'Escape') { setAssigningClientPlanId(null); setClientAssignEmail(''); }
+                                }}
+                                autoFocus
+                              />
+                              <button
+                                onClick={() => handleAssignClientToPlan(scenario.id)}
+                                disabled={!clientAssignEmail || isAssigningClient}
+                                className="p-1 text-blue-600 hover:bg-blue-50 rounded transition-all disabled:opacity-50"
+                                title="Send invitation"
+                              >
+                                {isAssigningClient ? <Loader className="w-3 h-3 animate-spin" /> : <Send className="w-3 h-3" />}
+                              </button>
+                              <button
+                                onClick={() => { setAssigningClientPlanId(null); setClientAssignEmail(''); }}
+                                className="p-1 text-slate-400 hover:bg-slate-100 rounded transition-all"
+                                title="Cancel"
+                              >
+                                <X className="w-3 h-3" />
+                              </button>
+                            </div>
+                          ) : (
+                            <button
+                              onClick={() => setAssigningClientPlanId(scenario.id)}
+                              className="text-xs text-blue-600 hover:text-blue-700 hover:underline flex items-center gap-1"
+                            >
+                              <UserPlus className="w-3 h-3" /> Invite Client
+                            </button>
+                          )}
+                        </td>
+                      )}
                       <td className="p-3">
                         <div className="flex items-center gap-1 text-slate-500">
                           <Calendar className="w-3 h-3" />
                           {formatDate(scenario.updatedAt)}
                         </div>
                       </td>
-                      <td className="p-3 text-right" onClick={(e) => e.stopPropagation()}>
-                        <button
-                          onClick={(e) => onDeleteScenario(e, scenario.id)}
-                          className="p-2 text-red-500 hover:bg-red-50 rounded-lg transition-all"
-                          title="Delete"
-                        >
-                          <Trash2 className="w-4 h-4" />
-                        </button>
-                      </td>
+                      {userRole !== 'registeredClient' && (
+                        <td className="p-3 text-right" onClick={(e) => e.stopPropagation()}>
+                          <button
+                            onClick={(e) => onDeleteScenario(e, scenario.id)}
+                            className="p-2 text-red-500 hover:bg-red-50 rounded-lg transition-all"
+                            title="Delete"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </button>
+                        </td>
+                      )}
                     </tr>
                   ))}
                 </tbody>

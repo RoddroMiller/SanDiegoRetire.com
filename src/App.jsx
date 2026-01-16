@@ -2,7 +2,7 @@ import React, { useState, useMemo, useEffect } from 'react';
 
 // --- Local Imports ---
 import { formatPhoneNumber, calculateAccumulation, calculateBasePlan, runSimulation, calculateSSAnalysis, calculateSSPartnerAnalysis, getAdjustedSS, calculateAlternativeAllocations, runOptimizedSimulation } from './utils';
-import { GateScreen, LoginScreen, AccumulationPage, ArchitectPage, ClientWizard, PlanManagement } from './components';
+import { GateScreen, LoginScreen, ClientLoginScreen, AccumulationPage, ArchitectPage, ClientWizard, PlanManagement } from './components';
 import { useAuth, useScenarios, useAdvisors } from './hooks';
 
 // --- Main Application ---
@@ -16,8 +16,12 @@ export default function BucketPortfolioBuilder() {
     currentUser,
     authError,
     isLoggingIn,
-    handleClientEntry,
+    resetStatus,
+    handleProspectEntry,
+    handleClientLogin,
+    handleClientSignup,
     handleAdvisorLogin,
+    handlePasswordReset,
     handleLogout
   } = useAuth();
 
@@ -33,7 +37,9 @@ export default function BucketPortfolioBuilder() {
     deleteScenario,
     clearScenarios,
     reassignScenario,
-    refreshScenarios
+    refreshScenarios,
+    assignPlanToClient,
+    removeClientAssignment
   } = useScenarios({ currentUser, userRole });
 
   // Advisor view state (planning vs management)
@@ -53,6 +59,7 @@ export default function BucketPortfolioBuilder() {
   const [showSettings, setShowSettings] = useState(true);
   const [activeTab, setActiveTab] = useState('chart');
   const [rebalanceFreq, setRebalanceFreq] = useState(3);
+  const [optimizerRebalanceFreq, setOptimizerRebalanceFreq] = useState(0); // 0 = sequential, 1 = annual, 3 = every 3 years
   const [isGeneratingReport, setIsGeneratingReport] = useState(false);
   const [showCashFlowTable, setShowCashFlowTable] = useState(false);
 
@@ -153,24 +160,23 @@ export default function BucketPortfolioBuilder() {
   const projectionData = useMemo(() => runSimulation(basePlan, assumptions, inputs, rebalanceFreq, false), [basePlan, assumptions, inputs, rebalanceFreq]);
   const monteCarloData = useMemo(() => runSimulation(basePlan, assumptions, inputs, rebalanceFreq, true), [basePlan, assumptions, inputs, rebalanceFreq]);
 
-  // Optimizer data - compare three allocation strategies
+  // Optimizer data - compare six allocation strategies with consistent rebalancing
   const optimizerData = useMemo(() => {
     try {
       const allocations = calculateAlternativeAllocations(inputs, basePlan);
       return {
-        strategy1: runOptimizedSimulation(allocations.strategy1, assumptions, inputs, clientInfo),
-        strategy2: runOptimizedSimulation(allocations.strategy2, assumptions, inputs, clientInfo),
-        strategy3: {
-          ...allocations.strategy3,
-          successRate: monteCarloData?.successRate || 0,
-          medianLegacy: projectionData[projectionData.length - 1]?.total || 0
-        }
+        strategy1: runOptimizedSimulation(allocations.strategy1, assumptions, inputs, clientInfo, optimizerRebalanceFreq),
+        strategy2: runOptimizedSimulation(allocations.strategy2, assumptions, inputs, clientInfo, optimizerRebalanceFreq),
+        strategy3: runOptimizedSimulation(allocations.strategy3, assumptions, inputs, clientInfo, optimizerRebalanceFreq),
+        strategy4: runOptimizedSimulation(allocations.strategy4, assumptions, inputs, clientInfo, optimizerRebalanceFreq),
+        strategy5: runOptimizedSimulation(allocations.strategy5, assumptions, inputs, clientInfo, optimizerRebalanceFreq),
+        strategy6: runOptimizedSimulation(allocations.strategy6, assumptions, inputs, clientInfo, optimizerRebalanceFreq)
       };
     } catch (error) {
       console.error('Optimizer calculation error:', error);
       return null;
     }
-  }, [inputs, basePlan, assumptions, clientInfo, monteCarloData, projectionData]);
+  }, [inputs, basePlan, assumptions, clientInfo, optimizerRebalanceFreq]);
 
   // Keep totalPortfolio in sync with accumulation data
   const finalAccumulationBalance = accumulationData.length > 0 ? accumulationData[accumulationData.length - 1].balance : 0;
@@ -337,7 +343,8 @@ export default function BucketPortfolioBuilder() {
     return (
       <GateScreen
         onAdvisorClick={() => setViewMode('login')}
-        onClientEntry={handleClientEntry}
+        onClientLoginClick={() => setViewMode('clientLogin')}
+        onProspectEntry={handleProspectEntry}
         isLoggingIn={isLoggingIn}
       />
     );
@@ -353,8 +360,21 @@ export default function BucketPortfolioBuilder() {
     );
   }
 
-  // Client Wizard Flow
-  if (userRole === 'client') {
+  if (viewMode === 'clientLogin') {
+    return (
+      <ClientLoginScreen
+        onBack={() => setViewMode('gate')}
+        onLogin={handleClientLogin}
+        onSignup={handleClientSignup}
+        onPasswordReset={handlePasswordReset}
+        authError={authError}
+        resetStatus={resetStatus}
+      />
+    );
+  }
+
+  // Anonymous Client Wizard Flow (prospective clients)
+  if (userRole === 'anonymous') {
     return (
       <ClientWizard
         clientInfo={clientInfo}
@@ -376,6 +396,41 @@ export default function BucketPortfolioBuilder() {
         onAddAdditionalIncome={addAdditionalIncome}
         onUpdateAdditionalIncome={updateAdditionalIncome}
         onRemoveAdditionalIncome={removeAdditionalIncome}
+      />
+    );
+  }
+
+  // Registered Client Flow - same view as prospective clients (ClientWizard)
+  if (userRole === 'registeredClient') {
+    // Auto-load the first assigned plan if available and not already loaded
+    if (savedScenarios.length > 0 && !clientInfo.name && !isLoadingScenarios) {
+      // Load the first (most recent) assigned plan
+      handleLoadScenario(savedScenarios[0]);
+    }
+
+    return (
+      <ClientWizard
+        clientInfo={clientInfo}
+        onClientChange={handleClientChange}
+        inputs={inputs}
+        onInputChange={handleInputChange}
+        accumulationData={accumulationData}
+        projectionData={projectionData}
+        monteCarloData={monteCarloData}
+        ssAnalysis={ssAnalysis}
+        ssPartnerAnalysis={ssPartnerAnalysis}
+        onSaveProgress={handleClientSaveProgress}
+        onClientSubmit={handleClientSubmit}
+        saveStatus={saveStatus}
+        targetMaxPortfolioAge={targetMaxPortfolioAge}
+        onSetTargetMaxPortfolioAge={setTargetMaxPortfolioAge}
+        onUpdateSSStartAge={updateSSStartAge}
+        onUpdatePartnerSSStartAge={updatePartnerSSStartAge}
+        onAddAdditionalIncome={addAdditionalIncome}
+        onUpdateAdditionalIncome={updateAdditionalIncome}
+        onRemoveAdditionalIncome={removeAdditionalIncome}
+        isRegisteredClient={true}
+        onLogout={onLogout}
       />
     );
   }
@@ -402,6 +457,8 @@ export default function BucketPortfolioBuilder() {
         onAddAdvisor={addAdvisor}
         onDeleteAdvisor={deleteAdvisor}
         onRefreshAdvisors={refreshAdvisors}
+        onAssignPlanToClient={assignPlanToClient}
+        onRemoveClientAssignment={removeClientAssignment}
       />
     );
   }
@@ -436,6 +493,7 @@ export default function BucketPortfolioBuilder() {
       onGenerateReport={generateReport}
       isGeneratingReport={isGeneratingReport}
       clientInfo={clientInfo}
+      onClientChange={handleClientChange}
       inputs={inputs}
       onInputChange={handleInputChange}
       assumptions={assumptions}
@@ -455,6 +513,8 @@ export default function BucketPortfolioBuilder() {
       projectionData={projectionData}
       monteCarloData={monteCarloData}
       optimizerData={optimizerData}
+      optimizerRebalanceFreq={optimizerRebalanceFreq}
+      onSetOptimizerRebalanceFreq={setOptimizerRebalanceFreq}
       ssAnalysis={ssAnalysis}
       ssPartnerAnalysis={ssPartnerAnalysis}
       targetMaxPortfolioAge={targetMaxPortfolioAge}

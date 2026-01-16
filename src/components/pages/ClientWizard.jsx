@@ -1,6 +1,6 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import { ResponsiveContainer, AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ComposedChart, Line, Legend } from 'recharts';
-import { User, DollarSign, ArrowRight, ArrowLeft, Shield, Info, Activity, Briefcase, Send, TrendingUp, Clock, PiggyBank, BarChart2, Table as TableIcon, Plus, Trash2, AlertCircle } from 'lucide-react';
+import { User, DollarSign, ArrowRight, ArrowLeft, Shield, Info, Activity, Briefcase, Send, TrendingUp, Clock, PiggyBank, BarChart2, Table as TableIcon, Plus, Trash2, AlertCircle, LogOut } from 'lucide-react';
 
 import { COLORS, LOGO_URL } from '../../constants';
 import { formatPhoneNumber, getAdjustedSS } from '../../utils';
@@ -37,7 +37,10 @@ export const ClientWizard = ({
   // Additional Income
   onAddAdditionalIncome,
   onUpdateAdditionalIncome,
-  onRemoveAdditionalIncome
+  onRemoveAdditionalIncome,
+  // Registered client props
+  isRegisteredClient = false,
+  onLogout
 }) => {
   const [wizardStep, setWizardStep] = useState(1);
   const [showCashFlowTable, setShowCashFlowTable] = useState(false);
@@ -902,7 +905,7 @@ export const ClientWizard = ({
 
                   <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
                     <div>
-                      <label className="block text-[10px] text-slate-500 uppercase mb-1">
+                      <label className="block text-[12px] text-slate-500 uppercase mb-1">
                         {income.isOneTime ? 'Amount' : 'Monthly Amount'}
                       </label>
                       <FormattedNumberInput
@@ -912,7 +915,7 @@ export const ClientWizard = ({
                       />
                     </div>
                     <div>
-                      <label className="block text-[10px] text-slate-500 uppercase mb-1">
+                      <label className="block text-[12px] text-slate-500 uppercase mb-1">
                         {income.isOneTime ? 'Age Received' : 'Start Age'}
                       </label>
                       <input
@@ -932,7 +935,7 @@ export const ClientWizard = ({
                     </div>
                     {!income.isOneTime && (
                       <div>
-                        <label className="block text-[10px] text-slate-500 uppercase mb-1">End Age</label>
+                        <label className="block text-[12px] text-slate-500 uppercase mb-1">End Age</label>
                         <input
                           type="number"
                           value={income.endAge}
@@ -944,7 +947,7 @@ export const ClientWizard = ({
                       </div>
                     )}
                     <div className="flex flex-col justify-end gap-1">
-                      <label className="flex items-center gap-1 text-[10px] text-slate-500">
+                      <label className="flex items-center gap-1 text-[12px] text-slate-500">
                         <input
                           type="checkbox"
                           checked={income.isOneTime}
@@ -958,7 +961,7 @@ export const ClientWizard = ({
                         />
                         One-Time Event
                       </label>
-                      <label className="flex items-center gap-1 text-[10px] text-slate-500">
+                      <label className="flex items-center gap-1 text-[12px] text-slate-500">
                         <input
                           type="checkbox"
                           checked={income.inflationAdjusted}
@@ -1352,6 +1355,15 @@ export const ClientWizard = ({
               <p className="text-yellow-500 text-xs sm:text-sm mt-1">Step {wizardStep} of 2</p>
             </div>
           </div>
+          {isRegisteredClient && onLogout && (
+            <button
+              onClick={onLogout}
+              className="flex items-center gap-1 sm:gap-2 px-3 sm:px-4 py-1.5 sm:py-2 bg-slate-700 hover:bg-slate-600 text-white rounded-lg transition-all text-xs sm:text-sm"
+            >
+              <LogOut className="w-3 h-3 sm:w-4 sm:h-4" />
+              <span className="hidden sm:inline">Logout</span>
+            </button>
+          )}
         </div>
 
         {/* Main Content */}

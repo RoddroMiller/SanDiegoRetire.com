@@ -16,7 +16,7 @@ export const useScenarios = ({ currentUser, userRole }) => {
 
   // Fetch scenarios when user/role changes
   useEffect(() => {
-    if (!currentUser || !db || userRole === 'client') return;
+    if (!currentUser || !db || userRole === 'anonymous') return;
 
     const fetchScenarios = async () => {
       setIsLoadingScenarios(true);
@@ -29,8 +29,14 @@ export const useScenarios = ({ currentUser, userRole }) => {
           scenarios.push({ id: doc.id, ...doc.data() });
         });
 
+        // For registered clients, only show plans assigned to them
+        if (userRole === 'registeredClient') {
+          scenarios = scenarios.filter(s =>
+            s.assignedClientEmail?.toLowerCase() === currentUser.email?.toLowerCase()
+          );
+        }
         // Filter by advisor if not master - check both UID and email
-        if (userRole !== 'master') {
+        else if (userRole !== 'master') {
           scenarios = scenarios.filter(s =>
             s.advisorId === currentUser.uid ||
             s.advisorEmail?.toLowerCase() === currentUser.email?.toLowerCase() ||
@@ -318,8 +324,14 @@ export const useScenarios = ({ currentUser, userRole }) => {
         scenarios.push({ id: doc.id, ...doc.data() });
       });
 
+      // For registered clients, only show plans assigned to them
+      if (userRole === 'registeredClient') {
+        scenarios = scenarios.filter(s =>
+          s.assignedClientEmail?.toLowerCase() === currentUser.email?.toLowerCase()
+        );
+      }
       // Filter by advisor if not master - check both UID and email
-      if (userRole !== 'master') {
+      else if (userRole !== 'master') {
         scenarios = scenarios.filter(s =>
           s.advisorId === currentUser.uid ||
           s.advisorEmail?.toLowerCase() === currentUser.email?.toLowerCase() ||
@@ -336,6 +348,85 @@ export const useScenarios = ({ currentUser, userRole }) => {
     }
   }, [currentUser, userRole]);
 
+  /**
+   * Assign a plan to a client by email
+   * @param {string} scenarioId - Scenario ID to assign
+   * @param {string} clientEmail - Client email address
+   * @returns {Promise<{success: boolean, message: string, clientEmail: string}>} Result
+   */
+  const assignPlanToClient = useCallback(async (scenarioId, clientEmail) => {
+    if (!db) {
+      return { success: false, message: 'Database not connected' };
+    }
+
+    const email = clientEmail.toLowerCase().trim();
+
+    try {
+      // Update the scenario with client assignment
+      await updateDoc(
+        doc(db, 'artifacts', appId, 'public', 'data', 'scenarios', scenarioId),
+        {
+          assignedClientEmail: email,
+          clientAssignedAt: Date.now(),
+          updatedAt: Date.now()
+        }
+      );
+
+      // Update local state
+      setSavedScenarios(prev =>
+        prev.map(s =>
+          s.id === scenarioId
+            ? { ...s, assignedClientEmail: email, clientAssignedAt: Date.now(), updatedAt: Date.now() }
+            : s
+        )
+      );
+
+      return {
+        success: true,
+        message: `Plan assigned to ${email}. Please notify your client to sign up.`,
+        clientEmail: email
+      };
+    } catch (error) {
+      console.error('Error assigning plan to client:', error);
+      return { success: false, message: error.message };
+    }
+  }, []);
+
+  /**
+   * Remove client assignment from a plan
+   * @param {string} scenarioId - Scenario ID to remove assignment from
+   * @returns {Promise<boolean>} Success status
+   */
+  const removeClientAssignment = useCallback(async (scenarioId) => {
+    if (!db) return false;
+
+    try {
+      await updateDoc(
+        doc(db, 'artifacts', appId, 'public', 'data', 'scenarios', scenarioId),
+        {
+          assignedClientEmail: null,
+          assignedClientUid: null,
+          clientAssignedAt: null,
+          updatedAt: Date.now()
+        }
+      );
+
+      // Update local state
+      setSavedScenarios(prev =>
+        prev.map(s =>
+          s.id === scenarioId
+            ? { ...s, assignedClientEmail: null, assignedClientUid: null, clientAssignedAt: null, updatedAt: Date.now() }
+            : s
+        )
+      );
+
+      return true;
+    } catch (error) {
+      console.error('Error removing client assignment:', error);
+      return false;
+    }
+  }, []);
+
   return {
     // State
     savedScenarios,
@@ -350,7 +441,9 @@ export const useScenarios = ({ currentUser, userRole }) => {
     deleteScenario,
     clearScenarios,
     reassignScenario,
-    refreshScenarios
+    refreshScenarios,
+    assignPlanToClient,
+    removeClientAssignment
   };
 };
 

@@ -1,18 +1,18 @@
 import React, { useState } from 'react';
-import { Briefcase, User, Loader } from 'lucide-react';
+import { Briefcase, User, UserCircle, Loader } from 'lucide-react';
 import { LOGO_URL } from '../../constants';
 import { Disclaimer, PrivacyTermsModal } from '../ui';
 
-export const GateScreen = ({ onAdvisorClick, onClientEntry, isLoggingIn }) => {
+export const GateScreen = ({ onAdvisorClick, onClientLoginClick, onProspectEntry, isLoggingIn }) => {
   const [showPrivacyModal, setShowPrivacyModal] = useState(false);
 
-  const handleClientClick = () => {
+  const handleProspectClick = () => {
     setShowPrivacyModal(true);
   };
 
   const handleAcceptTerms = () => {
     setShowPrivacyModal(false);
-    onClientEntry();
+    onProspectEntry();
   };
 
   return (
@@ -30,18 +30,28 @@ export const GateScreen = ({ onAdvisorClick, onClientEntry, isLoggingIn }) => {
           <Briefcase className="w-5 h-5 sm:w-6 sm:h-6" /> I am an Advisor
         </button>
         <button
-          onClick={handleClientClick}
+          onClick={onClientLoginClick}
+          className="w-full flex items-center justify-center gap-2 sm:gap-3 p-3 sm:p-4 bg-blue-600 text-white rounded-xl hover:bg-blue-700 transition-all font-bold shadow-lg text-sm sm:text-base"
+        >
+          <UserCircle className="w-5 h-5 sm:w-6 sm:h-6" /> I am a Client
+        </button>
+        <button
+          onClick={handleProspectClick}
           disabled={isLoggingIn}
-          className="w-full flex items-center justify-center gap-2 sm:gap-3 p-3 sm:p-4 bg-black text-white rounded-xl hover:bg-gray-800 transition-all font-bold shadow-lg disabled:opacity-50 text-sm sm:text-base"
+          className="w-full flex items-center justify-center gap-2 sm:gap-3 p-3 sm:p-4 bg-slate-700 text-white rounded-xl hover:bg-slate-800 transition-all font-bold shadow-lg disabled:opacity-50 text-sm sm:text-base"
         >
           {isLoggingIn ? (
             <Loader className="w-5 h-5 sm:w-6 sm:h-6 animate-spin" />
           ) : (
             <User className="w-5 h-5 sm:w-6 sm:h-6" />
           )}
-          {isLoggingIn ? "Loading..." : "Client / Prospective Client"}
+          {isLoggingIn ? "Loading..." : "Prospective Client (Guest)"}
         </button>
       </div>
+      <p className="text-xs text-slate-400 mt-4">
+        Existing clients: Log in to view your assigned plan.<br/>
+        New visitors: Continue as guest to explore the tool.
+      </p>
       <Disclaimer className="text-left" />
 
       <PrivacyTermsModal
