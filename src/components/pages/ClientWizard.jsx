@@ -347,7 +347,8 @@ export const ClientWizard = ({
         <h3 className="text-lg font-bold text-slate-800 border-b pb-2 flex items-center gap-2">
           <Clock className="w-5 h-5 text-emerald-600" /> Retirement Timeline
         </h3>
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+        {/* Your Info Row */}
+        <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
           <div className="relative group">
             <label className="block text-xs font-bold text-slate-500 uppercase mb-1 flex items-center gap-1">
               Your Age <Info className="w-3 h-3 text-slate-400" />
@@ -394,22 +395,41 @@ export const ClientWizard = ({
               />
             </div>
           )}
-          {clientInfo.isMarried && (
-            <>
-              <div className="relative group">
-                <label className="block text-xs font-bold text-slate-500 uppercase mb-1 flex items-center gap-1">
-                  Partner Age <Info className="w-3 h-3 text-slate-400" />
-                </label>
-                <div className="absolute left-0 bottom-full mb-2 hidden group-hover:block w-48 bg-slate-800 text-white text-xs p-2 rounded shadow-lg z-10">
-                  Your partner's current age for joint planning calculations.
-                </div>
-                <FormattedNumberInput
-                  name="partnerAge"
-                  value={clientInfo.partnerAge}
-                  onChange={onClientChange}
-                  className="p-3 border rounded-lg w-full font-bold text-slate-700"
-                />
+        </div>
+        {/* Partner Info Row */}
+        {clientInfo.isMarried && (
+          <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+            <div className="relative group">
+              <label className="block text-xs font-bold text-slate-500 uppercase mb-1 flex items-center gap-1">
+                Partner Age <Info className="w-3 h-3 text-slate-400" />
+              </label>
+              <div className="absolute left-0 bottom-full mb-2 hidden group-hover:block w-48 bg-slate-800 text-white text-xs p-2 rounded shadow-lg z-10">
+                Your partner's current age for joint planning calculations.
               </div>
+              <FormattedNumberInput
+                name="partnerAge"
+                value={clientInfo.partnerAge}
+                onChange={onClientChange}
+                className="p-3 border rounded-lg w-full font-bold text-slate-700"
+              />
+            </div>
+            <div className="relative group">
+              <label className="block text-xs font-bold text-slate-500 uppercase mb-1 flex items-center gap-1">
+                Partner Status
+              </label>
+              <button
+                type="button"
+                onClick={() => onClientChange({ target: { name: 'partnerIsRetired', type: 'checkbox', checked: !clientInfo.partnerIsRetired } })}
+                className={`w-full p-3 rounded-lg font-bold transition-all ${
+                  clientInfo.partnerIsRetired
+                    ? 'bg-emerald-600 text-white border-2 border-emerald-600'
+                    : 'bg-white text-slate-600 border-2 border-slate-300 hover:border-emerald-400'
+                }`}
+              >
+                {clientInfo.partnerIsRetired ? '✓ Already Retired' : 'Already Retired?'}
+              </button>
+            </div>
+            {!clientInfo.partnerIsRetired && (
               <div className="relative group">
                 <label className="block text-xs font-bold text-slate-500 uppercase mb-1 flex items-center gap-1">
                   Partner Retire Age <Info className="w-3 h-3 text-slate-400" />
@@ -424,9 +444,9 @@ export const ClientWizard = ({
                   className="p-3 border rounded-lg w-full font-bold text-slate-700"
                 />
               </div>
-            </>
-          )}
-        </div>
+            )}
+          </div>
+        )}
       </div>
 
       {/* Financial Inputs */}
