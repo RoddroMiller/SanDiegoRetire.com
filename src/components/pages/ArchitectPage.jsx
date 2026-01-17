@@ -31,6 +31,7 @@ export const ArchitectPage = ({
   isGeneratingReport,
   // Client Data
   clientInfo,
+  onClientChange,
   // Inputs & Assumptions
   inputs,
   onInputChange,
@@ -53,6 +54,8 @@ export const ArchitectPage = ({
   projectionData,
   monteCarloData,
   optimizerData,
+  optimizerRebalanceFreq,
+  onSetOptimizerRebalanceFreq,
   ssAnalysis,
   ssPartnerAnalysis,
   // SS Settings
@@ -236,17 +239,17 @@ export const ArchitectPage = ({
 
       {/* PRINT PAGE 1: Cover Page */}
       <div className="hidden print:flex flex-col h-screen break-after-page items-center justify-center text-center p-12 bg-white">
-        <img src={LOGO_URL} alt="Logo" className="h-32 mb-6" />
-        <h1 className="text-4xl font-bold text-slate-900 mb-2">Retirement Strategy Illustration</h1>
-        <div className="w-24 h-1 bg-emerald-600 mx-auto mb-8"></div>
-        <p className="text-2xl text-slate-600 mb-2">Prepared for</p>
-        <p className="text-3xl font-bold text-emerald-700 mb-12">{clientInfo.name || "Valued Client"}</p>
-        <div className="text-left border-t border-slate-200 pt-8 w-full max-w-md mx-auto space-y-3 text-slate-600">
+        <img src={LOGO_URL} alt="Logo" className="h-40 mb-8" />
+        <h1 className="text-5xl font-bold text-slate-900 mb-4">Retirement Strategy Illustration</h1>
+        <div className="w-32 h-1.5 bg-emerald-600 mx-auto mb-10"></div>
+        <p className="text-3xl text-slate-600 mb-3">Prepared for</p>
+        <p className="text-4xl font-bold text-emerald-700 mb-16">{clientInfo.name || "Valued Client"}</p>
+        <div className="text-left border-t border-slate-200 pt-10 w-full max-w-lg mx-auto space-y-4 text-lg text-slate-600">
           <p><strong>Email:</strong> {clientInfo.email || 'Not provided'}</p>
           <p><strong>Phone:</strong> {clientInfo.phone || 'Not provided'}</p>
           <p><strong>Prepared:</strong> {new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' })}</p>
         </div>
-        <div className="mt-auto pt-12 text-xs text-slate-400">
+        <div className="mt-auto pt-12 text-base text-slate-400">
           <p>Miller Wealth Management</p>
           <p>www.millerwm.com | (480) 613-7400</p>
         </div>
@@ -323,19 +326,19 @@ export const ArchitectPage = ({
         </div>
         <div className="grid grid-cols-4 gap-3 text-sm mb-4">
           <div className="bg-slate-50 p-2 rounded-lg">
-            <p className="text-slate-500 text-[10px]">Current Age</p>
+            <p className="text-slate-500 text-[12px]">Current Age</p>
             <p className="font-bold text-base">{clientInfo.currentAge}</p>
           </div>
           <div className="bg-slate-50 p-2 rounded-lg">
-            <p className="text-slate-500 text-[10px]">Retirement Age</p>
+            <p className="text-slate-500 text-[12px]">Retirement Age</p>
             <p className="font-bold text-base">{clientInfo.retirementAge}</p>
           </div>
           <div className="bg-slate-50 p-2 rounded-lg">
-            <p className="text-slate-500 text-[10px]">Current Portfolio</p>
+            <p className="text-slate-500 text-[12px]">Current Portfolio</p>
             <p className="font-bold text-base">${clientInfo.currentPortfolio.toLocaleString()}</p>
           </div>
           <div className="bg-slate-50 p-2 rounded-lg">
-            <p className="text-slate-500 text-[10px]">Annual Savings</p>
+            <p className="text-slate-500 text-[12px]">Annual Savings</p>
             <p className="font-bold text-base">${clientInfo.annualSavings.toLocaleString()}</p>
           </div>
         </div>
@@ -343,7 +346,7 @@ export const ArchitectPage = ({
         {/* Cash Flow Table for Accumulation Phase */}
         <div className="border rounded-lg p-3 mb-4">
           <h3 className="font-bold text-sm text-slate-800 mb-2">Accumulation Cash Flow</h3>
-          <table className="w-full text-[9px]">
+          <table className="w-full text-[12px]">
             <thead>
               <tr className="bg-slate-100">
                 <th className="p-1 text-left">Age</th>
@@ -412,7 +415,7 @@ export const ArchitectPage = ({
                   </label>
                   <button
                     onClick={onApplyFourPercentRule}
-                    className="text-[9px] bg-yellow-50 text-yellow-700 px-1.5 py-0.5 rounded border border-yellow-200 hover:bg-yellow-100 transition-colors font-medium"
+                    className="text-[12px] bg-yellow-50 text-yellow-700 px-1.5 py-0.5 rounded border border-yellow-200 hover:bg-yellow-100 transition-colors font-medium"
                   >
                     Set to 4% Rule
                   </button>
@@ -430,7 +433,7 @@ export const ArchitectPage = ({
                 {showSettings && (
                   <div className="mt-2 bg-slate-50 p-2 rounded border border-slate-200 space-y-2">
                     <div className="relative group">
-                      <label className="text-[10px] font-bold text-slate-500 uppercase flex items-center gap-1">
+                      <label className="text-[12px] font-bold text-slate-500 uppercase flex items-center gap-1">
                         Inflation Rate (%) <Info className="w-3 h-3 text-slate-400" />
                       </label>
                       <div className="absolute left-0 bottom-full mb-1 hidden group-hover:block w-56 bg-slate-800 text-white text-xs p-2 rounded shadow-lg z-10">
@@ -439,7 +442,7 @@ export const ArchitectPage = ({
                       <input type="number" step="0.1" name="inflationRate" value={inputs.inflationRate} onChange={onInputChange} className="w-full px-2 py-1 text-xs border rounded" />
                     </div>
                     <div className="relative group">
-                      <label className="text-[10px] font-bold text-slate-500 uppercase flex items-center gap-1">
+                      <label className="text-[12px] font-bold text-slate-500 uppercase flex items-center gap-1">
                         Personal Inflation Rate (%) <Info className="w-3 h-3 text-slate-400" />
                       </label>
                       <div className="absolute left-0 bottom-full mb-1 hidden group-hover:block w-56 bg-slate-800 text-white text-xs p-2 rounded shadow-lg z-10">
@@ -456,7 +459,7 @@ export const ArchitectPage = ({
                   <h4 className="text-xs font-bold text-slate-700 uppercase flex items-center gap-1"><Shield className="w-3 h-3" /> Social Security</h4>
                   <button
                     onClick={() => onSetActiveTab('ss')}
-                    className="text-[10px] bg-yellow-50 text-yellow-700 px-2 py-1 rounded border border-yellow-200 hover:bg-yellow-100 transition-colors font-medium"
+                    className="text-[12px] bg-yellow-50 text-yellow-700 px-2 py-1 rounded border border-yellow-200 hover:bg-yellow-100 transition-colors font-medium"
                   >
                     Get Recommendation
                   </button>
@@ -464,7 +467,7 @@ export const ArchitectPage = ({
                 <div className="space-y-3">
                   <div className="grid grid-cols-2 gap-2">
                     <div className="relative group">
-                      <label className="text-[10px] text-slate-500 uppercase flex items-center gap-1">
+                      <label className="text-[12px] text-slate-500 uppercase flex items-center gap-1">
                         Benefit @ FRA <Info className="w-3 h-3 text-slate-400" />
                       </label>
                       <div className="absolute left-0 bottom-full mb-1 hidden group-hover:block w-56 bg-slate-800 text-white text-xs p-2 rounded shadow-lg z-10">
@@ -473,7 +476,7 @@ export const ArchitectPage = ({
                       <FormattedNumberInput name="ssPIA" value={inputs.ssPIA} onChange={onInputChange} className="w-full px-2 py-1 border rounded-md text-sm" />
                     </div>
                     <div className="relative group">
-                      <label className="text-[10px] text-slate-500 uppercase flex items-center gap-1">
+                      <label className="text-[12px] text-slate-500 uppercase flex items-center gap-1">
                         Start Age (62-70) <Info className="w-3 h-3 text-slate-400" />
                       </label>
                       <div className="absolute left-0 bottom-full mb-1 hidden group-hover:block w-56 bg-slate-800 text-white text-xs p-2 rounded shadow-lg z-10">
@@ -485,7 +488,7 @@ export const ArchitectPage = ({
                   {clientInfo.isMarried && (
                     <div className="grid grid-cols-2 gap-2">
                       <div className="relative group">
-                        <label className="text-[10px] text-slate-500 uppercase flex items-center gap-1">
+                        <label className="text-[12px] text-slate-500 uppercase flex items-center gap-1">
                           Partner Benefit <Info className="w-3 h-3 text-slate-400" />
                         </label>
                         <div className="absolute left-0 bottom-full mb-1 hidden group-hover:block w-56 bg-slate-800 text-white text-xs p-2 rounded shadow-lg z-10">
@@ -494,7 +497,7 @@ export const ArchitectPage = ({
                         <FormattedNumberInput name="partnerSSPIA" value={inputs.partnerSSPIA} onChange={onInputChange} className="w-full px-2 py-1 border rounded-md text-sm" />
                       </div>
                       <div className="relative group">
-                        <label className="text-[10px] text-slate-500 uppercase flex items-center gap-1">
+                        <label className="text-[12px] text-slate-500 uppercase flex items-center gap-1">
                           Start Age (62-70) <Info className="w-3 h-3 text-slate-400" />
                         </label>
                         <div className="absolute left-0 bottom-full mb-1 hidden group-hover:block w-56 bg-slate-800 text-white text-xs p-2 rounded shadow-lg z-10">
@@ -510,9 +513,11 @@ export const ArchitectPage = ({
               <div className="border-t border-slate-100 pt-4">
                 <h4 className="text-xs font-bold text-slate-700 uppercase flex items-center gap-1 mb-3"><DollarSign className="w-3 h-3" /> Pension / Other Income</h4>
                 <div className="space-y-3">
+                  {/* Client Pension */}
+                  <p className="text-[10px] font-semibold text-slate-500 uppercase">{clientInfo.name || 'Client'}'s Pension</p>
                   <div className="grid grid-cols-3 gap-2">
                     <div className="relative group">
-                      <label className="text-[10px] text-slate-500 uppercase flex items-center gap-1">
+                      <label className="text-[12px] text-slate-500 uppercase flex items-center gap-1">
                         Monthly Pension <Info className="w-3 h-3 text-slate-400" />
                       </label>
                       <div className="absolute left-0 bottom-full mb-1 hidden group-hover:block w-56 bg-slate-800 text-white text-xs p-2 rounded shadow-lg z-10">
@@ -521,7 +526,7 @@ export const ArchitectPage = ({
                       <FormattedNumberInput name="monthlyPension" value={inputs.monthlyPension} onChange={onInputChange} className="w-full px-2 py-1 border rounded-md text-sm" />
                     </div>
                     <div className="relative group">
-                      <label className="text-[10px] text-slate-500 uppercase flex items-center gap-1">
+                      <label className="text-[12px] text-slate-500 uppercase flex items-center gap-1">
                         Start Age <Info className="w-3 h-3 text-slate-400" />
                       </label>
                       <div className="absolute left-0 bottom-full mb-1 hidden group-hover:block w-48 bg-slate-800 text-white text-xs p-2 rounded shadow-lg z-10">
@@ -530,7 +535,7 @@ export const ArchitectPage = ({
                       <input type="number" name="pensionStartAge" value={inputs.pensionStartAge} onChange={onInputChange} min={55} max={80} className="w-full px-2 py-1 border rounded-md text-sm" />
                     </div>
                     <div className="relative group">
-                      <label className="text-[10px] text-slate-500 uppercase flex items-center gap-1">
+                      <label className="text-[12px] text-slate-500 uppercase flex items-center gap-1">
                         COLA <Info className="w-3 h-3 text-slate-400" />
                       </label>
                       <div className="absolute left-0 bottom-full mb-1 hidden group-hover:block w-48 bg-slate-800 text-white text-xs p-2 rounded shadow-lg z-10">
@@ -550,27 +555,73 @@ export const ArchitectPage = ({
                     </div>
                   </div>
 
+                  {/* Partner Pension - only show if married */}
+                  {clientInfo.isMarried && (
+                    <>
+                      <p className="text-[10px] font-semibold text-slate-500 uppercase mt-3">{clientInfo.partnerName || 'Partner'}'s Pension</p>
+                      <div className="grid grid-cols-3 gap-2">
+                        <div className="relative group">
+                          <label className="text-[12px] text-slate-500 uppercase flex items-center gap-1">
+                            Monthly Pension <Info className="w-3 h-3 text-slate-400" />
+                          </label>
+                          <div className="absolute left-0 bottom-full mb-1 hidden group-hover:block w-56 bg-slate-800 text-white text-xs p-2 rounded shadow-lg z-10">
+                            Partner's monthly pension or other guaranteed income.
+                          </div>
+                          <FormattedNumberInput name="partnerMonthlyPension" value={inputs.partnerMonthlyPension} onChange={onInputChange} className="w-full px-2 py-1 border rounded-md text-sm" />
+                        </div>
+                        <div className="relative group">
+                          <label className="text-[12px] text-slate-500 uppercase flex items-center gap-1">
+                            Start Age <Info className="w-3 h-3 text-slate-400" />
+                          </label>
+                          <div className="absolute left-0 bottom-full mb-1 hidden group-hover:block w-48 bg-slate-800 text-white text-xs p-2 rounded shadow-lg z-10">
+                            The age partner's pension payments begin.
+                          </div>
+                          <input type="number" name="partnerPensionStartAge" value={inputs.partnerPensionStartAge} onChange={onInputChange} min={55} max={80} className="w-full px-2 py-1 border rounded-md text-sm" />
+                        </div>
+                        <div className="relative group">
+                          <label className="text-[12px] text-slate-500 uppercase flex items-center gap-1">
+                            COLA <Info className="w-3 h-3 text-slate-400" />
+                          </label>
+                          <div className="absolute left-0 bottom-full mb-1 hidden group-hover:block w-48 bg-slate-800 text-white text-xs p-2 rounded shadow-lg z-10">
+                            Does partner's pension have a COLA?
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() => onInputChange({ target: { name: 'partnerPensionCOLA', type: 'checkbox', checked: !inputs.partnerPensionCOLA } })}
+                            className={`w-full px-2 py-1 rounded-md text-sm font-medium transition-all ${
+                              inputs.partnerPensionCOLA
+                                ? 'bg-emerald-600 text-white'
+                                : 'bg-white text-slate-600 border border-slate-300 hover:border-emerald-400'
+                            }`}
+                          >
+                            {inputs.partnerPensionCOLA ? '✓ Yes' : 'No'}
+                          </button>
+                        </div>
+                      </div>
+                    </>
+                  )}
+
                   {/* Additional Income Streams */}
                   <div className="border-t border-slate-100 pt-3 mt-3">
                     <div className="flex justify-between items-center mb-2">
-                      <span className="text-[10px] font-bold text-slate-500 uppercase">Additional Income & One-Time Events</span>
+                      <span className="text-[12px] font-bold text-slate-500 uppercase">Additional Income & One-Time Events</span>
                       <button
                         onClick={onAddAdditionalIncome}
-                        className="flex items-center gap-1 px-2 py-1 text-[10px] bg-emerald-50 text-emerald-700 rounded border border-emerald-200 hover:bg-emerald-100"
+                        className="flex items-center gap-1 px-2 py-1 text-[12px] bg-emerald-50 text-emerald-700 rounded border border-emerald-200 hover:bg-emerald-100"
                       >
                         <Plus className="w-3 h-3" /> Add
                       </button>
                     </div>
 
                     {inputs.additionalIncomes?.length === 0 && (
-                      <p className="text-[10px] text-slate-400 italic">
+                      <p className="text-[12px] text-slate-400 italic">
                         Rental income, inheritance, real estate sale, etc.
                       </p>
                     )}
 
                     {inputs.additionalIncomes?.map((income) => (
                       <div key={income.id} className="p-2 bg-slate-50 rounded border border-slate-200 mb-2">
-                        <div className="flex justify-between items-center mb-2">
+                        <div className="flex justify-between items-center mb-2 gap-1">
                           <select
                             value={income.name}
                             onChange={(e) => {
@@ -582,7 +633,7 @@ export const ArchitectPage = ({
                               onUpdateAdditionalIncome(income.id, 'isOneTime', isOneTime);
                               if (isOneTime) onUpdateAdditionalIncome(income.id, 'endAge', income.startAge);
                             }}
-                            className="text-[10px] font-medium bg-white border rounded px-1 py-0.5"
+                            className="text-[12px] font-medium bg-white border rounded px-1 py-0.5"
                           >
                             <option value="">Type...</option>
                             <option value="Rental Income">Rental Income (Monthly)</option>
@@ -593,21 +644,32 @@ export const ArchitectPage = ({
                             <option value="Business Sale">Business Sale (One-Time)</option>
                             <option value="Other">Other</option>
                           </select>
+                          {clientInfo.isMarried && (
+                            <select
+                              value={income.owner || 'client'}
+                              onChange={(e) => onUpdateAdditionalIncome(income.id, 'owner', e.target.value)}
+                              className="text-[12px] font-medium bg-white border rounded px-1 py-0.5"
+                            >
+                              <option value="client">{clientInfo.name || 'Client'}</option>
+                              <option value="partner">{clientInfo.partnerName || 'Partner'}</option>
+                              <option value="joint">Joint</option>
+                            </select>
+                          )}
                           <button onClick={() => onRemoveAdditionalIncome(income.id)} className="p-0.5 text-red-500 hover:bg-red-50 rounded">
                             <Trash2 className="w-3 h-3" />
                           </button>
                         </div>
                         <div className="grid grid-cols-4 gap-1">
                           <div>
-                            <label className="block text-[8px] text-slate-500 uppercase">{income.isOneTime ? 'Amount' : 'Monthly'}</label>
+                            <label className="block text-[12px] text-slate-500 uppercase">{income.isOneTime ? 'Amount' : 'Monthly'}</label>
                             <FormattedNumberInput
                               value={income.amount}
                               onChange={(e) => onUpdateAdditionalIncome(income.id, 'amount', parseFloat(e.target.value) || 0)}
-                              className="w-full px-1 py-0.5 border rounded text-[10px]"
+                              className="w-full px-1 py-0.5 border rounded text-[12px]"
                             />
                           </div>
                           <div>
-                            <label className="block text-[8px] text-slate-500 uppercase">{income.isOneTime ? 'Age' : 'Start'}</label>
+                            <label className="block text-[12px] text-slate-500 uppercase">{income.isOneTime ? 'Age' : 'Start'}</label>
                             <input
                               type="number"
                               value={income.startAge}
@@ -616,22 +678,22 @@ export const ArchitectPage = ({
                                 onUpdateAdditionalIncome(income.id, 'startAge', age);
                                 if (income.isOneTime) onUpdateAdditionalIncome(income.id, 'endAge', age);
                               }}
-                              className="w-full px-1 py-0.5 border rounded text-[10px]"
+                              className="w-full px-1 py-0.5 border rounded text-[12px]"
                             />
                           </div>
                           {!income.isOneTime && (
                             <div>
-                              <label className="block text-[8px] text-slate-500 uppercase">End</label>
+                              <label className="block text-[12px] text-slate-500 uppercase">End</label>
                               <input
                                 type="number"
                                 value={income.endAge}
                                 onChange={(e) => onUpdateAdditionalIncome(income.id, 'endAge', parseInt(e.target.value) || 100)}
-                                className="w-full px-1 py-0.5 border rounded text-[10px]"
+                                className="w-full px-1 py-0.5 border rounded text-[12px]"
                               />
                             </div>
                           )}
                           <div className="flex flex-col justify-end gap-0.5">
-                            <label className="flex items-center gap-0.5 text-[8px] text-slate-500">
+                            <label className="flex items-center gap-0.5 text-[12px] text-slate-500">
                               <input
                                 type="checkbox"
                                 checked={income.isOneTime}
@@ -643,7 +705,7 @@ export const ArchitectPage = ({
                               />
                               One-Time
                             </label>
-                            <label className="flex items-center gap-0.5 text-[8px] text-slate-500">
+                            <label className="flex items-center gap-0.5 text-[12px] text-slate-500">
                               <input
                                 type="checkbox"
                                 checked={income.inflationAdjusted}
@@ -681,11 +743,11 @@ export const ArchitectPage = ({
                     <p className="font-bold text-xs text-slate-700 mb-1">{data.name}</p>
                     <div className="grid grid-cols-2 gap-2">
                       <div>
-                        <label className="text-[10px] text-slate-500">Return %</label>
+                        <label className="text-[12px] text-slate-500">Return %</label>
                         <input type="number" value={data.return} onChange={(e) => onAssumptionChange(key, 'return', e.target.value)} className="w-full px-2 py-1 text-xs border rounded" />
                       </div>
                       <div>
-                        <label className="text-[10px] text-slate-500">StdDev %</label>
+                        <label className="text-[12px] text-slate-500">StdDev %</label>
                         <input type="number" value={data.stdDev} onChange={(e) => onAssumptionChange(key, 'stdDev', e.target.value)} className="w-full px-2 py-1 text-xs border rounded" />
                       </div>
                     </div>
@@ -752,6 +814,40 @@ export const ArchitectPage = ({
               colorClass={`bg-emerald-800 text-white ${adjustedProjections.hasChanges ? 'ring-2 ring-yellow-300' : ''}`}
             />
           </div>
+
+          {/* Quick Adjustments - Retirement Age & Savings */}
+          {!clientInfo.isRetired && (
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="p-4 bg-blue-50 rounded-lg border border-blue-200">
+                <div className="flex items-center gap-3">
+                  <Clock className="w-5 h-5 text-blue-600" />
+                  <div className="flex-1">
+                    <h4 className="font-bold text-blue-800 text-sm">Retirement Age</h4>
+                  </div>
+                  <FormattedNumberInput
+                    name="retirementAge"
+                    value={clientInfo.retirementAge}
+                    onChange={onClientChange}
+                    className="p-2 border border-blue-300 rounded-lg w-20 text-center font-bold text-blue-800 bg-white"
+                  />
+                </div>
+              </div>
+              <div className="p-4 bg-emerald-50 rounded-lg border border-emerald-200">
+                <div className="flex items-center gap-3">
+                  <PiggyBank className="w-5 h-5 text-emerald-600" />
+                  <div className="flex-1">
+                    <h4 className="font-bold text-emerald-800 text-sm">Annual Savings</h4>
+                  </div>
+                  <FormattedNumberInput
+                    name="annualSavings"
+                    value={clientInfo.annualSavings}
+                    onChange={onClientChange}
+                    className="p-2 border border-emerald-300 rounded-lg w-28 text-center font-bold text-emerald-800 bg-white"
+                  />
+                </div>
+              </div>
+            </div>
+          )}
 
           {/* Tab Navigation */}
           <div className="border-b border-slate-200 print:hidden -mx-4 sm:mx-0">
@@ -856,6 +952,8 @@ export const ArchitectPage = ({
               basePlan={basePlan}
               monteCarloData={monteCarloData}
               projectionData={projectionData}
+              optimizerRebalanceFreq={optimizerRebalanceFreq}
+              onSetOptimizerRebalanceFreq={onSetOptimizerRebalanceFreq}
             />
           )}
         </div>
@@ -864,118 +962,387 @@ export const ArchitectPage = ({
         </div>
       </div>
 
-      {/* PRINT PAGE 3: Phase 2 - Distribution Phase */}
+      {/* PRINT PAGE 3: Bucket Architecture */}
       <div className="hidden print:block break-after-page p-6">
-        <div className="flex justify-between items-start mb-3">
+        <div className="flex justify-between items-start mb-6">
           <div>
-            <h2 className="text-2xl font-bold text-slate-900">Phase 2 - Distribution</h2>
-            <p className="text-sm text-slate-500">Retirement income sustainability</p>
+            <h2 className="text-3xl font-bold text-slate-900">Bucket Architecture</h2>
+            <p className="text-base text-slate-500">Time-segmented allocation strategy</p>
           </div>
-          <img src={LOGO_URL} alt="Logo" className="h-10" />
+          <img src={LOGO_URL} alt="Logo" className="h-12" />
         </div>
 
-        {/* Key Metrics */}
-        <div className="grid grid-cols-4 gap-3 mb-4">
-          <div className="bg-gray-800 text-white p-3 rounded-lg">
-            <p className="text-xs text-gray-400">Retirement Portfolio</p>
-            <p className="text-xl font-bold">${inputs.totalPortfolio.toLocaleString()}</p>
+        {/* Bucket Allocation Summary */}
+        <div className="grid grid-cols-5 gap-3 mb-6">
+          <div className="p-4 rounded-lg text-center" style={{ backgroundColor: `${COLORS.shortTerm}20`, borderTop: `4px solid ${COLORS.shortTerm}` }}>
+            <p className="text-sm font-bold text-slate-600">B1 - Short Term</p>
+            <p className="text-2xl font-bold text-slate-800">{basePlan.b1Val >= 1000000 ? `$${(basePlan.b1Val / 1000000).toFixed(2)}M` : `$${(basePlan.b1Val / 1000).toFixed(0)}k`}</p>
+            <p className="text-sm text-slate-500">{((basePlan.b1Val / inputs.totalPortfolio) * 100).toFixed(1)}%</p>
+            <p className="text-sm text-slate-400 mt-1">Years 1-3</p>
           </div>
-          <div className="bg-yellow-500 text-white p-3 rounded-lg">
-            <p className="text-xs text-yellow-100">Monthly Spend</p>
-            <p className="text-xl font-bold">${inputs.monthlySpending.toLocaleString()}</p>
+          <div className="p-4 rounded-lg text-center" style={{ backgroundColor: `${COLORS.midTerm}20`, borderTop: `4px solid ${COLORS.midTerm}` }}>
+            <p className="text-sm font-bold text-slate-600">B2 - Mid Term</p>
+            <p className="text-2xl font-bold text-slate-800">{basePlan.b2Val >= 1000000 ? `$${(basePlan.b2Val / 1000000).toFixed(2)}M` : `$${(basePlan.b2Val / 1000).toFixed(0)}k`}</p>
+            <p className="text-sm text-slate-500">{((basePlan.b2Val / inputs.totalPortfolio) * 100).toFixed(1)}%</p>
+            <p className="text-sm text-slate-400 mt-1">Years 4-6</p>
           </div>
-          <div className={`${monteCarloData.successRate > 85 ? 'bg-emerald-500' : 'bg-orange-500'} text-white p-3 rounded-lg`}>
-            <p className="text-xs opacity-80">Success Rate</p>
-            <p className="text-xl font-bold">{monteCarloData.successRate.toFixed(1)}%</p>
+          <div className="p-4 rounded-lg text-center" style={{ backgroundColor: `${COLORS.hedged}20`, borderTop: `4px solid ${COLORS.hedged}` }}>
+            <p className="text-sm font-bold text-slate-600">B3 - Balanced</p>
+            <p className="text-2xl font-bold text-slate-800">{basePlan.b3Val >= 1000000 ? `$${(basePlan.b3Val / 1000000).toFixed(2)}M` : `$${(basePlan.b3Val / 1000).toFixed(0)}k`}</p>
+            <p className="text-sm text-slate-500">{((basePlan.b3Val / inputs.totalPortfolio) * 100).toFixed(1)}%</p>
+            <p className="text-sm text-slate-400 mt-1">Years 7-15</p>
           </div>
-          <div className="bg-indigo-600 text-white p-3 rounded-lg">
-            <p className="text-xs text-indigo-200">Projected Legacy</p>
-            <p className="text-xl font-bold">${Math.round(projectionData[projectionData.length - 1]?.total || 0).toLocaleString()}</p>
+          <div className="p-4 rounded-lg text-center" style={{ backgroundColor: `${COLORS.income}20`, borderTop: `4px solid ${COLORS.income}` }}>
+            <p className="text-sm font-bold text-slate-600">B4 - Income</p>
+            <p className="text-2xl font-bold text-slate-800">{basePlan.b4Val >= 1000000 ? `$${(basePlan.b4Val / 1000000).toFixed(2)}M` : `$${(basePlan.b4Val / 1000).toFixed(0)}k`}</p>
+            <p className="text-sm text-slate-500">{((basePlan.b4Val / inputs.totalPortfolio) * 100).toFixed(1)}%</p>
+            <p className="text-sm text-slate-400 mt-1">10% Fixed</p>
+          </div>
+          <div className="p-4 rounded-lg text-center" style={{ backgroundColor: `${COLORS.longTerm}20`, borderTop: `4px solid ${COLORS.longTerm}` }}>
+            <p className="text-sm font-bold text-slate-600">B5 - Long Term</p>
+            <p className="text-2xl font-bold text-slate-800">{Math.max(0, basePlan.b5Val) >= 1000000 ? `$${(Math.max(0, basePlan.b5Val) / 1000000).toFixed(2)}M` : `$${(Math.max(0, basePlan.b5Val) / 1000).toFixed(0)}k`}</p>
+            <p className="text-sm text-slate-500">{((Math.max(0, basePlan.b5Val) / inputs.totalPortfolio) * 100).toFixed(1)}%</p>
+            <p className="text-sm text-slate-400 mt-1">Remainder</p>
           </div>
         </div>
 
-        {/* Portfolio Sustainability Chart with Benchmark and Distribution Rate */}
-        <div className="border rounded-lg p-4 mb-4">
-          <h3 className="font-bold text-sm text-slate-800 mb-2">Portfolio Sustainability (30 Years)</h3>
-          <ComposedChart width={680} height={280} data={projectionData}>
-            <CartesianGrid strokeDasharray="3 3" vertical={false} />
-            <XAxis dataKey="year" tick={{ fontSize: 9 }} />
-            <YAxis tickFormatter={(val) => val >= 2000000 ? `$${Math.round(val / 1000000)}M` : `$${Math.round(val / 1000)}k`} tick={{ fontSize: 9 }} />
-            <YAxis yAxisId="right" orientation="right" tickFormatter={(val) => `${val.toFixed(1)}%`} domain={[0, 'auto']} tick={{ fontSize: 9 }} />
-            <Legend wrapperStyle={{ fontSize: '9px' }} />
-            <Area type="monotone" dataKey="total" name="Miller Portfolio Strategy" fill={COLORS.areaFill} stroke={COLORS.areaFill} fillOpacity={0.8} />
-            <Line type="monotone" dataKey="benchmark" name="Benchmark 60/40" stroke={COLORS.benchmark} strokeDasharray="5 5" strokeWidth={2} dot={false} />
-            <Line yAxisId="right" type="monotone" dataKey="distRate" name="Distribution Rate" stroke={COLORS.distRate} strokeWidth={2} dot={false} />
-          </ComposedChart>
-        </div>
-
-        {/* Legend Explanation */}
-        <div className="bg-slate-50 p-3 rounded-lg border border-slate-200 text-[10px] text-slate-600">
-          <div className="grid grid-cols-3 gap-4">
-            <div className="flex items-center gap-2">
-              <div className="w-4 h-3 rounded" style={{ backgroundColor: COLORS.areaFill }}></div>
-              <span><strong>Grey Area:</strong> Miller Portfolio Strategy</span>
+        {/* Strategy Explanation */}
+        <div className="border rounded-lg p-5 mb-6">
+          <h3 className="font-bold text-lg text-slate-800 mb-4">Time-Segmented Bucket Strategy</h3>
+          <div className="grid grid-cols-2 gap-6 text-[13px] text-slate-600">
+            <div>
+              <p className="mb-3"><strong>How It Works:</strong> Assets are allocated into buckets based on when they'll be needed. Near-term needs are in conservative investments, while long-term assets can grow more aggressively.</p>
+              <p><strong>Withdrawal Sequence:</strong> Distributions come from B1 first, then B2, B3, B4, and finally B5. This allows growth assets time to recover from market downturns.</p>
             </div>
-            <div className="flex items-center gap-2">
-              <div className="w-4 h-0.5" style={{ backgroundColor: COLORS.benchmark, borderStyle: 'dashed' }}></div>
-              <span><strong>Gold Line:</strong> Benchmark 60/40 (Annual Rebalance)</span>
-            </div>
-            <div className="flex items-center gap-2">
-              <div className="w-4 h-0.5" style={{ backgroundColor: COLORS.distRate }}></div>
-              <span><strong>Red Line:</strong> Distribution Rate (%)</span>
+            <div>
+              <p className="mb-3"><strong>Rebalancing:</strong> Periodically, gains from growth buckets refill near-term buckets, maintaining the time-segmented structure.</p>
+              <p><strong>Benefits:</strong> Reduces sequence-of-returns risk, provides psychological comfort during market volatility, and maintains liquidity for near-term needs.</p>
             </div>
           </div>
+        </div>
+
+        {/* Return Assumptions */}
+        <div className="border rounded-lg p-5">
+          <h3 className="font-bold text-lg text-slate-800 mb-4">Return Assumptions by Bucket</h3>
+          <table className="w-full text-[13px]">
+            <thead>
+              <tr className="bg-slate-100">
+                <th className="p-3 text-left">Bucket</th>
+                <th className="p-3 text-center">Expected Return</th>
+                <th className="p-3 text-center">Std Deviation</th>
+                <th className="p-3 text-left">Investment Type</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr className="border-b">
+                <td className="p-3 font-medium">B1 - Short Term</td>
+                <td className="p-3 text-center">{assumptions.b1.return}%</td>
+                <td className="p-3 text-center">{assumptions.b1.stdDev}%</td>
+                <td className="p-3">Cash, Money Market, Short-term Bonds</td>
+              </tr>
+              <tr className="border-b bg-slate-50">
+                <td className="p-3 font-medium">B2 - Mid Term</td>
+                <td className="p-3 text-center">{assumptions.b2.return}%</td>
+                <td className="p-3 text-center">{assumptions.b2.stdDev}%</td>
+                <td className="p-3">Intermediate Bonds, Conservative Allocation</td>
+              </tr>
+              <tr className="border-b">
+                <td className="p-3 font-medium">B3 - Balanced</td>
+                <td className="p-3 text-center">{assumptions.b3.return}%</td>
+                <td className="p-3 text-center">{assumptions.b3.stdDev}%</td>
+                <td className="p-3">60/40 Balanced Portfolio</td>
+              </tr>
+              <tr className="border-b bg-slate-50">
+                <td className="p-3 font-medium">B4 - Income & Growth</td>
+                <td className="p-3 text-center">{assumptions.b4.return}%</td>
+                <td className="p-3 text-center">{assumptions.b4.stdDev}%</td>
+                <td className="p-3">Dividend Stocks, REITs, Preferred</td>
+              </tr>
+              <tr>
+                <td className="p-3 font-medium">B5 - Long Term</td>
+                <td className="p-3 text-center">{assumptions.b5.return}%</td>
+                <td className="p-3 text-center">{assumptions.b5.stdDev}%</td>
+                <td className="p-3">Equity Growth, Small Cap, International</td>
+              </tr>
+            </tbody>
+          </table>
         </div>
         <PrintFooter pageNumber={3} />
       </div>
 
-      {/* PRINT PAGE 4: Cash Flows */}
+      {/* PRINT PAGE 4: Phase 2 - Distribution Phase Flowchart */}
       <div className="hidden print:block break-after-page p-6">
+        {(() => {
+          // Helper function for conditional formatting
+          const fmtMoney = (val) => val >= 1000000 ? `$${(val / 1000000).toFixed(2)}M` : `$${Math.round(val / 1000)}k`;
+
+          // Get income data for each phase's first year
+          const getPhaseIncome = (yearIndex) => {
+            const row = projectionData[yearIndex] || {};
+            const yearNum = yearIndex + 1;
+            const simAge = clientInfo.retirementAge + yearIndex;
+            const partnerSimAge = clientInfo.partnerAge + yearIndex;
+
+            // Inflation factor for this year (SS gets COLA adjustments)
+            const inflationFactor = Math.pow(1 + (inputs.inflationRate || 2.5) / 100, yearIndex);
+
+            // Calculate SS income for this year with inflation
+            let ssMonthly = 0;
+            if (simAge >= inputs.ssStartAge) {
+              ssMonthly += Math.round(getAdjustedSS(inputs.ssPIA, inputs.ssStartAge) * inflationFactor);
+            }
+            if (clientInfo.isMarried && partnerSimAge >= inputs.partnerSSStartAge) {
+              ssMonthly += Math.round(getAdjustedSS(inputs.partnerSSPIA, inputs.partnerSSStartAge) * inflationFactor);
+            }
+
+            // Pension income (with COLA if enabled)
+            let pensionMonthly = 0;
+            if (simAge >= inputs.pensionStartAge) {
+              pensionMonthly = inputs.pensionCOLA
+                ? Math.round(inputs.monthlyPension * inflationFactor)
+                : inputs.monthlyPension;
+            }
+
+            // Portfolio distribution (from projectionData)
+            const portfolioMonthly = Math.round((row.distribution || 0) / 12);
+
+            const total = ssMonthly + pensionMonthly + portfolioMonthly;
+            return { ss: ssMonthly, pension: pensionMonthly, portfolio: portfolioMonthly, total };
+          };
+
+          const phase1Income = getPhaseIncome(0);  // Year 1
+          const phase2Income = getPhaseIncome(3);  // Year 4
+          const phase3Income = getPhaseIncome(6);  // Year 7
+          const phase4Income = getPhaseIncome(15); // Year 16
+          const phase5Income = getPhaseIncome(20); // Year 21
+
+          return (
+            <>
         <div className="flex justify-between items-start mb-4">
           <div>
-            <h2 className="text-2xl font-bold text-slate-900">Portfolio Cash Flows</h2>
-            <p className="text-sm text-slate-500">Year-by-year projection</p>
+            <h2 className="text-3xl font-bold text-slate-900">Phase 2 - Distribution Strategy</h2>
+            <p className="text-base text-slate-500">Bucket-based withdrawal sequence</p>
           </div>
-          <img src={LOGO_URL} alt="Logo" className="h-10" />
+          <img src={LOGO_URL} alt="Logo" className="h-12" />
         </div>
-        <div className="overflow-hidden">
-          <table className="w-full text-[8px]">
-            <thead>
-              <tr className="bg-slate-100">
-                <th className="p-1 text-left">Yr</th>
-                <th className="p-1 text-left">Age</th>
-                <th className="p-1 text-right">B1</th>
-                <th className="p-1 text-right">B2</th>
-                <th className="p-1 text-right">B3</th>
-                <th className="p-1 text-right">B4</th>
-                <th className="p-1 text-right">B5</th>
-                <th className="p-1 text-right">Total</th>
-                <th className="p-1 text-right">Withdraw</th>
-                <th className="p-1 text-right">Income</th>
-              </tr>
-            </thead>
-            <tbody>
-              {projectionData.slice(0, 30).map((row, i) => (
-                <tr key={i} className={i % 2 === 0 ? 'bg-white' : 'bg-slate-50'}>
-                  <td className="p-1">{row.year}</td>
-                  <td className="p-1">{row.age}</td>
-                  <td className="p-1 text-right">${Math.round(row.b1 / 1000)}k</td>
-                  <td className="p-1 text-right">${Math.round(row.b2 / 1000)}k</td>
-                  <td className="p-1 text-right">${Math.round(row.b3 / 1000)}k</td>
-                  <td className="p-1 text-right">${Math.round(row.b4 / 1000)}k</td>
-                  <td className="p-1 text-right">${Math.round(row.b5 / 1000)}k</td>
-                  <td className="p-1 text-right font-bold">${Math.round(row.total / 1000)}k</td>
-                  <td className="p-1 text-right text-red-600">${Math.round((row.w1 + row.w2 + row.w3 + row.w4 + row.w5) / 1000)}k</td>
-                  <td className="p-1 text-right text-emerald-600">${Math.round((row.ssIncome || 0) / 1000)}k</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+
+        {/* Starting Balance - Top Center */}
+        <div className="flex flex-col items-center mb-3">
+          <div className="bg-slate-800 text-white px-10 py-3 rounded-lg shadow-lg text-center">
+            <p className="text-sm text-slate-400 uppercase tracking-wide">Starting Retirement Portfolio</p>
+            <p className="text-2xl font-bold">{fmtMoney(inputs.totalPortfolio)}</p>
+          </div>
+          {/* Arrow down */}
+          <div className="flex flex-col items-center">
+            <div className="w-0.5 h-3 bg-slate-400"></div>
+            <div className="w-0 h-0 border-l-[5px] border-l-transparent border-r-[5px] border-r-transparent border-t-[6px] border-t-slate-400"></div>
+          </div>
         </div>
-        <p className="text-[9px] text-slate-500 mt-2">
-          Values shown in thousands. Withdraw = amount taken from portfolio. Income = Social Security and other income sources.
-        </p>
+
+        {/* 5 Buckets Row */}
+        <div className="grid grid-cols-5 gap-2 mb-3">
+          {/* Bucket 1 - Short Term */}
+          <div className="flex flex-col items-center">
+            <div className="text-white p-2 rounded-lg w-full text-center" style={{ backgroundColor: COLORS.shortTerm }}>
+              <p className="text-sm font-semibold">B1 - Short Term</p>
+              <p className="text-lg font-bold">{fmtMoney(basePlan.b1Val)}</p>
+              <p className="text-sm opacity-80">Years 1-3</p>
+            </div>
+            <div className="w-0.5 h-2" style={{ backgroundColor: COLORS.shortTerm }}></div>
+            <div className="text-sm text-center text-slate-600 p-1 rounded w-full" style={{ backgroundColor: `${COLORS.shortTerm}20` }}>
+              <p className="font-semibold">{fmtMoney(basePlan.b1Val / 3)}/yr</p>
+            </div>
+            <div className="w-0.5 h-2" style={{ backgroundColor: COLORS.shortTerm }}></div>
+            <div className="w-0 h-0 border-l-[4px] border-l-transparent border-r-[4px] border-r-transparent border-t-[5px]" style={{ borderTopColor: COLORS.shortTerm }}></div>
+            <div className="bg-slate-200 text-slate-600 px-2 py-1 rounded text-sm font-semibold mt-0.5">
+              $0 @ Year 3
+            </div>
+            {/* Income breakdown */}
+            <div className="w-full mt-1 p-2 bg-slate-50 rounded border border-slate-200 text-sm">
+              <p className="font-semibold text-center text-slate-700 mb-1">Monthly Cash Flow</p>
+              <div className="space-y-0.5">
+                <div className="flex justify-between"><span>SS:</span><span>${phase1Income.ss.toLocaleString()}</span></div>
+                <div className="flex justify-between"><span>Pension:</span><span>${phase1Income.pension.toLocaleString()}</span></div>
+                <div className="flex justify-between"><span>Portfolio:</span><span>${phase1Income.portfolio.toLocaleString()}</span></div>
+                <div className="flex justify-between font-bold border-t border-slate-300 pt-0.5"><span>Total:</span><span>${phase1Income.total.toLocaleString()}</span></div>
+              </div>
+            </div>
+          </div>
+
+          {/* Bucket 2 - Mid Term */}
+          <div className="flex flex-col items-center">
+            <div className="text-white p-2 rounded-lg w-full text-center" style={{ backgroundColor: COLORS.midTerm }}>
+              <p className="text-sm font-semibold">B2 - Mid Term</p>
+              <p className="text-lg font-bold">{fmtMoney(basePlan.b2Val)}</p>
+              <p className="text-sm opacity-80">Years 4-6</p>
+            </div>
+            <div className="w-0.5 h-2" style={{ backgroundColor: COLORS.midTerm }}></div>
+            <div className="text-sm text-center text-slate-600 p-1 rounded w-full" style={{ backgroundColor: `${COLORS.midTerm}20` }}>
+              <p className="font-semibold">{fmtMoney(basePlan.b2Val / 3)}/yr</p>
+            </div>
+            <div className="w-0.5 h-2" style={{ backgroundColor: COLORS.midTerm }}></div>
+            <div className="w-0 h-0 border-l-[4px] border-l-transparent border-r-[4px] border-r-transparent border-t-[5px]" style={{ borderTopColor: COLORS.midTerm }}></div>
+            <div className="bg-slate-200 text-slate-600 px-2 py-1 rounded text-sm font-semibold mt-0.5">
+              $0 @ Year 6
+            </div>
+            {/* Income breakdown */}
+            <div className="w-full mt-1 p-2 bg-slate-50 rounded border border-slate-200 text-sm">
+              <p className="font-semibold text-center text-slate-700 mb-1">Monthly Cash Flow</p>
+              <div className="space-y-0.5">
+                <div className="flex justify-between"><span>SS:</span><span>${phase2Income.ss.toLocaleString()}</span></div>
+                <div className="flex justify-between"><span>Pension:</span><span>${phase2Income.pension.toLocaleString()}</span></div>
+                <div className="flex justify-between"><span>Portfolio:</span><span>${phase2Income.portfolio.toLocaleString()}</span></div>
+                <div className="flex justify-between font-bold border-t border-slate-300 pt-0.5"><span>Total:</span><span>${phase2Income.total.toLocaleString()}</span></div>
+              </div>
+            </div>
+          </div>
+
+          {/* Bucket 3 - Balanced 60/40 */}
+          <div className="flex flex-col items-center">
+            <div className="text-white p-2 rounded-lg w-full text-center" style={{ backgroundColor: COLORS.hedged }}>
+              <p className="text-sm font-semibold">B3 - Balanced 60/40</p>
+              <p className="text-lg font-bold">{fmtMoney(basePlan.b3Val)}</p>
+              <p className="text-sm opacity-80">Years 7-15</p>
+            </div>
+            <div className="w-0.5 h-2" style={{ backgroundColor: COLORS.hedged }}></div>
+            <div className="text-sm text-center text-slate-600 p-1 rounded w-full" style={{ backgroundColor: `${COLORS.hedged}20` }}>
+              <p className="font-semibold">{fmtMoney(basePlan.b3Val / 9)}/yr</p>
+            </div>
+            <div className="w-0.5 h-2" style={{ backgroundColor: COLORS.hedged }}></div>
+            <div className="w-0 h-0 border-l-[4px] border-l-transparent border-r-[4px] border-r-transparent border-t-[5px]" style={{ borderTopColor: COLORS.hedged }}></div>
+            <div className="bg-slate-200 text-slate-600 px-2 py-1 rounded text-sm font-semibold mt-0.5">
+              $0 @ Year 15
+            </div>
+            {/* Income breakdown */}
+            <div className="w-full mt-1 p-2 bg-slate-50 rounded border border-slate-200 text-sm">
+              <p className="font-semibold text-center text-slate-700 mb-1">Monthly Cash Flow</p>
+              <div className="space-y-0.5">
+                <div className="flex justify-between"><span>SS:</span><span>${phase3Income.ss.toLocaleString()}</span></div>
+                <div className="flex justify-between"><span>Pension:</span><span>${phase3Income.pension.toLocaleString()}</span></div>
+                <div className="flex justify-between"><span>Portfolio:</span><span>${phase3Income.portfolio.toLocaleString()}</span></div>
+                <div className="flex justify-between font-bold border-t border-slate-300 pt-0.5"><span>Total:</span><span>${phase3Income.total.toLocaleString()}</span></div>
+              </div>
+            </div>
+          </div>
+
+          {/* Bucket 4 - Income & Growth */}
+          <div className="flex flex-col items-center">
+            <div className="text-white p-2 rounded-lg w-full text-center" style={{ backgroundColor: COLORS.income }}>
+              <p className="text-sm font-semibold">B4 - Income & Growth</p>
+              <p className="text-lg font-bold">{fmtMoney(basePlan.b4Val)}</p>
+              <p className="text-sm opacity-80">Years 16-20</p>
+            </div>
+            <div className="w-0.5 h-2" style={{ backgroundColor: COLORS.income }}></div>
+            <div className="text-sm text-center text-slate-600 p-1 rounded w-full" style={{ backgroundColor: `${COLORS.income}20` }}>
+              <p className="font-semibold">{fmtMoney(basePlan.b4Val / 5)}/yr</p>
+            </div>
+            <div className="w-0.5 h-2" style={{ backgroundColor: COLORS.income }}></div>
+            <div className="w-0 h-0 border-l-[4px] border-l-transparent border-r-[4px] border-r-transparent border-t-[5px]" style={{ borderTopColor: COLORS.income }}></div>
+            <div className="bg-slate-200 text-slate-600 px-2 py-1 rounded text-sm font-semibold mt-0.5">
+              $0 @ Year 20
+            </div>
+            {/* Income breakdown */}
+            <div className="w-full mt-1 p-2 bg-slate-50 rounded border border-slate-200 text-sm">
+              <p className="font-semibold text-center text-slate-700 mb-1">Monthly Cash Flow</p>
+              <div className="space-y-0.5">
+                <div className="flex justify-between"><span>SS:</span><span>${phase4Income.ss.toLocaleString()}</span></div>
+                <div className="flex justify-between"><span>Pension:</span><span>${phase4Income.pension.toLocaleString()}</span></div>
+                <div className="flex justify-between"><span>Portfolio:</span><span>${phase4Income.portfolio.toLocaleString()}</span></div>
+                <div className="flex justify-between font-bold border-t border-slate-300 pt-0.5"><span>Total:</span><span>${phase4Income.total.toLocaleString()}</span></div>
+              </div>
+            </div>
+          </div>
+
+          {/* Bucket 5 - Long Term */}
+          <div className="flex flex-col items-center">
+            <div className="text-white p-2 rounded-lg w-full text-center" style={{ backgroundColor: COLORS.longTerm }}>
+              <p className="text-sm font-semibold">B5 - Long Term</p>
+              <p className="text-lg font-bold">{fmtMoney(basePlan.b5Val)}</p>
+              <p className="text-sm opacity-80">Year 21+</p>
+            </div>
+            <div className="w-0.5 h-2" style={{ backgroundColor: COLORS.longTerm }}></div>
+            <div className="text-sm text-center text-slate-600 p-1 rounded w-full" style={{ backgroundColor: `${COLORS.longTerm}20` }}>
+              <p className="font-semibold">20 Years</p>
+              <p>to grow</p>
+            </div>
+            <div className="w-0.5 h-2" style={{ backgroundColor: COLORS.longTerm }}></div>
+            <div className="w-0 h-0 border-l-[4px] border-l-transparent border-r-[4px] border-r-transparent border-t-[5px]" style={{ borderTopColor: COLORS.longTerm }}></div>
+            <div className="text-white px-2 py-1 rounded text-sm font-semibold mt-0.5" style={{ backgroundColor: COLORS.longTerm }}>
+              {fmtMoney(projectionData[19]?.b5 || basePlan.b5Val * 2)} @ Yr 20
+            </div>
+            {/* Income breakdown */}
+            <div className="w-full mt-1 p-2 bg-slate-50 rounded border border-slate-200 text-sm">
+              <p className="font-semibold text-center text-slate-700 mb-1">Monthly Cash Flow</p>
+              <div className="space-y-0.5">
+                <div className="flex justify-between"><span>SS:</span><span>${phase5Income.ss.toLocaleString()}</span></div>
+                <div className="flex justify-between"><span>Pension:</span><span>${phase5Income.pension.toLocaleString()}</span></div>
+                <div className="flex justify-between"><span>Portfolio:</span><span>${phase5Income.portfolio.toLocaleString()}</span></div>
+                <div className="flex justify-between font-bold border-t border-slate-300 pt-0.5"><span>Total:</span><span>${phase5Income.total.toLocaleString()}</span></div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Flow explanation */}
+        <div className="bg-slate-50 border border-slate-200 rounded-lg p-3 mb-4">
+          <div className="flex items-center gap-2 mb-2">
+            <span className="text-lg">→</span>
+            <p className="text-sm text-slate-700">
+              <strong>Sequential Withdrawal Strategy:</strong> Withdrawals are taken from B1 first (years 1-3), then B2 (years 4-6),
+              then B3 (years 7-15), then B4 (years 16-20). Meanwhile, B5 remains invested for maximum growth over 20 years before being tapped.
+            </p>
+          </div>
+          <div className="flex items-center gap-4 text-sm">
+            <span className="flex items-center gap-1"><span className="w-3 h-3 rounded" style={{ backgroundColor: COLORS.shortTerm }}></span> Short Term</span>
+            <span className="flex items-center gap-1"><span className="w-3 h-3 rounded" style={{ backgroundColor: COLORS.midTerm }}></span> Mid Term</span>
+            <span className="flex items-center gap-1"><span className="w-3 h-3 rounded" style={{ backgroundColor: COLORS.hedged }}></span> Balanced 60/40</span>
+            <span className="flex items-center gap-1"><span className="w-3 h-3 rounded" style={{ backgroundColor: COLORS.income }}></span> Income & Growth</span>
+            <span className="flex items-center gap-1"><span className="w-3 h-3 rounded" style={{ backgroundColor: COLORS.longTerm }}></span> Long Term</span>
+          </div>
+        </div>
+        {/* Bottom Stats - Success Rate and Legacy */}
+        <div className="grid grid-cols-2 gap-4">
+          {/* Success Probability */}
+          <div className="border-2 border-slate-200 rounded-xl p-4 text-center">
+            <p className="text-sm text-slate-500 uppercase tracking-wide mb-1">30-Year Success Probability</p>
+            <div className={`text-4xl font-bold ${monteCarloData.successRate >= 85 ? 'text-emerald-600' : monteCarloData.successRate >= 70 ? 'text-yellow-600' : 'text-red-600'}`}>
+              {monteCarloData.successRate.toFixed(1)}%
+            </div>
+            <p className="text-sm text-slate-500 mt-1">
+              Based on 500 Monte Carlo simulations
+            </p>
+            <div className="w-full bg-slate-200 rounded-full h-1.5 mt-1">
+              <div
+                className={`h-1.5 rounded-full ${monteCarloData.successRate >= 85 ? 'bg-emerald-500' : monteCarloData.successRate >= 70 ? 'bg-yellow-500' : 'bg-red-500'}`}
+                style={{ width: `${Math.min(monteCarloData.successRate, 100)}%` }}
+              ></div>
+            </div>
+          </div>
+
+          {/* Projected Legacy */}
+          <div className="border-2 border-slate-200 rounded-xl p-3 text-center">
+            <p className="text-[12px] text-slate-500 uppercase tracking-wide mb-1">Projected Legacy (Year 30)</p>
+            <div className="text-3xl font-bold text-indigo-600">
+              {fmtMoney(projectionData[projectionData.length - 1]?.total || 0)}
+            </div>
+            <p className="text-[12px] text-slate-500 mt-1">
+              Median projected portfolio value
+            </p>
+            <div className="flex justify-center gap-3 mt-1 text-[12px]">
+              <span className="text-slate-500">Start: {fmtMoney(inputs.totalPortfolio)}</span>
+              <span className="text-slate-400">→</span>
+              <span className={`font-semibold ${(projectionData[projectionData.length - 1]?.total || 0) >= inputs.totalPortfolio ? 'text-emerald-600' : 'text-red-600'}`}>
+                {(projectionData[projectionData.length - 1]?.total || 0) >= inputs.totalPortfolio ? '+' : '-'}
+                {fmtMoney(Math.abs((projectionData[projectionData.length - 1]?.total || 0) - inputs.totalPortfolio))}
+              </span>
+            </div>
+          </div>
+        </div>
+
         <PrintFooter pageNumber={4} />
+            </>
+          );
+        })()}
       </div>
 
       {/* PRINT PAGE 5: Social Security Optimization */}
@@ -1009,7 +1376,7 @@ export const ArchitectPage = ({
               <p className={`text-lg font-bold ${outcome.age === ssAnalysis.winner.age ? 'text-emerald-700' : 'text-slate-700'}`}>
                 ${Math.round(outcome.balance).toLocaleString()}
               </p>
-              <p className="text-[10px] text-slate-400">Portfolio @ Age {targetMaxPortfolioAge}</p>
+              <p className="text-[12px] text-slate-400">Portfolio @ Age {targetMaxPortfolioAge}</p>
             </div>
           ))}
         </div>
@@ -1203,6 +1570,202 @@ export const ArchitectPage = ({
         </div>
         <PrintFooter pageNumber={7} />
       </div>
+
+      {/* PRINT PAGE 8: Strategy Optimizer */}
+      <div className="hidden print:block break-after-page p-6">
+        <div className="flex justify-between items-start mb-4">
+          <div>
+            <h2 className="text-3xl font-bold text-slate-900">Strategy Comparison</h2>
+            <p className="text-base text-slate-500">Alternative allocation strategies analyzed</p>
+          </div>
+          <img src={LOGO_URL} alt="Logo" className="h-10" />
+        </div>
+
+        {/* Strategy Comparison Table */}
+        <div className="border rounded-lg overflow-hidden mb-4">
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="bg-slate-800 text-white">
+                <th className="p-2 text-left">Strategy</th>
+                <th className="p-2 text-center">B1</th>
+                <th className="p-2 text-center">B2</th>
+                <th className="p-2 text-center">B3</th>
+                <th className="p-2 text-center">B4</th>
+                <th className="p-2 text-center">B5</th>
+                <th className="p-2 text-center">Success Rate</th>
+                <th className="p-2 text-center">Legacy (30yr)</th>
+              </tr>
+            </thead>
+            <tbody>
+              {(() => {
+                const fmtLegacy = (val) => val >= 1000000 ? `$${(val / 1000000).toFixed(2)}M` : `$${Math.round(val / 1000)}k`;
+                return (
+                  <>
+              <tr className="border-b bg-emerald-50">
+                <td className="p-2 font-bold">Current Model</td>
+                <td className="p-2 text-center">{((basePlan.b1Val / inputs.totalPortfolio) * 100).toFixed(0)}%</td>
+                <td className="p-2 text-center">{((basePlan.b2Val / inputs.totalPortfolio) * 100).toFixed(0)}%</td>
+                <td className="p-2 text-center">{((basePlan.b3Val / inputs.totalPortfolio) * 100).toFixed(0)}%</td>
+                <td className="p-2 text-center">{((basePlan.b4Val / inputs.totalPortfolio) * 100).toFixed(0)}%</td>
+                <td className="p-2 text-center">{((Math.max(0, basePlan.b5Val) / inputs.totalPortfolio) * 100).toFixed(0)}%</td>
+                <td className="p-2 text-center font-bold text-emerald-700">{(monteCarloData?.successRate || 0).toFixed(1)}%</td>
+                <td className="p-2 text-center">{fmtLegacy(projectionData[projectionData.length - 1]?.total || 0)}</td>
+              </tr>
+              <tr className="border-b">
+                <td className="p-2 font-medium">4% Model</td>
+                <td className="p-2 text-center">12.5%</td>
+                <td className="p-2 text-center">12.5%</td>
+                <td className="p-2 text-center">22.5%</td>
+                <td className="p-2 text-center">15%</td>
+                <td className="p-2 text-center">37.5%</td>
+                <td className="p-2 text-center font-bold">{(optimizerData?.strategy4?.successRate || 0).toFixed(1)}%</td>
+                <td className="p-2 text-center">{fmtLegacy(optimizerData?.strategy4?.medianLegacy || 0)}</td>
+              </tr>
+              <tr className="border-b bg-slate-50">
+                <td className="p-2 font-medium">5.5% Model</td>
+                <td className="p-2 text-center">17.5%</td>
+                <td className="p-2 text-center">17.5%</td>
+                <td className="p-2 text-center">25%</td>
+                <td className="p-2 text-center">10%</td>
+                <td className="p-2 text-center">30%</td>
+                <td className="p-2 text-center font-bold">{(optimizerData?.strategy5?.successRate || 0).toFixed(1)}%</td>
+                <td className="p-2 text-center">{fmtLegacy(optimizerData?.strategy5?.medianLegacy || 0)}</td>
+              </tr>
+              <tr className="border-b">
+                <td className="p-2 font-medium">Balanced 60/40</td>
+                <td className="p-2 text-center">0%</td>
+                <td className="p-2 text-center">0%</td>
+                <td className="p-2 text-center">100%</td>
+                <td className="p-2 text-center">0%</td>
+                <td className="p-2 text-center">0%</td>
+                <td className="p-2 text-center font-bold">{(optimizerData?.strategy6?.successRate || 0).toFixed(1)}%</td>
+                <td className="p-2 text-center">{fmtLegacy(optimizerData?.strategy6?.medianLegacy || 0)}</td>
+              </tr>
+              <tr className="border-b bg-slate-50">
+                <td className="p-2 font-medium">Aggressive Growth</td>
+                <td className="p-2 text-center">0%</td>
+                <td className="p-2 text-center">0%</td>
+                <td className="p-2 text-center">20%</td>
+                <td className="p-2 text-center">10%</td>
+                <td className="p-2 text-center">70%</td>
+                <td className="p-2 text-center font-bold">{(optimizerData?.strategy1?.successRate || 0).toFixed(1)}%</td>
+                <td className="p-2 text-center">{fmtLegacy(optimizerData?.strategy1?.medianLegacy || 0)}</td>
+              </tr>
+              <tr>
+                <td className="p-2 font-medium">Barbell Strategy</td>
+                <td className="p-2 text-center" colSpan="5">3 yrs cash in B1, remainder in B5</td>
+                <td className="p-2 text-center font-bold">{(optimizerData?.strategy2?.successRate || 0).toFixed(1)}%</td>
+                <td className="p-2 text-center">{fmtLegacy(optimizerData?.strategy2?.medianLegacy || 0)}</td>
+              </tr>
+                  </>
+                );
+              })()}
+            </tbody>
+          </table>
+        </div>
+
+        {/* Strategy Descriptions */}
+        <div className="grid grid-cols-2 gap-4 text-sm">
+          <div className="border rounded-lg p-3">
+            <h4 className="font-bold text-base text-slate-800 mb-2">Strategy Descriptions</h4>
+            <div className="space-y-2 text-slate-600">
+              <p><strong>Current Model:</strong> Time-segmented bucket strategy based on spending gap analysis.</p>
+              <p><strong>4% Model:</strong> Designed for traditional 4% withdrawal rate with balanced risk.</p>
+              <p><strong>5.5% Model:</strong> Higher liquidity allocation for higher withdrawal rates.</p>
+            </div>
+          </div>
+          <div className="border rounded-lg p-3">
+            <h4 className="font-bold text-base text-slate-800 mb-2">Alternative Approaches</h4>
+            <div className="space-y-2 text-slate-600">
+              <p><strong>Balanced 60/40:</strong> Traditional single-bucket approach without time segmentation.</p>
+              <p><strong>Aggressive Growth:</strong> Maximizes long-term growth with 70% in B5, minimal short-term reserves.</p>
+              <p><strong>Barbell:</strong> Cash for near-term, maximum equity for long-term growth.</p>
+            </div>
+          </div>
+        </div>
+
+        <div className="mt-4 bg-slate-100 p-3 rounded-lg text-sm text-slate-500">
+          <p><strong>Note:</strong> Success rates are based on 500-iteration Monte Carlo simulations. Legacy values represent median outcomes. Actual results will vary based on market conditions and personal circumstances.</p>
+        </div>
+        <PrintFooter pageNumber={8} />
+      </div>
+
+      {/* PRINT PAGE 9: Disclosures */}
+      <div className="hidden print:block break-after-page p-6">
+        <div className="flex justify-between items-start mb-4">
+          <div>
+            <h2 className="text-2xl font-bold text-slate-900">Important Disclosures</h2>
+            <p className="text-sm text-slate-500">Assumptions, methodology, and limitations</p>
+          </div>
+          <img src={LOGO_URL} alt="Logo" className="h-10" />
+        </div>
+
+        <div className="space-y-3 text-[13px] text-slate-600">
+          {/* Return Assumptions */}
+          <div className="border rounded-lg p-3">
+            <h3 className="font-bold text-[13px] text-slate-800 mb-2">Return & Interest Rate Assumptions</h3>
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <p className="mb-1">The projected returns used in this analysis are based on historical averages and forward-looking estimates:</p>
+                <ul className="list-disc list-inside space-y-0.5 ml-1">
+                  <li>B1 (Short Term): {assumptions.b1.return}% return, {assumptions.b1.stdDev}% std dev</li>
+                  <li>B2 (Mid Term): {assumptions.b2.return}% return, {assumptions.b2.stdDev}% std dev</li>
+                  <li>B3 (Balanced): {assumptions.b3.return}% return, {assumptions.b3.stdDev}% std dev</li>
+                  <li>B4 (Income & Growth): {assumptions.b4.return}% return, {assumptions.b4.stdDev}% std dev</li>
+                  <li>B5 (Long Term): {assumptions.b5.return}% return, {assumptions.b5.stdDev}% std dev</li>
+                </ul>
+              </div>
+              <div>
+                <p className="mb-1">These assumptions are estimates and actual results may vary significantly. Past performance does not guarantee future results.</p>
+                <p className="mb-1"><strong>Inflation:</strong> {inputs.inflationRate}% annual rate for SS COLA and expense projections.</p>
+                <p><strong>Personal Inflation:</strong> {inputs.personalInflationRate}% applied to retirement spending projections.</p>
+              </div>
+            </div>
+          </div>
+
+          {/* Monte Carlo Methodology */}
+          <div className="border rounded-lg p-3">
+            <h3 className="font-bold text-[13px] text-slate-800 mb-2">Monte Carlo Simulation Methodology</h3>
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <p className="mb-1">Success rates are calculated using Monte Carlo simulation:</p>
+                <ul className="list-disc list-inside space-y-0.5 ml-1">
+                  <li>500 independent simulation iterations</li>
+                  <li>Random returns using normal distribution</li>
+                  <li>Returns correlated based on historical relationships</li>
+                  <li>Annual rebalancing between buckets</li>
+                  <li>30-year projection horizon</li>
+                </ul>
+              </div>
+              <div>
+                <p className="mb-1"><strong>Success Definition:</strong> Portfolio maintains positive balance throughout the 30-year projection period.</p>
+                <p><strong>Limitations:</strong> Simulations cannot predict actual future returns. They provide a range of possible outcomes based on historical patterns and may not account for extreme market events or changes in tax law.</p>
+              </div>
+            </div>
+          </div>
+
+          {/* Social Security Assumptions */}
+          <div className="border rounded-lg p-3">
+            <h3 className="font-bold text-[13px] text-slate-800 mb-2">Social Security & Income Assumptions</h3>
+            <p className="mb-1">Social Security benefits adjusted based on claiming age: Before FRA (67): reduced ~6.67%/year. After FRA: increased 8%/year up to age 70. Annual COLA applied based on assumed inflation rate. Pension income assumes continued payment per stated terms with COLA only if indicated.</p>
+          </div>
+
+          {/* General Disclaimers */}
+          <div className="border rounded-lg p-3">
+            <h3 className="font-bold text-[13px] text-slate-800 mb-2">General Disclaimers</h3>
+            <p className="mb-1">This analysis is for educational and illustrative purposes only and should not be construed as personalized investment advice. Projections are hypothetical and do not represent actual investment results.</p>
+            <p className="mb-1">Investment involves risk, including possible loss of principal. No guarantee any strategy will achieve its objectives. Diversification does not ensure profit or protect against loss. Tax considerations are important but not fully addressed here - consult a qualified tax professional.</p>
+            <p>Report generated {new Date().toLocaleDateString()}. Regular reviews and updates recommended.</p>
+          </div>
+
+          {/* Regulatory Disclosure */}
+          <div className="bg-slate-100 rounded-lg p-3 text-[13px]">
+            <p>Securities offered through LPL Financial, Member FINRA/SIPC. Investment Advice offered through Miller Wealth Management, a Registered Investment Advisor. Miller Wealth Management is a separate entity from LPL Financial. The opinions voiced in this material are for general information only and are not intended to provide specific advice or recommendations for any individual.</p>
+          </div>
+        </div>
+
+        <PrintFooter pageNumber={9} />
+      </div>
     </div>
   );
 };
@@ -1308,7 +1871,7 @@ const AllocationTab = ({ inputs, basePlan, assumptions, projectionData, clientIn
             </button>
           </div>
           <div className="bg-slate-50 px-3 py-1.5 rounded-lg border border-slate-200">
-            <label className="text-[10px] font-bold text-slate-500 uppercase block mb-1">Rebalance Frequency</label>
+            <label className="text-[12px] font-bold text-slate-500 uppercase block mb-1">Rebalance Frequency</label>
             <select
               value={rebalanceFreq}
               onChange={(e) => onSetRebalanceFreq(parseInt(e.target.value))}
@@ -1438,7 +2001,7 @@ const SSOptimizationTab = ({ clientInfo, inputs, ssAnalysis, ssPartnerAnalysis, 
           <p className="text-sm text-slate-500">Determine the optimal claiming strategy based on portfolio impact.</p>
         </div>
         <div className="bg-yellow-50 p-3 rounded-lg border border-yellow-200">
-          <label className="block text-[10px] font-bold text-yellow-800 uppercase mb-1">
+          <label className="block text-[12px] font-bold text-yellow-800 uppercase mb-1">
             At what age do you want your portfolio value maximized?
           </label>
           <select
@@ -1482,7 +2045,7 @@ const SSOptimizationTab = ({ clientInfo, inputs, ssAnalysis, ssPartnerAnalysis, 
               <p className={`text-xl font-bold ${outcome.age === ssAnalysis.winner.age ? 'text-emerald-700' : 'text-slate-700'}`}>
                 ${Math.round(outcome.balance).toLocaleString()}
               </p>
-              <p className="text-[10px] text-slate-400">Projected Portfolio @ Age {targetMaxPortfolioAge}</p>
+              <p className="text-[12px] text-slate-400">Projected Portfolio @ Age {targetMaxPortfolioAge}</p>
             </div>
           ))}
         </div>
@@ -1523,7 +2086,7 @@ const SSOptimizationTab = ({ clientInfo, inputs, ssAnalysis, ssPartnerAnalysis, 
                 <p className={`text-xl font-bold ${outcome.age === ssPartnerAnalysis.winner.age ? 'text-yellow-700' : 'text-slate-700'}`}>
                   ${Math.round(outcome.balance).toLocaleString()}
                 </p>
-                <p className="text-[10px] text-slate-400">Projected Portfolio @ Age {targetMaxPortfolioAge}</p>
+                <p className="text-[12px] text-slate-400">Projected Portfolio @ Age {targetMaxPortfolioAge}</p>
               </div>
             ))}
           </div>
@@ -1747,9 +2310,9 @@ const ArchitectureTab = ({ inputs, basePlan, assumptions, projectionData }) => {
         </Card>
 
         {/* Bucket Details Table */}
-        <Card className="p-6">
-          <h3 className="font-bold text-lg text-slate-800 mb-6 flex items-center gap-2">
-            <BarChart2 className="w-5 h-5 text-emerald-600" /> Bucket Strategy Details
+        <Card className="p-6 print:break-before-page">
+          <h3 className="font-bold text-xl text-slate-800 mb-6 flex items-center gap-2">
+            <BarChart2 className="w-6 h-6 text-emerald-600" /> Bucket Strategy Details
           </h3>
           <div className="space-y-3">
             <div className="p-3 rounded-lg" style={{ backgroundColor: `${COLORS.shortTerm}20`, borderLeft: `4px solid ${COLORS.shortTerm}` }}>
@@ -1845,7 +2408,7 @@ const ArchitectureTab = ({ inputs, basePlan, assumptions, projectionData }) => {
   );
 };
 
-const OptimizerTab = ({ optimizerData, inputs, basePlan, monteCarloData, projectionData }) => {
+const OptimizerTab = ({ optimizerData, inputs, basePlan, monteCarloData, projectionData, optimizerRebalanceFreq, onSetOptimizerRebalanceFreq }) => {
   // Safety check - if optimizerData isn't ready yet, show loading
   if (!optimizerData || !optimizerData.strategy1 || !optimizerData.strategy2 || !optimizerData.strategy3) {
     return (
@@ -1856,9 +2419,12 @@ const OptimizerTab = ({ optimizerData, inputs, basePlan, monteCarloData, project
     );
   }
 
-  const annualSpending = inputs.monthlySpending * 12;
-  const distributionRate = inputs.totalPortfolio > 0 ? (annualSpending / inputs.totalPortfolio) * 100 : 0;
-  const isHighDistribution = distributionRate >= 6;
+  // Distribution strategy options
+  const distributionStrategies = [
+    { value: 0, label: 'Sequential Distribution', description: 'Withdraw from buckets in order (B1→B2→B3→B4→B5) without rebalancing' },
+    { value: 1, label: 'Annual Rebalance', description: 'Rebalance to target allocations every year' },
+    { value: 3, label: 'Rebalance Every 3 Years', description: 'Rebalance to target allocations every 3 years' }
+  ];
 
   // Helper to format allocation as percentages
   const getAllocationPercentages = (allocationData) => {
@@ -1874,11 +2440,39 @@ const OptimizerTab = ({ optimizerData, inputs, basePlan, monteCarloData, project
   };
 
   // Build strategies array - runOptimizedSimulation returns { successRate, medianLegacy, allocation }
-  // strategy3 comes from calculateAlternativeAllocations directly with b1Val etc at top level
   const strategies = [
     {
+      key: 'strategy3',
+      name: 'Current Model',
+      successRate: optimizerData?.strategy3?.successRate || 0,
+      medianLegacy: optimizerData?.strategy3?.medianLegacy || 0,
+      allocation: optimizerData?.strategy3?.allocation || {},
+      isCurrent: true
+    },
+    {
+      key: 'strategy4',
+      name: '4% Model',
+      successRate: optimizerData?.strategy4?.successRate || 0,
+      medianLegacy: optimizerData?.strategy4?.medianLegacy || 0,
+      allocation: optimizerData?.strategy4?.allocation || {}
+    },
+    {
+      key: 'strategy5',
+      name: '5.5% Model',
+      successRate: optimizerData?.strategy5?.successRate || 0,
+      medianLegacy: optimizerData?.strategy5?.medianLegacy || 0,
+      allocation: optimizerData?.strategy5?.allocation || {}
+    },
+    {
+      key: 'strategy6',
+      name: 'Balanced 60/40',
+      successRate: optimizerData?.strategy6?.successRate || 0,
+      medianLegacy: optimizerData?.strategy6?.medianLegacy || 0,
+      allocation: optimizerData?.strategy6?.allocation || {}
+    },
+    {
       key: 'strategy1',
-      name: 'Conservative Equity Tilt',
+      name: 'Aggressive Growth',
       successRate: optimizerData?.strategy1?.successRate || 0,
       medianLegacy: optimizerData?.strategy1?.medianLegacy || 0,
       allocation: optimizerData?.strategy1?.allocation || {}
@@ -1890,37 +2484,32 @@ const OptimizerTab = ({ optimizerData, inputs, basePlan, monteCarloData, project
       medianLegacy: optimizerData?.strategy2?.medianLegacy || 0,
       allocation: optimizerData?.strategy2?.allocation || {}
     },
-    {
-      key: 'strategy3',
-      name: 'Current Model',
-      successRate: optimizerData?.strategy3?.successRate || 0,
-      medianLegacy: optimizerData?.strategy3?.medianLegacy || 0,
-      allocation: {
-        b1Val: optimizerData?.strategy3?.b1Val || 0,
-        b2Val: optimizerData?.strategy3?.b2Val || 0,
-        b3Val: optimizerData?.strategy3?.b3Val || 0,
-        b4Val: optimizerData?.strategy3?.b4Val || 0,
-        b5Val: optimizerData?.strategy3?.b5Val || 0,
-      },
-      isCurrent: true
-    },
   ];
 
-  const sortedStrategies = [...strategies].sort((a, b) => (b.successRate || 0) - (a.successRate || 0));
-  const bestStrategy = sortedStrategies[0];
+  // Find "Safest" - highest success rate
+  const sortedBySuccessRate = [...strategies].sort((a, b) => (b.successRate || 0) - (a.successRate || 0));
+  const safestStrategy = sortedBySuccessRate[0];
 
-  const StrategyCard = ({ strategy, isBest }) => {
+  // Find "Best" - largest legacy among strategies with similar success rate (within 5% of safest)
+  const similarSuccessThreshold = (safestStrategy.successRate || 0) - 5;
+  const strategiesWithSimilarSuccess = strategies.filter(s => (s.successRate || 0) >= similarSuccessThreshold);
+  const sortedByLegacy = [...strategiesWithSimilarSuccess].sort((a, b) => (b.medianLegacy || 0) - (a.medianLegacy || 0));
+  const bestStrategy = sortedByLegacy[0];
+
+  const StrategyCard = ({ strategy, isBest, isSafest }) => {
     const pct = getAllocationPercentages(strategy.allocation);
     const successRate = strategy.successRate || 0;
     const legacy = strategy.medianLegacy || 0;
+    const hasHighlight = isBest || isSafest;
 
     return (
-      <Card className={`p-5 ${isBest ? 'ring-2 ring-emerald-500 bg-emerald-50' : ''}`}>
+      <Card className={`p-5 ${hasHighlight ? 'ring-2 ' + (isBest ? 'ring-emerald-500 bg-emerald-50' : 'ring-blue-500 bg-blue-50') : ''}`}>
         <div className="flex justify-between items-start mb-4">
           <div>
             <h4 className="font-bold text-slate-800 flex items-center gap-2">
               {strategy.name}
               {isBest && <span className="text-xs bg-emerald-500 text-white px-2 py-0.5 rounded">Best</span>}
+              {isSafest && !isBest && <span className="text-xs bg-blue-500 text-white px-2 py-0.5 rounded">Safest</span>}
             </h4>
             {strategy.isCurrent && <span className="text-xs text-slate-500">Your current allocation</span>}
           </div>
@@ -1958,7 +2547,7 @@ const OptimizerTab = ({ optimizerData, inputs, basePlan, monteCarloData, project
             {pct.b4 > 0 && <div style={{ width: `${pct.b4}%`, backgroundColor: COLORS.income }} title={`B4: ${pct.b4}%`} />}
             {pct.b5 > 0 && <div style={{ width: `${pct.b5}%`, backgroundColor: COLORS.longTerm }} title={`B5: ${pct.b5}%`} />}
           </div>
-          <div className="grid grid-cols-5 gap-1 text-[10px] text-center">
+          <div className="grid grid-cols-5 gap-1 text-[12px] text-center">
             <div><span className="inline-block w-2 h-2 rounded-full mr-1" style={{ backgroundColor: COLORS.shortTerm }}></span>B1: {pct.b1}%</div>
             <div><span className="inline-block w-2 h-2 rounded-full mr-1" style={{ backgroundColor: COLORS.midTerm }}></span>B2: {pct.b2}%</div>
             <div><span className="inline-block w-2 h-2 rounded-full mr-1" style={{ backgroundColor: COLORS.hedged }}></span>B3: {pct.b3}%</div>
@@ -1972,19 +2561,34 @@ const OptimizerTab = ({ optimizerData, inputs, basePlan, monteCarloData, project
 
   return (
     <div className="space-y-6 animate-in fade-in duration-300 mt-6">
-      {/* Distribution Rate Alert */}
-      {isHighDistribution && (
-        <div className="bg-amber-50 border border-amber-200 rounded-lg p-4 flex items-start gap-3">
-          <AlertCircle className="w-5 h-5 text-amber-600 flex-shrink-0 mt-0.5" />
-          <div>
-            <h4 className="font-bold text-amber-800">High Distribution Rate Detected</h4>
-            <p className="text-sm text-amber-700">
-              Your distribution rate of {distributionRate.toFixed(1)}% is above 6%. Research from JP Morgan suggests
-              that higher equity allocations may improve success rates for higher distribution scenarios.
-            </p>
+      {/* Distribution Strategy Selector */}
+      <Card className="p-4">
+        <div className="flex flex-col sm:flex-row sm:items-center gap-4">
+          <div className="flex items-center gap-2">
+            <RefreshCw className="w-5 h-5 text-slate-600" />
+            <span className="font-medium text-slate-700">Distribution Strategy:</span>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            {distributionStrategies.map((strategy) => (
+              <button
+                key={strategy.value}
+                onClick={() => onSetOptimizerRebalanceFreq(strategy.value)}
+                className={`px-4 py-2 rounded-lg text-sm font-medium transition-all ${
+                  optimizerRebalanceFreq === strategy.value
+                    ? 'bg-emerald-600 text-white shadow-md'
+                    : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
+                }`}
+                title={strategy.description}
+              >
+                {strategy.label}
+              </button>
+            ))}
           </div>
         </div>
-      )}
+        <p className="text-xs text-slate-500 mt-2">
+          {distributionStrategies.find(s => s.value === optimizerRebalanceFreq)?.description}
+        </p>
+      </Card>
 
       {/* Strategy Comparison Header */}
       <div className="text-center">
@@ -1995,12 +2599,13 @@ const OptimizerTab = ({ optimizerData, inputs, basePlan, monteCarloData, project
       </div>
 
       {/* Strategy Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
         {strategies.map(strategy => (
           <StrategyCard
             key={strategy.key}
             strategy={strategy}
             isBest={strategy.key === bestStrategy.key}
+            isSafest={strategy.key === safestStrategy.key}
           />
         ))}
       </div>
@@ -2014,11 +2619,21 @@ const OptimizerTab = ({ optimizerData, inputs, basePlan, monteCarloData, project
           <div>
             <h4 className="font-bold text-slate-800">Recommendation</h4>
             <p className="text-slate-700 mt-1">
-              {bestStrategy.isCurrent ? (
-                <>Your current allocation is optimal for your situation with a {bestStrategy.successRate?.toFixed(1)}% success rate.</>
+              {bestStrategy.key === safestStrategy.key ? (
+                // Best and Safest are the same strategy
+                bestStrategy.isCurrent ? (
+                  <>Your current allocation is optimal - it has both the highest success rate ({bestStrategy.successRate?.toFixed(1)}%) and the largest projected legacy (${Math.round(bestStrategy.medianLegacy || 0).toLocaleString()}).</>
+                ) : (
+                  <>The <strong>{bestStrategy.name}</strong> strategy is both the safest ({bestStrategy.successRate?.toFixed(1)}% success rate) and offers the largest projected legacy (${Math.round(bestStrategy.medianLegacy || 0).toLocaleString()}).</>
+                )
               ) : (
-                <>The <strong>{bestStrategy.name}</strong> strategy shows the highest success rate at {bestStrategy.successRate?.toFixed(1)}%.
-                This could improve your portfolio sustainability by {((bestStrategy.successRate || 0) - (monteCarloData?.successRate || 0)).toFixed(1)} percentage points.</>
+                // Best and Safest are different strategies
+                <>
+                  <strong>{bestStrategy.name}</strong> offers the best balance with a {bestStrategy.successRate?.toFixed(1)}% success rate and the largest legacy of ${Math.round(bestStrategy.medianLegacy || 0).toLocaleString()}.
+                  {safestStrategy.key !== bestStrategy.key && (
+                    <> For maximum safety, <strong>{safestStrategy.name}</strong> has the highest success rate at {safestStrategy.successRate?.toFixed(1)}%.</>
+                  )}
+                </>
               )}
             </p>
           </div>
@@ -2028,26 +2643,47 @@ const OptimizerTab = ({ optimizerData, inputs, basePlan, monteCarloData, project
       {/* Strategy Explanations */}
       <Card className="p-5">
         <h4 className="font-bold text-slate-800 mb-4">Strategy Descriptions</h4>
-        <div className="space-y-4">
-          <div className="border-l-4 border-blue-500 pl-4">
-            <h5 className="font-medium text-slate-800">Conservative Equity Tilt</h5>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div className="border-l-4 border-emerald-500 pl-4">
+            <h5 className="font-medium text-slate-800">Current Model</h5>
             <p className="text-sm text-slate-600">
-              Allocates 10% to B1, 10% to B2, 30% to B3, eliminates B4, and maximizes B5 at 50%.
-              This approach reduces fixed income drag while maintaining 2-year liquidity cushion.
+              Your existing bucket allocation based on spending gap analysis. Balances liquidity needs
+              across multiple time horizons with income-generating assets.
+            </p>
+          </div>
+          <div className="border-l-4 border-blue-500 pl-4">
+            <h5 className="font-medium text-slate-800">4% Model</h5>
+            <p className="text-sm text-slate-600">
+              12.5% B1, 12.5% B2, 22.5% B3, 15% B4, 37.5% B5. Designed for traditional 4% withdrawal rate
+              with balanced risk across all buckets.
+            </p>
+          </div>
+          <div className="border-l-4 border-orange-500 pl-4">
+            <h5 className="font-medium text-slate-800">5.5% Model</h5>
+            <p className="text-sm text-slate-600">
+              17.5% B1, 17.5% B2, 25% B3, 10% B4, 30% B5. Higher liquidity allocation for clients
+              with higher withdrawal rates.
+            </p>
+          </div>
+          <div className="border-l-4 border-slate-500 pl-4">
+            <h5 className="font-medium text-slate-800">Balanced 60/40</h5>
+            <p className="text-sm text-slate-600">
+              100% in B3 (60/40 balanced). Traditional single-bucket approach without
+              time-segmented strategy.
+            </p>
+          </div>
+          <div className="border-l-4 border-indigo-500 pl-4">
+            <h5 className="font-medium text-slate-800">Aggressive Growth</h5>
+            <p className="text-sm text-slate-600">
+              0% B1, 0% B2, 20% B3, 10% B4, 70% B5. Maximizes long-term growth potential
+              with minimal short-term reserves.
             </p>
           </div>
           <div className="border-l-4 border-purple-500 pl-4">
             <h5 className="font-medium text-slate-800">Barbell Strategy</h5>
             <p className="text-sm text-slate-600">
-              Places 3 years of spending needs in cash (B1) with everything else in long-term growth (B5).
-              Extreme approach that maximizes equity exposure while maintaining near-term liquidity.
-            </p>
-          </div>
-          <div className="border-l-4 border-emerald-500 pl-4">
-            <h5 className="font-medium text-slate-800">Current Model</h5>
-            <p className="text-sm text-slate-600">
-              Your existing bucket allocation based on the spending gap analysis. Balances liquidity needs
-              across multiple time horizons with a 10% allocation to income-generating assets.
+              3 years cash in B1, remainder in B5. Extreme approach maximizing equity exposure
+              while maintaining near-term liquidity.
             </p>
           </div>
         </div>
@@ -2058,11 +2694,11 @@ const OptimizerTab = ({ optimizerData, inputs, basePlan, monteCarloData, project
 
 const PrintFooter = ({ pageNumber }) => (
   <div className="border-t border-gray-100 pt-4 mt-auto">
-    <div className="flex justify-between text-[10px] text-gray-400 mb-2">
+    <div className="flex justify-between text-[12px] text-gray-400 mb-2">
       <span>Miller Wealth Management | Confidential</span>
-      <span>Page {pageNumber} of 7</span>
+      <span>Page {pageNumber} of 9</span>
     </div>
-    <p className="text-[8px] text-gray-400 text-center leading-tight">
+    <p className="text-[12px] text-gray-400 text-center leading-tight">
       Securities offered through LPL Financial, Member FINRA/SIPC. Investment Advice offered through Miller Wealth Management, a Registered Investment Advisor. Miller Wealth Management is a separate entity from LPL Financial.
     </p>
   </div>

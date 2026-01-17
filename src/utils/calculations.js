@@ -100,6 +100,7 @@ export const calculateBasePlan = (inputs, assumptions, clientInfo) => {
   const {
     totalPortfolio, monthlySpending, ssPIA, partnerSSPIA,
     ssStartAge, partnerSSStartAge, monthlyPension, pensionStartAge, pensionCOLA,
+    partnerMonthlyPension, partnerPensionStartAge, partnerPensionCOLA,
     inflationRate, personalInflationRate, additionalIncomes
   } = inputs;
 
@@ -135,9 +136,16 @@ export const calculateBasePlan = (inputs, assumptions, clientInfo) => {
       income += monthlyPension * 12 * (pensionCOLA ? incomeInflationFactor : 1);
     }
 
+    // Partner pension (if married and has pension)
+    if (clientInfo.isMarried && partnerMonthlyPension > 0 && currentPartnerAge >= (partnerPensionStartAge || 65)) {
+      income += partnerMonthlyPension * 12 * (partnerPensionCOLA ? incomeInflationFactor : 1);
+    }
+
     // Recurring additional incomes (monthly * 12)
     additionalIncomes.forEach(stream => {
-      if (!stream.isOneTime && simAge >= stream.startAge && simAge <= (stream.endAge || 100)) {
+      // Use partner's age if owner is 'partner', otherwise use client's age
+      const ownerAge = stream.owner === 'partner' ? currentPartnerAge : simAge;
+      if (!stream.isOneTime && ownerAge >= stream.startAge && ownerAge <= (stream.endAge || 100)) {
         let streamAmount = stream.amount * 12;
         if (stream.inflationAdjusted) streamAmount *= incomeInflationFactor;
         income += streamAmount;
@@ -147,7 +155,9 @@ export const calculateBasePlan = (inputs, assumptions, clientInfo) => {
     // One-time contributions (added to portfolio, not income)
     let oneTimeContributions = 0;
     additionalIncomes.forEach(stream => {
-      if (stream.isOneTime && simAge === stream.startAge) {
+      // Use partner's age if owner is 'partner', otherwise use client's age
+      const ownerAge = stream.owner === 'partner' ? currentPartnerAge : simAge;
+      if (stream.isOneTime && ownerAge === stream.startAge) {
         let streamAmount = stream.amount;
         if (stream.inflationAdjusted) streamAmount *= incomeInflationFactor;
         oneTimeContributions += streamAmount;
@@ -172,7 +182,10 @@ export const calculateBasePlan = (inputs, assumptions, clientInfo) => {
 
   const b1Val = Math.round(calculateBucketNeed(1, 3, assumptions.b1.return) / 1000) * 1000;
   const b2Val = Math.round(calculateBucketNeed(4, 6, assumptions.b2.return) / 1000) * 1000;
-  const b3Val = Math.round(calculateBucketNeed(7, 14, assumptions.b3.return) / 1000) * 1000;
+  // B3 covers years 7-15 with minimum 20% allocation
+  const b3Calculated = Math.round(calculateBucketNeed(7, 15, assumptions.b3.return) / 1000) * 1000;
+  const b3Min = Math.round((totalPortfolio * 0.20) / 1000) * 1000;
+  const b3Val = Math.max(b3Calculated, b3Min);
   const b4Val = Math.round((totalPortfolio * 0.10) / 1000) * 1000;
   const allocatedSoFar = b1Val + b2Val + b3Val + b4Val;
   const b5Val = totalPortfolio - allocatedSoFar;
@@ -307,8 +320,10 @@ export const runSimulation = (basePlan, assumptions, inputs, rebalanceFreq, isMo
         const b1Target = calcPVGaps(i + 1, i + 3, assumptions.b1.return);
         // B2: Years 4-6 from now (i+4 to i+6)
         const b2Target = calcPVGaps(i + 4, i + 6, assumptions.b2.return);
-        // B3: Years 7-14 from now (i+7 to i+14)
-        const b3Target = calcPVGaps(i + 7, i + 14, assumptions.b3.return);
+        // B3: Years 7-15 from now (i+7 to i+15) with minimum 20% allocation
+        const b3Calculated = calcPVGaps(i + 7, i + 15, assumptions.b3.return);
+        const b3Min = currentTotal * 0.20;
+        const b3Target = Math.max(b3Calculated, b3Min);
         // B4: Always 10% of current total
         const b4Target = currentTotal * 0.10;
         // B5: Everything else
@@ -391,21 +406,21 @@ export const runSimulation = (basePlan, assumptions, inputs, rebalanceFreq, isMo
  * Calculate alternative allocation strategies for the optimizer
  * @param {object} inputs - Client inputs (portfolio, spending, etc.)
  * @param {object} basePlan - Current model allocation
- * @returns {object} Three allocation strategies
+ * @returns {object} Six allocation strategies
  */
 export const calculateAlternativeAllocations = (inputs, basePlan) => {
   const { totalPortfolio, monthlySpending } = inputs;
   const annualDistribution = monthlySpending * 12;
 
-  // Strategy 1: Conservative Equity Tilt (10% B1, 10% B2, 30% B3, 0% B4, 50% B5)
+  // Strategy 1: Aggressive Growth (0% B1, 0% B2, 20% B3, 10% B4, 70% B5)
   const strategy1 = {
-    name: 'Conservative Equity Tilt',
-    description: 'B1+B2 limited to 20%, no B4, 50% in long-term growth',
-    b1Val: Math.round(totalPortfolio * 0.10),
-    b2Val: Math.round(totalPortfolio * 0.10),
-    b3Val: Math.round(totalPortfolio * 0.30),
-    b4Val: 0,
-    b5Val: Math.round(totalPortfolio * 0.50)
+    name: 'Aggressive Growth',
+    description: 'Maximizes long-term growth with 70% in B5, minimal short-term reserves',
+    b1Val: 0,
+    b2Val: 0,
+    b3Val: Math.round(totalPortfolio * 0.20),
+    b4Val: Math.round(totalPortfolio * 0.10),
+    b5Val: Math.round(totalPortfolio * 0.70)
   };
 
   // Strategy 2: Barbell (3 years cash in B1, rest in B5)
@@ -431,7 +446,40 @@ export const calculateAlternativeAllocations = (inputs, basePlan) => {
     b5Val: basePlan.b5Val
   };
 
-  return { strategy1, strategy2, strategy3 };
+  // Strategy 4: 4% Model (12.5% B1, 12.5% B2, 22.5% B3, 10% B4, 42.5% B5)
+  const strategy4 = {
+    name: '4% Model',
+    description: 'Designed for 4% withdrawal rate with balanced risk',
+    b1Val: Math.round(totalPortfolio * 0.125),
+    b2Val: Math.round(totalPortfolio * 0.125),
+    b3Val: Math.round(totalPortfolio * 0.225),
+    b4Val: Math.round(totalPortfolio * 0.10),
+    b5Val: Math.round(totalPortfolio * 0.425)
+  };
+
+  // Strategy 5: 5.5% Model (17.5% B1, 17.5% B2, 25% B3, 10% B4, 30% B5)
+  const strategy5 = {
+    name: '5.5% Model',
+    description: 'Higher liquidity for higher withdrawal rates',
+    b1Val: Math.round(totalPortfolio * 0.175),
+    b2Val: Math.round(totalPortfolio * 0.175),
+    b3Val: Math.round(totalPortfolio * 0.25),
+    b4Val: Math.round(totalPortfolio * 0.10),
+    b5Val: Math.round(totalPortfolio * 0.30)
+  };
+
+  // Strategy 6: Balanced 60/40 (100% B3)
+  const strategy6 = {
+    name: 'Balanced 60/40',
+    description: 'Traditional 60/40 portfolio in single bucket',
+    b1Val: 0,
+    b2Val: 0,
+    b3Val: totalPortfolio,
+    b4Val: 0,
+    b5Val: 0
+  };
+
+  return { strategy1, strategy2, strategy3, strategy4, strategy5, strategy6 };
 };
 
 /**
@@ -440,16 +488,28 @@ export const calculateAlternativeAllocations = (inputs, basePlan) => {
  * @param {object} assumptions - Return assumptions for each bucket
  * @param {object} inputs - Client inputs
  * @param {object} clientInfo - Client information
+ * @param {number} rebalanceFreq - Rebalancing frequency (0 = sequential/never, 1 = annual, 3 = every 3 years)
  * @returns {object} Simulation results with successRate and finalBalance
  */
-export const runOptimizedSimulation = (allocation, assumptions, inputs, clientInfo) => {
+export const runOptimizedSimulation = (allocation, assumptions, inputs, clientInfo, rebalanceFreq = 0) => {
   const { monthlySpending, ssPIA, partnerSSPIA, ssStartAge, partnerSSStartAge,
-    monthlyPension, pensionStartAge, pensionCOLA, inflationRate, personalInflationRate,
-    additionalIncomes } = inputs;
+    monthlyPension, pensionStartAge, pensionCOLA,
+    partnerMonthlyPension, partnerPensionStartAge, partnerPensionCOLA,
+    inflationRate, personalInflationRate, additionalIncomes } = inputs;
 
   const simulationStartAge = Math.max(clientInfo.currentAge, clientInfo.retirementAge);
   const years = 30;
   const iterations = 500;
+
+  // Calculate initial allocation percentages for rebalancing
+  const initialTotal = allocation.b1Val + allocation.b2Val + allocation.b3Val + allocation.b4Val + allocation.b5Val;
+  const targetPcts = {
+    b1: initialTotal > 0 ? allocation.b1Val / initialTotal : 0,
+    b2: initialTotal > 0 ? allocation.b2Val / initialTotal : 0,
+    b3: initialTotal > 0 ? allocation.b3Val / initialTotal : 0,
+    b4: initialTotal > 0 ? allocation.b4Val / initialTotal : 0,
+    b5: initialTotal > 0 ? allocation.b5Val / initialTotal : 0
+  };
 
   // Calculate SS values
   const clientSS = clientInfo.currentAge >= 67 ? ssPIA : getAdjustedSS(ssPIA, ssStartAge);
@@ -474,9 +534,16 @@ export const runOptimizedSimulation = (allocation, assumptions, inputs, clientIn
       income += monthlyPension * 12 * (pensionCOLA ? incomeInflationFactor : 1);
     }
 
+    // Partner pension
+    if (clientInfo.isMarried && partnerMonthlyPension > 0 && currentPartnerAge >= (partnerPensionStartAge || 65)) {
+      income += partnerMonthlyPension * 12 * (partnerPensionCOLA ? incomeInflationFactor : 1);
+    }
+
     // Recurring additional incomes
     (additionalIncomes || []).forEach(stream => {
-      if (!stream.isOneTime && simAge >= stream.startAge && simAge <= (stream.endAge || 100)) {
+      // Use partner's age if owner is 'partner', otherwise use client's age
+      const ownerAge = stream.owner === 'partner' ? currentPartnerAge : simAge;
+      if (!stream.isOneTime && ownerAge >= stream.startAge && ownerAge <= (stream.endAge || 100)) {
         let streamAmount = stream.amount * 12;
         if (stream.inflationAdjusted) streamAmount *= incomeInflationFactor;
         income += streamAmount;
@@ -486,7 +553,9 @@ export const runOptimizedSimulation = (allocation, assumptions, inputs, clientIn
     // One-time contributions
     let oneTimeContributions = 0;
     (additionalIncomes || []).forEach(stream => {
-      if (stream.isOneTime && simAge === stream.startAge) {
+      // Use partner's age if owner is 'partner', otherwise use client's age
+      const ownerAge = stream.owner === 'partner' ? currentPartnerAge : simAge;
+      if (stream.isOneTime && ownerAge === stream.startAge) {
         let streamAmount = stream.amount;
         if (stream.inflationAdjusted) streamAmount *= incomeInflationFactor;
         oneTimeContributions += streamAmount;
@@ -494,7 +563,7 @@ export const runOptimizedSimulation = (allocation, assumptions, inputs, clientIn
     });
 
     const gap = Math.max(0, expenses - income);
-    return { expenses, income, gap, simAge, oneTimeContributions };
+    return { expenses, income, gap, simAge, currentPartnerAge, oneTimeContributions };
   };
 
   let failureCount = 0;
@@ -541,6 +610,19 @@ export const runOptimizedSimulation = (allocation, assumptions, inputs, clientIn
         } else {
           withdrawalAmount -= balances[b];
           balances[b] = 0;
+        }
+      }
+
+      // Rebalance if frequency is set and it's a rebalance year
+      // Use (i + 1) since i is 0-indexed but we want year 1, 2, 3...
+      if (rebalanceFreq > 0 && (i + 1) % rebalanceFreq === 0) {
+        const currentTotal = balances.b1 + balances.b2 + balances.b3 + balances.b4 + balances.b5;
+        if (currentTotal > 0) {
+          balances.b1 = currentTotal * targetPcts.b1;
+          balances.b2 = currentTotal * targetPcts.b2;
+          balances.b3 = currentTotal * targetPcts.b3;
+          balances.b4 = currentTotal * targetPcts.b4;
+          balances.b5 = currentTotal * targetPcts.b5;
         }
       }
 

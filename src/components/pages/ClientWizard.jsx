@@ -796,7 +796,8 @@ export const ClientWizard = ({
           </h3>
 
           <div className="space-y-4">
-            {/* Primary Pension */}
+            {/* Client Pension */}
+            <p className="text-xs font-semibold text-slate-600 uppercase tracking-wider">{clientInfo.name || 'Client'}'s Pension</p>
             <div className="grid grid-cols-3 gap-4">
               <div className="relative group">
                 <label className="block text-xs font-bold text-slate-500 uppercase mb-1 flex items-center gap-1">
@@ -850,6 +851,65 @@ export const ClientWizard = ({
               </div>
             </div>
 
+            {/* Partner Pension - only show if married */}
+            {clientInfo.isMarried && (
+              <>
+                <p className="text-xs font-semibold text-slate-600 uppercase tracking-wider mt-4">{clientInfo.partnerName || 'Partner'}'s Pension</p>
+                <div className="grid grid-cols-3 gap-4">
+                  <div className="relative group">
+                    <label className="block text-xs font-bold text-slate-500 uppercase mb-1 flex items-center gap-1">
+                      Monthly Pension <Info className="w-3 h-3 text-slate-400" />
+                    </label>
+                    <div className="absolute left-0 bottom-full mb-2 hidden group-hover:block w-56 bg-slate-800 text-white text-xs p-2 rounded shadow-lg z-10">
+                      Partner's monthly pension or other guaranteed income amount.
+                    </div>
+                    <FormattedNumberInput
+                      name="partnerMonthlyPension"
+                      value={inputs.partnerMonthlyPension}
+                      onChange={onInputChange}
+                      className="p-3 border rounded-lg w-full"
+                    />
+                  </div>
+                  <div className="relative group">
+                    <label className="block text-xs font-bold text-slate-500 uppercase mb-1 flex items-center gap-1">
+                      Pension Start Age <Info className="w-3 h-3 text-slate-400" />
+                    </label>
+                    <div className="absolute left-0 bottom-full mb-2 hidden group-hover:block w-48 bg-slate-800 text-white text-xs p-2 rounded shadow-lg z-10">
+                      The age partner's pension payments begin.
+                    </div>
+                    <input
+                      type="number"
+                      name="partnerPensionStartAge"
+                      value={inputs.partnerPensionStartAge}
+                      onChange={onInputChange}
+                      min={55}
+                      max={80}
+                      className="p-3 border rounded-lg w-full"
+                    />
+                  </div>
+                  <div className="relative group">
+                    <label className="block text-xs font-bold text-slate-500 uppercase mb-1 flex items-center gap-1">
+                      COLA <Info className="w-3 h-3 text-slate-400" />
+                    </label>
+                    <div className="absolute left-0 bottom-full mb-2 hidden group-hover:block w-56 bg-slate-800 text-white text-xs p-2 rounded shadow-lg z-10">
+                      Does partner's pension have a Cost of Living Adjustment?
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => onInputChange({ target: { name: 'partnerPensionCOLA', type: 'checkbox', checked: !inputs.partnerPensionCOLA } })}
+                      className={`w-full p-3 rounded-lg font-bold transition-all ${
+                        inputs.partnerPensionCOLA
+                          ? 'bg-emerald-600 text-white border-2 border-emerald-600'
+                          : 'bg-white text-slate-600 border-2 border-slate-300 hover:border-emerald-400'
+                      }`}
+                    >
+                      {inputs.partnerPensionCOLA ? '✓ Yes' : 'No'}
+                    </button>
+                  </div>
+                </div>
+              </>
+            )}
+
             {/* Additional Income Streams */}
             <div className="border-t pt-4 mt-4">
               <div className="flex justify-between items-center mb-3">
@@ -870,7 +930,7 @@ export const ClientWizard = ({
 
               {inputs.additionalIncomes?.map((income) => (
                 <div key={income.id} className="p-3 bg-slate-50 rounded-lg border border-slate-200 mb-3">
-                  <div className="flex justify-between items-start mb-3">
+                  <div className="flex justify-between items-start mb-3 gap-2">
                     <select
                       value={income.name}
                       onChange={(e) => {
@@ -895,6 +955,17 @@ export const ClientWizard = ({
                       <option value="Business Sale">Business Sale (One-Time)</option>
                       <option value="Other">Other</option>
                     </select>
+                    {clientInfo.isMarried && (
+                      <select
+                        value={income.owner || 'client'}
+                        onChange={(e) => onUpdateAdditionalIncome(income.id, 'owner', e.target.value)}
+                        className="text-sm font-medium text-slate-700 bg-white border rounded px-2 py-1"
+                      >
+                        <option value="client">{clientInfo.name || 'Client'}</option>
+                        <option value="partner">{clientInfo.partnerName || 'Partner'}</option>
+                        <option value="joint">Joint</option>
+                      </select>
+                    )}
                     <button
                       onClick={() => onRemoveAdditionalIncome(income.id)}
                       className="p-1 text-red-500 hover:bg-red-50 rounded"

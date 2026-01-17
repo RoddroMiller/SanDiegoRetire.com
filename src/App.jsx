@@ -95,6 +95,9 @@ export default function BucketPortfolioBuilder() {
     monthlyPension: 0,
     pensionStartAge: 65,
     pensionCOLA: false,
+    partnerMonthlyPension: 0,
+    partnerPensionStartAge: 65,
+    partnerPensionCOLA: false,
     inflationRate: 2.5,
     personalInflationRate: 1.5,
     ssReinvestRate: 4.5,
@@ -241,7 +244,7 @@ export default function BucketPortfolioBuilder() {
       ...prev,
       additionalIncomes: [
         ...prev.additionalIncomes,
-        { id: Date.now(), name: '', amount: 0, startAge: clientInfo.retirementAge, endAge: 100, isOneTime: false, inflationAdjusted: false }
+        { id: Date.now(), name: '', amount: 0, startAge: clientInfo.retirementAge, endAge: 100, isOneTime: false, inflationAdjusted: false, owner: 'client' }
       ]
     }));
   };

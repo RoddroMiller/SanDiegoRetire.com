@@ -28,25 +28,29 @@ const getIncomeInflationFactor = (inflationRate, yearIndex) => {
 /**
  * Calculate income from additional income streams for a given age
  * @param {Array} additionalIncomes - Array of additional income streams
- * @param {number} age - Current age
+ * @param {number} clientAge - Current client age
+ * @param {number} partnerAge - Current partner age
  * @param {number} inflationFactor - Inflation adjustment factor
  * @returns {object} Object with recurring income and one-time contributions
  */
-const calculateAdditionalIncome = (additionalIncomes, age, inflationFactor) => {
+const calculateAdditionalIncome = (additionalIncomes, clientAge, partnerAge, inflationFactor) => {
   let income = 0;
   let oneTimeContributions = 0;
 
   additionalIncomes.forEach(stream => {
+    // Use partner's age if owner is 'partner', otherwise use client's age
+    const ownerAge = stream.owner === 'partner' ? partnerAge : clientAge;
+
     if (stream.isOneTime) {
       // One-time events: only apply at the specific age, add to portfolio
-      if (age === stream.startAge) {
+      if (ownerAge === stream.startAge) {
         let streamAmount = stream.amount;
         if (stream.inflationAdjusted) streamAmount *= inflationFactor;
         oneTimeContributions += streamAmount;
       }
     } else {
       // Recurring income: multiply by 12 for annual, apply over age range
-      if (age >= stream.startAge && age <= (stream.endAge || 100)) {
+      if (ownerAge >= stream.startAge && ownerAge <= (stream.endAge || 100)) {
         let streamAmount = stream.amount * 12;
         if (stream.inflationAdjusted) streamAmount *= inflationFactor;
         income += streamAmount;
@@ -93,7 +97,10 @@ export const calculateSSAnalysis = ({ inputs, clientInfo, assumptions, targetMax
       let income = 0;
 
       // Client SS income (variable based on strategy)
-      if (age >= startAge && age >= clientInfo.retirementAge) {
+      // If claiming at FRA (67) or later, no earnings test - can collect while working
+      // If claiming before FRA, wait until retirement to avoid earnings test penalties
+      const effectiveSSStartAge = startAge >= 67 ? startAge : Math.max(startAge, clientInfo.retirementAge);
+      if (age >= effectiveSSStartAge) {
         income += getAdjustedSS(inputs.ssPIA, startAge) * 12 * incomeInflationFactor;
       }
 
@@ -108,7 +115,7 @@ export const calculateSSAnalysis = ({ inputs, clientInfo, assumptions, targetMax
       }
 
       // Additional income streams (recurring only - one-time adds to portfolio)
-      const additionalIncomeResult = calculateAdditionalIncome(inputs.additionalIncomes || [], age, incomeInflationFactor);
+      const additionalIncomeResult = calculateAdditionalIncome(inputs.additionalIncomes || [], age, currentPartnerAge, incomeInflationFactor);
       income += additionalIncomeResult.income;
       balance += additionalIncomeResult.oneTimeContributions;
 
@@ -168,13 +175,17 @@ export const calculateSSPartnerAnalysis = ({ inputs, clientInfo, assumptions, ta
       let income = 0;
 
       // Client SS income (fixed at optimal age from client analysis)
-      if (age >= clientSSWinner.age && age >= clientInfo.retirementAge) {
+      // If claiming at FRA (67) or later, no earnings test - can collect while working
+      const effectiveClientSSStartAge = clientSSWinner.age >= 67 ? clientSSWinner.age : Math.max(clientSSWinner.age, clientInfo.retirementAge);
+      if (age >= effectiveClientSSStartAge) {
         income += getAdjustedSS(inputs.ssPIA, clientSSWinner.age) * 12 * incomeInflationFactor;
       }
 
       // Partner SS income (variable based on strategy)
-      // Assume partner works until their retirement age (earnings test applies if claiming early)
-      if (currentPartnerAge >= pStartAge && currentPartnerAge >= clientInfo.partnerRetirementAge) {
+      // If claiming at FRA (67) or later, no earnings test - can collect while working
+      // If claiming before FRA, wait until retirement to avoid earnings test penalties
+      const effectivePartnerSSStartAge = pStartAge >= 67 ? pStartAge : Math.max(pStartAge, clientInfo.partnerRetirementAge);
+      if (currentPartnerAge >= effectivePartnerSSStartAge) {
         income += getAdjustedSS(inputs.partnerSSPIA, pStartAge) * 12 * incomeInflationFactor;
       }
 
@@ -184,7 +195,7 @@ export const calculateSSPartnerAnalysis = ({ inputs, clientInfo, assumptions, ta
       }
 
       // Additional income streams (recurring only - one-time adds to portfolio)
-      const additionalIncomeResult = calculateAdditionalIncome(inputs.additionalIncomes || [], age, incomeInflationFactor);
+      const additionalIncomeResult = calculateAdditionalIncome(inputs.additionalIncomes || [], age, currentPartnerAge, incomeInflationFactor);
       income += additionalIncomeResult.income;
       balance += additionalIncomeResult.oneTimeContributions;
 
