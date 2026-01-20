@@ -3,7 +3,7 @@ import React, { useState, useMemo, useEffect } from 'react';
 // --- Local Imports ---
 import { formatPhoneNumber, calculateAccumulation, calculateBasePlan, runSimulation, calculateSSAnalysis, calculateSSPartnerAnalysis, getAdjustedSS, calculateAlternativeAllocations, runOptimizedSimulation } from './utils';
 import { GateScreen, LoginScreen, ClientLoginScreen, AccumulationPage, ArchitectPage, ClientWizard, PlanManagement } from './components';
-import { useAuth, useScenarios, useAdvisors } from './hooks';
+import { useAuth, useScenarios, useAdvisors, useCommandCenter } from './hooks';
 
 // --- Main Application ---
 
@@ -54,6 +54,13 @@ export default function BucketPortfolioBuilder() {
     refreshAdvisors
   } = useAdvisors();
 
+  // --- Command Center Hook (The One Process integration) ---
+  const {
+    commandCenterStatus,
+    saveToCommandCenter,
+    isCommandCenterConnected
+  } = useCommandCenter({ currentUser });
+
   // App State
   const [step, setStep] = useState(1);
   const [showSettings, setShowSettings] = useState(true);
@@ -65,6 +72,12 @@ export default function BucketPortfolioBuilder() {
 
   // SS Recommendation State
   const [targetMaxPortfolioAge, setTargetMaxPortfolioAge] = useState(80);
+
+  // Manual Allocation Override
+  const [useManualAllocation, setUseManualAllocation] = useState(false);
+  const [manualAllocations, setManualAllocations] = useState({
+    b1: 0, b2: 0, b3: 0, b4: 0, b5: 0
+  });
 
   // Client Data
   const [clientInfo, setClientInfo] = useState({
@@ -118,6 +131,15 @@ export default function BucketPortfolioBuilder() {
     saveScenario({ clientInfo, inputs, assumptions, targetMaxPortfolioAge, rebalanceFreq });
   };
 
+  const handleSaveToCommandCenter = async () => {
+    const result = await saveToCommandCenter({ clientInfo, inputs, assumptions, targetMaxPortfolioAge, rebalanceFreq });
+    if (result.success) {
+      alert(result.message);
+    } else {
+      alert(`Error: ${result.message}`);
+    }
+  };
+
   const handleClientSubmit = () => {
     submitClientScenario({ clientInfo, inputs, assumptions, targetMaxPortfolioAge, rebalanceFreq });
   };
@@ -141,9 +163,54 @@ export default function BucketPortfolioBuilder() {
     handleLogout(clearScenarios);
   };
 
+  // --- Manual Allocation Handlers ---
+  const handleManualAllocationChange = (bucket, value) => {
+    setManualAllocations(prev => ({ ...prev, [bucket]: value }));
+  };
+
+  const handleRecalculateFromFormula = () => {
+    // Reset to formula-calculated values
+    setManualAllocations({
+      b1: formulaBasePlan.b1Val,
+      b2: formulaBasePlan.b2Val,
+      b3: formulaBasePlan.b3Val,
+      b4: formulaBasePlan.b4Val,
+      b5: formulaBasePlan.b5Val
+    });
+  };
+
+  const handleToggleManualAllocation = (enabled) => {
+    if (enabled && !useManualAllocation) {
+      // When enabling manual mode, initialize with current formula values
+      setManualAllocations({
+        b1: formulaBasePlan.b1Val,
+        b2: formulaBasePlan.b2Val,
+        b3: formulaBasePlan.b3Val,
+        b4: formulaBasePlan.b4Val,
+        b5: formulaBasePlan.b5Val
+      });
+    }
+    setUseManualAllocation(enabled);
+  };
+
   // --- Calculations (using imported utilities) ---
   const accumulationData = useMemo(() => calculateAccumulation(clientInfo, inputs.inflationRate, inputs.additionalIncomes), [clientInfo, inputs.inflationRate, inputs.additionalIncomes]);
-  const basePlan = useMemo(() => calculateBasePlan(inputs, assumptions, clientInfo), [inputs, assumptions, clientInfo]);
+  const formulaBasePlan = useMemo(() => calculateBasePlan(inputs, assumptions, clientInfo), [inputs, assumptions, clientInfo]);
+
+  // Use manual allocations if enabled, otherwise use formula-calculated values
+  const basePlan = useMemo(() => {
+    if (useManualAllocation) {
+      return {
+        ...formulaBasePlan,
+        b1Val: manualAllocations.b1,
+        b2Val: manualAllocations.b2,
+        b3Val: manualAllocations.b3,
+        b4Val: manualAllocations.b4,
+        b5Val: manualAllocations.b5
+      };
+    }
+    return formulaBasePlan;
+  }, [formulaBasePlan, useManualAllocation, manualAllocations]);
 
   const ssAnalysis = useMemo(() => calculateSSAnalysis({
     inputs,
@@ -528,6 +595,17 @@ export default function BucketPortfolioBuilder() {
       onUpdateAdditionalIncome={updateAdditionalIncome}
       onRemoveAdditionalIncome={removeAdditionalIncome}
       onViewManagement={() => setAdvisorView('management')}
+      // Command Center (The One Process) integration
+      commandCenterStatus={commandCenterStatus}
+      onSaveToCommandCenter={handleSaveToCommandCenter}
+      isCommandCenterConnected={isCommandCenterConnected}
+      // Manual Allocation Override
+      useManualAllocation={useManualAllocation}
+      manualAllocations={manualAllocations}
+      onToggleManualAllocation={handleToggleManualAllocation}
+      onManualAllocationChange={handleManualAllocationChange}
+      onRecalculateFromFormula={handleRecalculateFromFormula}
+      formulaAllocations={formulaBasePlan}
     />
   );
 }

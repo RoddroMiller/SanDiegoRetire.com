@@ -8,11 +8,11 @@ import {
   ChevronDown, ChevronUp, Activity, BarChart2, Briefcase, Download, Lock,
   RefreshCw, Percent, Plus, Trash2, History, User, Users, FileText, ArrowRight,
   Info, CheckCircle, RefreshCcw, MousePointerClick, Save, FolderOpen, Loader,
-  LogIn, LogOut, UserCheck, Send, Table as TableIcon, PiggyBank, Layers, Target
+  LogIn, LogOut, UserCheck, Send, Table as TableIcon, PiggyBank, Layers, Target, Upload
 } from 'lucide-react';
 
 import { COLORS, LOGO_URL } from '../../constants';
-import { getAdjustedSS } from '../../utils';
+import { getAdjustedSS, generateAndDownloadIPS } from '../../utils';
 import { Card, StatBox, AllocationRow, FormattedNumberInput, Disclaimer } from '../ui';
 
 /**
@@ -68,7 +68,18 @@ export const ArchitectPage = ({
   onUpdateAdditionalIncome,
   onRemoveAdditionalIncome,
   // Navigation
-  onViewManagement
+  onViewManagement,
+  // Command Center (The One Process) integration
+  commandCenterStatus,
+  onSaveToCommandCenter,
+  isCommandCenterConnected,
+  // Manual Allocation Override
+  useManualAllocation,
+  manualAllocations,
+  onToggleManualAllocation,
+  onManualAllocationChange,
+  onRecalculateFromFormula,
+  formulaAllocations
 }) => {
   // Improvement solution selections
   const [selectedImprovements, setSelectedImprovements] = useState({
@@ -285,6 +296,18 @@ export const ArchitectPage = ({
               >
                 {saveStatus === 'saving' ? <Loader className="w-3 h-3 sm:w-4 sm:h-4 animate-spin" /> : saveStatus === 'success' ? <CheckCircle className="w-3 h-3 sm:w-4 sm:h-4" /> : <Save className="w-3 h-3 sm:w-4 sm:h-4" />}
                 {saveStatus === 'success' ? 'Saved' : 'Save'}
+              </button>
+            )}
+            {userRole !== 'client' && isCommandCenterConnected && (
+              <button
+                onClick={onSaveToCommandCenter}
+                disabled={commandCenterStatus === 'saving'}
+                className={`flex items-center gap-1 sm:gap-2 px-2 sm:px-4 py-1.5 sm:py-2 text-white rounded-lg shadow-sm transition-all font-medium text-xs sm:text-sm ${commandCenterStatus === 'success' ? 'bg-green-600' : 'bg-blue-600 hover:bg-blue-700'}`}
+                title="Save to The One Process Client Command Center"
+              >
+                {commandCenterStatus === 'saving' ? <Loader className="w-3 h-3 sm:w-4 sm:h-4 animate-spin" /> : commandCenterStatus === 'success' ? <CheckCircle className="w-3 h-3 sm:w-4 sm:h-4" /> : <Upload className="w-3 h-3 sm:w-4 sm:h-4" />}
+                <span className="hidden sm:inline">{commandCenterStatus === 'success' ? 'Saved!' : 'Save to Client'}</span>
+                <span className="sm:hidden">{commandCenterStatus === 'success' ? 'Saved!' : 'Client'}</span>
               </button>
             )}
             {userRole === 'client' && (
@@ -903,6 +926,12 @@ export const ArchitectPage = ({
               onSetShowCashFlowTable={onSetShowCashFlowTable}
               rebalanceFreq={rebalanceFreq}
               onSetRebalanceFreq={onSetRebalanceFreq}
+              useManualAllocation={useManualAllocation}
+              manualAllocations={manualAllocations}
+              onToggleManualAllocation={onToggleManualAllocation}
+              onManualAllocationChange={onManualAllocationChange}
+              onRecalculateFromFormula={onRecalculateFromFormula}
+              formulaAllocations={formulaAllocations}
             />
           )}
 
@@ -954,6 +983,8 @@ export const ArchitectPage = ({
               projectionData={projectionData}
               optimizerRebalanceFreq={optimizerRebalanceFreq}
               onSetOptimizerRebalanceFreq={onSetOptimizerRebalanceFreq}
+              clientInfo={clientInfo}
+              assumptions={assumptions}
             />
           )}
         </div>
@@ -1771,15 +1802,94 @@ export const ArchitectPage = ({
 };
 
 // Sub-components for tabs
-const AllocationTab = ({ inputs, basePlan, assumptions, projectionData, clientInfo, showCashFlowTable, onSetShowCashFlowTable, rebalanceFreq, onSetRebalanceFreq }) => (
+const AllocationTab = ({
+  inputs, basePlan, assumptions, projectionData, clientInfo,
+  showCashFlowTable, onSetShowCashFlowTable, rebalanceFreq, onSetRebalanceFreq,
+  useManualAllocation, manualAllocations, onToggleManualAllocation,
+  onManualAllocationChange, onRecalculateFromFormula, formulaAllocations
+}) => (
   <div className="mt-6 animate-in fade-in duration-300">
     <div className="flex justify-between items-start mb-4 hidden print:flex">
       <h2 className="text-2xl font-bold text-slate-900">Phase 2: Distribution Allocation</h2>
       <img src={LOGO_URL} alt="Logo" className="h-12" />
     </div>
+    {/* Manual Allocation Toggle */}
+    <Card className="p-4 mb-6 print:hidden">
+      <div className="flex flex-wrap items-center justify-between gap-4">
+        <div className="flex items-center gap-3">
+          <label className="flex items-center gap-2 cursor-pointer">
+            <input
+              type="checkbox"
+              checked={useManualAllocation}
+              onChange={(e) => onToggleManualAllocation(e.target.checked)}
+              className="w-4 h-4 rounded border-slate-300 text-emerald-600 focus:ring-emerald-500"
+            />
+            <span className="font-medium text-slate-700">Manual Allocation Override</span>
+          </label>
+          {useManualAllocation && (
+            <span className="text-xs bg-amber-100 text-amber-700 px-2 py-1 rounded-full font-medium">
+              Custom Mode
+            </span>
+          )}
+        </div>
+        {useManualAllocation && (
+          <button
+            onClick={onRecalculateFromFormula}
+            className="flex items-center gap-2 px-3 py-1.5 text-sm bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg transition-colors"
+          >
+            <RefreshCw className="w-4 h-4" /> Recalculate from Formula
+          </button>
+        )}
+      </div>
+
+      {useManualAllocation && (
+        <div className="mt-4 grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-3">
+          {[
+            { key: 'b1', label: 'B1 Short Term', color: COLORS.shortTerm },
+            { key: 'b2', label: 'B2 Mid Term', color: COLORS.midTerm },
+            { key: 'b3', label: 'B3 Balanced', color: COLORS.hedged },
+            { key: 'b4', label: 'B4 Inc & Gro', color: COLORS.income },
+            { key: 'b5', label: 'B5 Long Term', color: COLORS.longTerm },
+          ].map(({ key, label, color }) => (
+            <div key={key} className="relative">
+              <label className="block text-xs font-medium text-slate-600 mb-1">
+                <span className="inline-block w-2 h-2 rounded-full mr-1" style={{ backgroundColor: color }}></span>
+                {label}
+              </label>
+              <div className="relative">
+                <span className="absolute left-2 top-1/2 -translate-y-1/2 text-slate-400 text-sm">$</span>
+                <input
+                  type="number"
+                  value={Math.round(manualAllocations[key])}
+                  onChange={(e) => onManualAllocationChange(key, parseFloat(e.target.value) || 0)}
+                  className="w-full pl-5 pr-2 py-1.5 text-sm border border-slate-200 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500"
+                />
+              </div>
+              <div className="text-xs text-slate-400 mt-0.5">
+                Formula: ${Math.round(formulaAllocations[`${key}Val`] || 0).toLocaleString()}
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {useManualAllocation && (
+        <div className="mt-3 flex items-center justify-between text-sm">
+          <span className="text-slate-600">
+            Total: <span className="font-bold">${(manualAllocations.b1 + manualAllocations.b2 + manualAllocations.b3 + manualAllocations.b4 + manualAllocations.b5).toLocaleString()}</span>
+          </span>
+          <span className={`font-medium ${Math.abs((manualAllocations.b1 + manualAllocations.b2 + manualAllocations.b3 + manualAllocations.b4 + manualAllocations.b5) - inputs.totalPortfolio) < 1 ? 'text-green-600' : 'text-amber-600'}`}>
+            {Math.abs((manualAllocations.b1 + manualAllocations.b2 + manualAllocations.b3 + manualAllocations.b4 + manualAllocations.b5) - inputs.totalPortfolio) < 1
+              ? '✓ Matches portfolio'
+              : `Difference: $${((manualAllocations.b1 + manualAllocations.b2 + manualAllocations.b3 + manualAllocations.b4 + manualAllocations.b5) - inputs.totalPortfolio).toLocaleString()}`}
+          </span>
+        </div>
+      )}
+    </Card>
+
     <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
       <Card className="p-6 flex flex-col justify-center">
-        <h3 className="font-bold text-lg text-slate-800 mb-6">Target Allocation</h3>
+        <h3 className="font-bold text-lg text-slate-800 mb-6">Target Allocation {useManualAllocation && <span className="text-xs font-normal text-amber-600">(Manual)</span>}</h3>
         <div className="h-64 w-full relative">
           <ResponsiveContainer width="100%" height="100%">
             <PieChart>
@@ -1880,6 +1990,7 @@ const AllocationTab = ({ inputs, basePlan, assumptions, projectionData, clientIn
               <option value={0}>Sequential (No Rebalance)</option>
               <option value={1}>Annual Rebalance</option>
               <option value={3}>Every 3 Years</option>
+              <option value={6}>Every 6 Years</option>
             </select>
           </div>
         </div>
@@ -2408,7 +2519,9 @@ const ArchitectureTab = ({ inputs, basePlan, assumptions, projectionData }) => {
   );
 };
 
-const OptimizerTab = ({ optimizerData, inputs, basePlan, monteCarloData, projectionData, optimizerRebalanceFreq, onSetOptimizerRebalanceFreq }) => {
+const OptimizerTab = ({ optimizerData, inputs, basePlan, monteCarloData, projectionData, optimizerRebalanceFreq, onSetOptimizerRebalanceFreq, clientInfo, assumptions }) => {
+  const [selectedIPSStrategy, setSelectedIPSStrategy] = useState(null);
+
   // Safety check - if optimizerData isn't ready yet, show loading
   if (!optimizerData || !optimizerData.strategy1 || !optimizerData.strategy2 || !optimizerData.strategy3) {
     return (
@@ -2423,7 +2536,8 @@ const OptimizerTab = ({ optimizerData, inputs, basePlan, monteCarloData, project
   const distributionStrategies = [
     { value: 0, label: 'Sequential Distribution', description: 'Withdraw from buckets in order (B1→B2→B3→B4→B5) without rebalancing' },
     { value: 1, label: 'Annual Rebalance', description: 'Rebalance to target allocations every year' },
-    { value: 3, label: 'Rebalance Every 3 Years', description: 'Rebalance to target allocations every 3 years' }
+    { value: 3, label: 'Rebalance Every 3 Years', description: 'Rebalance to target allocations every 3 years' },
+    { value: 6, label: 'Rebalance Every 6 Years', description: 'Rebalance to target allocations every 6 years' }
   ];
 
   // Helper to format allocation as percentages
@@ -2496,20 +2610,30 @@ const OptimizerTab = ({ optimizerData, inputs, basePlan, monteCarloData, project
   const sortedByLegacy = [...strategiesWithSimilarSuccess].sort((a, b) => (b.medianLegacy || 0) - (a.medianLegacy || 0));
   const bestStrategy = sortedByLegacy[0];
 
-  const StrategyCard = ({ strategy, isBest, isSafest }) => {
+  const StrategyCard = ({ strategy, isBest, isSafest, isSelected, onSelect }) => {
     const pct = getAllocationPercentages(strategy.allocation);
     const successRate = strategy.successRate || 0;
     const legacy = strategy.medianLegacy || 0;
     const hasHighlight = isBest || isSafest;
 
     return (
-      <Card className={`p-5 ${hasHighlight ? 'ring-2 ' + (isBest ? 'ring-emerald-500 bg-emerald-50' : 'ring-blue-500 bg-blue-50') : ''}`}>
+      <Card
+        className={`p-5 cursor-pointer transition-all ${
+          isSelected
+            ? 'ring-2 ring-indigo-500 bg-indigo-50'
+            : hasHighlight
+              ? 'ring-2 ' + (isBest ? 'ring-emerald-500 bg-emerald-50' : 'ring-blue-500 bg-blue-50')
+              : 'hover:shadow-md'
+        }`}
+        onClick={() => onSelect(strategy)}
+      >
         <div className="flex justify-between items-start mb-4">
           <div>
             <h4 className="font-bold text-slate-800 flex items-center gap-2">
               {strategy.name}
               {isBest && <span className="text-xs bg-emerald-500 text-white px-2 py-0.5 rounded">Best</span>}
               {isSafest && !isBest && <span className="text-xs bg-blue-500 text-white px-2 py-0.5 rounded">Safest</span>}
+              {isSelected && <span className="text-xs bg-indigo-500 text-white px-2 py-0.5 rounded">Selected for IPS</span>}
             </h4>
             {strategy.isCurrent && <span className="text-xs text-slate-500">Your current allocation</span>}
           </div>
@@ -2606,9 +2730,59 @@ const OptimizerTab = ({ optimizerData, inputs, basePlan, monteCarloData, project
             strategy={strategy}
             isBest={strategy.key === bestStrategy.key}
             isSafest={strategy.key === safestStrategy.key}
+            isSelected={selectedIPSStrategy?.key === strategy.key}
+            onSelect={setSelectedIPSStrategy}
           />
         ))}
       </div>
+
+      {/* IPS Generation Section */}
+      <Card className="p-5 bg-gradient-to-r from-indigo-50 to-purple-50 border-indigo-200">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+          <div className="flex items-start gap-4">
+            <div className="p-3 bg-indigo-100 rounded-full">
+              <FileText className="w-6 h-6 text-indigo-600" />
+            </div>
+            <div>
+              <h4 className="font-bold text-slate-800">Investment Policy Statement</h4>
+              <p className="text-slate-600 text-sm mt-1">
+                {selectedIPSStrategy
+                  ? `Generate an IPS document using the "${selectedIPSStrategy.name}" strategy with ${distributionStrategies.find(s => s.value === optimizerRebalanceFreq)?.label || 'Sequential Distribution'}.`
+                  : 'Click on a strategy above to select it for your Investment Policy Statement, then generate the document.'
+                }
+              </p>
+            </div>
+          </div>
+          <button
+            onClick={() => {
+              const strategyToUse = selectedIPSStrategy || bestStrategy;
+              generateAndDownloadIPS({
+                clientInfo,
+                inputs,
+                assumptions,
+                selectedStrategy: strategyToUse,
+                distributionFreq: optimizerRebalanceFreq,
+                monteCarloData
+              });
+            }}
+            disabled={!clientInfo?.name}
+            className={`flex items-center gap-2 px-6 py-3 rounded-lg font-medium transition-all whitespace-nowrap ${
+              clientInfo?.name
+                ? 'bg-indigo-600 text-white hover:bg-indigo-700 shadow-md'
+                : 'bg-slate-300 text-slate-500 cursor-not-allowed'
+            }`}
+            title={!clientInfo?.name ? 'Please enter client name to generate IPS' : ''}
+          >
+            <Download className="w-5 h-5" />
+            Generate IPS
+          </button>
+        </div>
+        {!clientInfo?.name && (
+          <p className="text-xs text-amber-600 mt-3 flex items-center gap-1">
+            <AlertCircle className="w-3 h-3" /> Client name is required to generate the Investment Policy Statement.
+          </p>
+        )}
+      </Card>
 
       {/* Recommendation Box */}
       <Card className="p-5 bg-gradient-to-r from-emerald-50 to-teal-50 border-emerald-200">
