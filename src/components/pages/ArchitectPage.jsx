@@ -73,6 +73,8 @@ export const ArchitectPage = ({
   commandCenterStatus,
   onSaveToCommandCenter,
   isCommandCenterConnected,
+  commandCenterClients,
+  isLoadingClients,
   // Manual Allocation Override
   useManualAllocation,
   manualAllocations,
@@ -81,6 +83,10 @@ export const ArchitectPage = ({
   onRecalculateFromFormula,
   formulaAllocations
 }) => {
+  // Command Center client selector state
+  const [showClientSelector, setShowClientSelector] = useState(false);
+  const [selectedCommandCenterClient, setSelectedCommandCenterClient] = useState(null);
+
   // Improvement solution selections
   const [selectedImprovements, setSelectedImprovements] = useState({
     delay: false,
@@ -300,7 +306,7 @@ export const ArchitectPage = ({
             )}
             {userRole !== 'client' && isCommandCenterConnected && (
               <button
-                onClick={onSaveToCommandCenter}
+                onClick={() => setShowClientSelector(true)}
                 disabled={commandCenterStatus === 'saving'}
                 className={`flex items-center gap-1 sm:gap-2 px-2 sm:px-4 py-1.5 sm:py-2 text-white rounded-lg shadow-sm transition-all font-medium text-xs sm:text-sm ${commandCenterStatus === 'success' ? 'bg-green-600' : 'bg-blue-600 hover:bg-blue-700'}`}
                 title="Save to The One Process Client Command Center"
@@ -1797,6 +1803,93 @@ export const ArchitectPage = ({
 
         <PrintFooter pageNumber={9} />
       </div>
+
+      {/* Command Center Client Selector Modal */}
+      {showClientSelector && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-xl shadow-2xl max-w-md w-full max-h-[80vh] overflow-hidden">
+            <div className="p-4 border-b border-slate-200 flex justify-between items-center">
+              <h3 className="font-bold text-lg text-slate-800">Save to Command Center</h3>
+              <button
+                onClick={() => setShowClientSelector(false)}
+                className="text-slate-400 hover:text-slate-600 text-2xl leading-none"
+              >
+                &times;
+              </button>
+            </div>
+            <div className="p-4">
+              <p className="text-sm text-slate-600 mb-4">Select a client to save this portfolio plan:</p>
+              {isLoadingClients ? (
+                <div className="flex items-center justify-center py-8">
+                  <Loader className="w-6 h-6 animate-spin text-blue-600" />
+                  <span className="ml-2 text-slate-600">Loading clients...</span>
+                </div>
+              ) : commandCenterClients.length === 0 ? (
+                <div className="text-center py-8">
+                  <Users className="w-12 h-12 text-slate-300 mx-auto mb-3" />
+                  <p className="text-slate-500">No clients found in Command Center.</p>
+                  <p className="text-sm text-slate-400 mt-1">Create a client in the Command Center first.</p>
+                </div>
+              ) : (
+                <div className="space-y-2 max-h-60 overflow-y-auto">
+                  {commandCenterClients.map((client) => (
+                    <button
+                      key={client.id}
+                      onClick={() => setSelectedCommandCenterClient(client)}
+                      className={`w-full text-left p-3 rounded-lg border transition-all ${
+                        selectedCommandCenterClient?.id === client.id
+                          ? 'border-blue-500 bg-blue-50'
+                          : 'border-slate-200 hover:border-slate-300 hover:bg-slate-50'
+                      }`}
+                    >
+                      <div className="font-medium text-slate-800">{client.displayName}</div>
+                      {client.email && (
+                        <div className="text-sm text-slate-500">{client.email}</div>
+                      )}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+            <div className="p-4 border-t border-slate-200 flex justify-end gap-3">
+              <button
+                onClick={() => setShowClientSelector(false)}
+                className="px-4 py-2 text-slate-600 hover:text-slate-800 font-medium"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={async () => {
+                  if (!selectedCommandCenterClient) {
+                    alert('Please select a client first.');
+                    return;
+                  }
+                  const result = await onSaveToCommandCenter(selectedCommandCenterClient.id);
+                  if (result.success) {
+                    alert(result.message);
+                    setShowClientSelector(false);
+                    setSelectedCommandCenterClient(null);
+                  } else {
+                    alert(`Error: ${result.message}`);
+                  }
+                }}
+                disabled={!selectedCommandCenterClient || commandCenterStatus === 'saving'}
+                className="px-4 py-2 bg-blue-600 text-white rounded-lg font-medium hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+              >
+                {commandCenterStatus === 'saving' ? (
+                  <>
+                    <Loader className="w-4 h-4 animate-spin" /> Saving...
+                  </>
+                ) : (
+                  <>
+                    <Upload className="w-4 h-4" /> Save to Client
+                  </>
+                )}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

@@ -58,7 +58,9 @@ export default function BucketPortfolioBuilder() {
   const {
     commandCenterStatus,
     saveToCommandCenter,
-    isCommandCenterConnected
+    isCommandCenterConnected,
+    commandCenterClients,
+    isLoadingClients
   } = useCommandCenter({ currentUser });
 
   // App State
@@ -131,13 +133,18 @@ export default function BucketPortfolioBuilder() {
     saveScenario({ clientInfo, inputs, assumptions, targetMaxPortfolioAge, rebalanceFreq });
   };
 
-  const handleSaveToCommandCenter = async () => {
-    const result = await saveToCommandCenter({ clientInfo, inputs, assumptions, targetMaxPortfolioAge, rebalanceFreq });
-    if (result.success) {
-      alert(result.message);
-    } else {
-      alert(`Error: ${result.message}`);
-    }
+  const handleSaveToCommandCenter = async (selectedClientId) => {
+    const result = await saveToCommandCenter({
+      clientInfo,
+      inputs,
+      assumptions,
+      targetMaxPortfolioAge,
+      rebalanceFreq,
+      // Include computed data for Command Center display
+      monteCarloData,
+      basePlan
+    }, selectedClientId);
+    return result;
   };
 
   const handleClientSubmit = () => {
@@ -599,6 +606,8 @@ export default function BucketPortfolioBuilder() {
       commandCenterStatus={commandCenterStatus}
       onSaveToCommandCenter={handleSaveToCommandCenter}
       isCommandCenterConnected={isCommandCenterConnected}
+      commandCenterClients={commandCenterClients}
+      isLoadingClients={isLoadingClients}
       // Manual Allocation Override
       useManualAllocation={useManualAllocation}
       manualAllocations={manualAllocations}
