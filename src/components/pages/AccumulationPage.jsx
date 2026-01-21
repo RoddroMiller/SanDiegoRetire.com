@@ -50,13 +50,13 @@ export const AccumulationPage = ({
                   <Settings className="w-3 h-3 sm:w-4 sm:h-4" /> <span className="hidden xs:inline">Manage</span> Plans
                 </button>
                 <div className="text-right">
-                  <p className="text-[10px] sm:text-xs text-gray-400 uppercase">Logged in as</p>
+                  <p className="text-[12px] sm:text-xs text-gray-400 uppercase">Logged in as</p>
                   <p className="text-xs sm:text-sm font-bold text-emerald-400">
                     {userRole === 'master' ? 'Master Advisor' : 'Advisor'}
                   </p>
                   <button
                     onClick={onLogout}
-                    className="text-[10px] text-white hover:text-red-400 flex items-center gap-1 justify-end mt-1"
+                    className="text-[12px] text-white hover:text-red-400 flex items-center gap-1 justify-end mt-1"
                   >
                     <LogOut className="w-3 h-3" /> Logout
                   </button>
@@ -93,12 +93,12 @@ export const AccumulationPage = ({
                               {s.clientInfo.name || s.clientInfo.email || 'Unnamed'}
                             </p>
                             {s.isClientSubmission && (
-                              <span className="bg-emerald-100 text-emerald-700 text-[9px] px-1.5 py-0.5 rounded-full font-bold uppercase tracking-wider">
+                              <span className="bg-emerald-100 text-emerald-700 text-[12px] px-1.5 py-0.5 rounded-full font-bold uppercase tracking-wider">
                                 New Submission
                               </span>
                             )}
                           </div>
-                          <div className="flex items-center gap-2 text-[10px] text-slate-400">
+                          <div className="flex items-center gap-2 text-[12px] text-slate-400">
                             <span>{new Date(s.updatedAt).toLocaleDateString()}</span>
                             {userRole === 'master' && (
                               <span className="bg-slate-200 px-1 rounded text-slate-600">{s.advisorEmail}</span>

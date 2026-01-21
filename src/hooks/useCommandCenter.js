@@ -133,6 +133,11 @@ export const useCommandCenter = ({ currentUser }) => {
         simulations: 500
       },
 
+      // Projected legacy (median balance at end of simulation period)
+      projectedLegacy: monteCarloData?.data?.length > 0
+        ? monteCarloData.data[monteCarloData.data.length - 1]?.median || 0
+        : 0,
+
       // Asset allocation (mapped to Command Center's expected format)
       // Command Center expects: stocks, bonds, cash, alternatives
       // We'll map our buckets: B1=cash, B2=bonds, B3-B4=balanced, B5=stocks

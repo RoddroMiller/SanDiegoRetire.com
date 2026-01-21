@@ -14,3 +14,8 @@ export {
   calculateSSPartnerAnalysis,
   calculateBreakevenData
 } from './ssAnalysis';
+export {
+  generateIPSContent,
+  downloadIPS,
+  generateAndDownloadIPS
+} from './ipsGenerator';
