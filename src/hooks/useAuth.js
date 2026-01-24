@@ -141,8 +141,10 @@ export const useAuth = () => {
       // The onAuthStateChanged will set the role to 'registeredClient'
       setViewMode('app');
     } catch (e) {
+      console.log('Client login error:', e.code, e.message);
       if (e.code === 'auth/multi-factor-auth-required') {
         // MFA verification required
+        console.log('MFA required, showing verification modal');
         mfaResolverRef.current = getMultiFactorResolver(auth, e);
         pendingCredentialsRef.current = { email, password };
         setMfaRequired(true);
@@ -233,8 +235,10 @@ export const useAuth = () => {
       await signInToCommandCenter(email, password);
       setViewMode('app');
     } catch (e) {
+      console.log('Login error:', e.code, e.message);
       if (e.code === 'auth/multi-factor-auth-required') {
         // MFA verification required
+        console.log('MFA required, showing verification modal');
         mfaResolverRef.current = getMultiFactorResolver(auth, e);
         pendingCredentialsRef.current = { email, password };
         setMfaRequired(true);
