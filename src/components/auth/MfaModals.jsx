@@ -149,7 +149,7 @@ export const MfaEnrollModal = ({ onStartEnrollment, onComplete, onCancel, error 
                 <div className="text-slate-400">Loading QR code...</div>
               ) : qrData ? (
                 <img
-                  src={`https://chart.googleapis.com/chart?cht=qr&chs=200x200&chl=${encodeURIComponent(qrData.qrUrl)}`}
+                  src={`https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${encodeURIComponent(qrData.qrUrl)}`}
                   alt="QR Code for Google Authenticator"
                   className="rounded-lg"
                 />
