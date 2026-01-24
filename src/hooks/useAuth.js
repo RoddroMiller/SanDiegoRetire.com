@@ -8,7 +8,7 @@ import {
   signOut
 } from 'firebase/auth';
 import { collection, getDocs } from 'firebase/firestore';
-import { auth, db, appId, MASTER_EMAIL } from '../constants';
+import { auth, db, appId, MASTER_EMAIL, signInToCommandCenter } from '../constants';
 
 /**
  * Custom hook for managing authentication state and actions
@@ -115,6 +115,8 @@ export const useAuth = () => {
     setAuthError('');
     try {
       await signInWithEmailAndPassword(auth, email, password);
+      // Also sign in to Command Center to enable cross-project queries
+      await signInToCommandCenter(email, password);
       // The onAuthStateChanged will set the role to 'registeredClient'
       setViewMode('app');
     } catch (e) {
@@ -136,6 +138,8 @@ export const useAuth = () => {
     setAuthError('');
     try {
       await createUserWithEmailAndPassword(auth, email, password);
+      // Also sign in to Command Center to enable cross-project queries
+      await signInToCommandCenter(email, password);
       // The onAuthStateChanged will check if they have plans assigned and set role accordingly
       setViewMode('app');
     } catch (e) {
@@ -185,6 +189,8 @@ export const useAuth = () => {
       } else {
         await signInWithEmailAndPassword(auth, email, password);
       }
+      // Also sign in to Command Center to enable cross-project queries
+      await signInToCommandCenter(email, password);
       setViewMode('app');
     } catch (e) {
       setAuthError(e.message);
