@@ -100,14 +100,20 @@ export const checkAccountLockout = async (email) => {
  */
 export const recordFailedAttempt = async (email) => {
   try {
+    console.log('Recording failed attempt for:', email);
     const docRef = getSecurityDocRef(email);
+    console.log('Security doc path:', docRef.path);
+
     const docSnap = await getDoc(docRef);
+    console.log('Doc exists:', docSnap.exists());
 
     let failedAttempts = 1;
 
     if (docSnap.exists()) {
       failedAttempts = (docSnap.data().failedAttempts || 0) + 1;
     }
+
+    console.log('Failed attempts count:', failedAttempts);
 
     const updateData = {
       email: email.toLowerCase(),
@@ -127,6 +133,8 @@ export const recordFailedAttempt = async (email) => {
       await setDoc(docRef, { ...updateData, createdAt: serverTimestamp() });
     }
 
+    console.log('Successfully recorded failed attempt. Remaining:', MAX_FAILED_ATTEMPTS - failedAttempts);
+
     return {
       attemptCount: failedAttempts,
       isLocked: failedAttempts >= MAX_FAILED_ATTEMPTS,
@@ -134,6 +142,8 @@ export const recordFailedAttempt = async (email) => {
     };
   } catch (error) {
     console.error('Error recording failed attempt:', error);
+    console.error('Error code:', error.code);
+    console.error('Error message:', error.message);
     return { attemptCount: 1, isLocked: false, remainingAttempts: MAX_FAILED_ATTEMPTS - 1 };
   }
 };
