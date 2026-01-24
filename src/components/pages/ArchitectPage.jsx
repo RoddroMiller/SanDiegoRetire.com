@@ -1132,12 +1132,18 @@ export const ArchitectPage = ({
               ssMonthly += Math.round(getAdjustedSS(inputs.partnerSSPIA, inputs.partnerSSStartAge) * inflationFactor);
             }
 
-            // Pension income (with COLA if enabled)
+            // Pension income (with COLA if enabled) - combined client and partner
             let pensionMonthly = 0;
-            if (simAge >= inputs.pensionStartAge) {
-              pensionMonthly = inputs.pensionCOLA
+            if (simAge >= inputs.pensionStartAge && inputs.monthlyPension > 0) {
+              pensionMonthly += inputs.pensionCOLA
                 ? Math.round(inputs.monthlyPension * inflationFactor)
                 : inputs.monthlyPension;
+            }
+            // Partner pension
+            if (clientInfo.isMarried && inputs.partnerMonthlyPension > 0 && partnerSimAge >= (inputs.partnerPensionStartAge || 65)) {
+              pensionMonthly += inputs.partnerPensionCOLA
+                ? Math.round(inputs.partnerMonthlyPension * inflationFactor)
+                : inputs.partnerMonthlyPension;
             }
 
             // Portfolio distribution (from projectionData)
