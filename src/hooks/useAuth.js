@@ -13,6 +13,13 @@ import {
 } from 'firebase/auth';
 import { collection, getDocs } from 'firebase/firestore';
 import { auth, db, appId, MASTER_EMAIL, signInToCommandCenter } from '../constants';
+import {
+  checkAccountLockout,
+  recordFailedAttempt,
+  resetFailedAttempts,
+  checkPasswordExpiry,
+  initializeSecurityRecord
+} from '../utils/accountSecurity';
 
 /**
  * Custom hook for managing authentication state and actions
@@ -33,6 +40,10 @@ export const useAuth = () => {
   const mfaResolverRef = useRef(null);
   const totpSecretRef = useRef(null);
   const pendingCredentialsRef = useRef(null);
+
+  // Password Expiry State (BOSP Compliance)
+  const [passwordExpired, setPasswordExpired] = useState(false);
+  const [passwordExpiryEmail, setPasswordExpiryEmail] = useState('');
 
   // Listen to auth state changes
   useEffect(() => {
@@ -126,8 +137,20 @@ export const useAuth = () => {
     if (!auth) return;
     setAuthError('');
     setMfaError('');
+
+    // BOSP: Check account lockout before attempting login
+    const lockoutStatus = await checkAccountLockout(email);
+    if (lockoutStatus.locked) {
+      setAuthError(lockoutStatus.message);
+      return;
+    }
+
     try {
       const userCredential = await signInWithEmailAndPassword(auth, email, password);
+
+      // BOSP: Reset failed attempts on successful login
+      await resetFailedAttempts(email);
+
       // Check if MFA is enrolled
       const enrolledFactors = multiFactor(userCredential.user).enrolledFactors;
       if (enrolledFactors.length === 0) {
@@ -136,6 +159,15 @@ export const useAuth = () => {
         setMfaEnrollRequired(true);
         return;
       }
+
+      // BOSP: Check password expiry
+      const expiryStatus = await checkPasswordExpiry(email);
+      if (expiryStatus.expired) {
+        setPasswordExpiryEmail(email);
+        setPasswordExpired(true);
+        return;
+      }
+
       // Also sign in to Command Center to enable cross-project queries
       await signInToCommandCenter(email, password);
       // The onAuthStateChanged will set the role to 'registeredClient'
@@ -143,13 +175,19 @@ export const useAuth = () => {
     } catch (e) {
       console.log('Client login error:', e.code, e.message);
       if (e.code === 'auth/multi-factor-auth-required') {
-        // MFA verification required
+        // MFA verification required - don't count as failed attempt
         console.log('MFA required, showing verification modal');
         mfaResolverRef.current = getMultiFactorResolver(auth, e);
         pendingCredentialsRef.current = { email, password };
         setMfaRequired(true);
       } else if (e.code === 'auth/user-not-found' || e.code === 'auth/wrong-password' || e.code === 'auth/invalid-credential') {
-        setAuthError('Invalid email or password. If this is your first time, click "Sign up" below.');
+        // BOSP: Record failed attempt
+        const result = await recordFailedAttempt(email);
+        if (result.isLocked) {
+          setAuthError('Too many failed attempts. Account locked for 15 minutes.');
+        } else {
+          setAuthError(`Invalid email or password. ${result.remainingAttempts} attempt${result.remainingAttempts !== 1 ? 's' : ''} remaining.`);
+        }
       } else {
         setAuthError(e.message);
       }
@@ -166,6 +204,10 @@ export const useAuth = () => {
     setAuthError('');
     try {
       await createUserWithEmailAndPassword(auth, email, password);
+
+      // BOSP: Initialize security record with password history
+      await initializeSecurityRecord(email, password);
+
       // Also sign in to Command Center to enable cross-project queries
       await signInToCommandCenter(email, password);
       // The onAuthStateChanged will check if they have plans assigned and set role accordingly
@@ -212,22 +254,48 @@ export const useAuth = () => {
     if (!auth) return;
     setAuthError('');
     setMfaError('');
+
+    // BOSP: Check account lockout before attempting login (not for signup)
+    if (!isSignup) {
+      const lockoutStatus = await checkAccountLockout(email);
+      if (lockoutStatus.locked) {
+        setAuthError(lockoutStatus.message);
+        return;
+      }
+    }
+
     try {
       let userCredential;
       if (isSignup) {
         userCredential = await createUserWithEmailAndPassword(auth, email, password);
+
+        // BOSP: Initialize security record with password history
+        await initializeSecurityRecord(email, password);
+
         // New users need to enroll in MFA
         pendingCredentialsRef.current = { email, password };
         setMfaEnrollRequired(true);
         return;
       } else {
         userCredential = await signInWithEmailAndPassword(auth, email, password);
+
+        // BOSP: Reset failed attempts on successful login
+        await resetFailedAttempts(email);
+
         // Check if MFA is enrolled
         const enrolledFactors = multiFactor(userCredential.user).enrolledFactors;
         if (enrolledFactors.length === 0) {
           // MFA not enrolled - require enrollment
           pendingCredentialsRef.current = { email, password };
           setMfaEnrollRequired(true);
+          return;
+        }
+
+        // BOSP: Check password expiry
+        const expiryStatus = await checkPasswordExpiry(email);
+        if (expiryStatus.expired) {
+          setPasswordExpiryEmail(email);
+          setPasswordExpired(true);
           return;
         }
       }
@@ -237,11 +305,19 @@ export const useAuth = () => {
     } catch (e) {
       console.log('Login error:', e.code, e.message);
       if (e.code === 'auth/multi-factor-auth-required') {
-        // MFA verification required
+        // MFA verification required - don't count as failed attempt
         console.log('MFA required, showing verification modal');
         mfaResolverRef.current = getMultiFactorResolver(auth, e);
         pendingCredentialsRef.current = { email, password };
         setMfaRequired(true);
+      } else if (e.code === 'auth/user-not-found' || e.code === 'auth/wrong-password' || e.code === 'auth/invalid-credential') {
+        // BOSP: Record failed attempt
+        const result = await recordFailedAttempt(email);
+        if (result.isLocked) {
+          setAuthError('Too many failed attempts. Account locked for 15 minutes.');
+        } else {
+          setAuthError(`Invalid email or password. ${result.remainingAttempts} attempt${result.remainingAttempts !== 1 ? 's' : ''} remaining.`);
+        }
       } else {
         setAuthError(e.message);
       }
@@ -393,6 +469,38 @@ export const useAuth = () => {
     }
   }, []);
 
+  /**
+   * Handle successful password change from expiry modal
+   */
+  const handlePasswordExpiryResolved = useCallback(async () => {
+    setPasswordExpired(false);
+    setPasswordExpiryEmail('');
+
+    // Complete sign-in to Command Center if we have pending credentials
+    if (pendingCredentialsRef.current) {
+      await signInToCommandCenter(
+        pendingCredentialsRef.current.email,
+        pendingCredentialsRef.current.password
+      );
+      pendingCredentialsRef.current = null;
+    }
+
+    setViewMode('app');
+  }, []);
+
+  /**
+   * Cancel password expiry flow (logout)
+   */
+  const cancelPasswordExpiry = useCallback(async () => {
+    setPasswordExpired(false);
+    setPasswordExpiryEmail('');
+    pendingCredentialsRef.current = null;
+    if (auth?.currentUser) {
+      await signOut(auth);
+    }
+    setViewMode('gate');
+  }, []);
+
   return {
     // State
     viewMode,
@@ -408,6 +516,10 @@ export const useAuth = () => {
     mfaEnrollRequired,
     mfaError,
 
+    // Password Expiry State (BOSP)
+    passwordExpired,
+    passwordExpiryEmail,
+
     // Actions
     handleProspectEntry,
     handleClientLogin,
@@ -420,7 +532,11 @@ export const useAuth = () => {
     startMfaEnrollment,
     completeMfaEnrollment,
     verifyMfaCode,
-    cancelMfa
+    cancelMfa,
+
+    // Password Expiry Actions (BOSP)
+    handlePasswordExpiryResolved,
+    cancelPasswordExpiry
   };
 };
 

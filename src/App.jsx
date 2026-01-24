@@ -4,6 +4,7 @@ import React, { useState, useMemo, useEffect, useCallback } from 'react';
 import { formatPhoneNumber, calculateAccumulation, calculateBasePlan, runSimulation, calculateSSAnalysis, calculateSSPartnerAnalysis, getAdjustedSS, calculateAlternativeAllocations, runOptimizedSimulation } from './utils';
 import { GateScreen, LoginScreen, ClientLoginScreen, AccumulationPage, ArchitectPage, ClientWizard, PlanManagement } from './components';
 import { MfaVerifyModal, MfaEnrollModal } from './components/auth/MfaModals';
+import { PasswordExpiryModal } from './components/auth/PasswordExpiryModal';
 import { useAuth, useScenarios, useAdvisors, useCommandCenter } from './hooks';
 import { useSessionTimeout } from './hooks/useSessionTimeout';
 
@@ -23,6 +24,9 @@ export default function BucketPortfolioBuilder() {
     mfaRequired,
     mfaEnrollRequired,
     mfaError,
+    // Password Expiry State (BOSP)
+    passwordExpired,
+    passwordExpiryEmail,
     // Auth Actions
     handleProspectEntry,
     handleClientLogin,
@@ -34,7 +38,10 @@ export default function BucketPortfolioBuilder() {
     startMfaEnrollment,
     completeMfaEnrollment,
     verifyMfaCode,
-    cancelMfa
+    cancelMfa,
+    // Password Expiry Actions (BOSP)
+    handlePasswordExpiryResolved,
+    cancelPasswordExpiry
   } = useAuth();
 
   // --- Scenarios Hook ---
@@ -497,6 +504,17 @@ export default function BucketPortfolioBuilder() {
         onComplete={completeMfaEnrollment}
         onCancel={cancelMfa}
         error={mfaError}
+      />
+    );
+  }
+
+  // Password Expiry Modal (BOSP: 90-day password expiration)
+  if (passwordExpired) {
+    return (
+      <PasswordExpiryModal
+        userEmail={passwordExpiryEmail}
+        onSuccess={handlePasswordExpiryResolved}
+        onCancel={cancelPasswordExpiry}
       />
     );
   }

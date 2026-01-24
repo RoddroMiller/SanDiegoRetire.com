@@ -4,6 +4,7 @@ import { User, DollarSign, ArrowRight, ArrowLeft, Shield, Info, Activity, Briefc
 
 import { COLORS, LOGO_URL } from '../../constants';
 import { formatPhoneNumber, getAdjustedSS } from '../../utils';
+import { containsSSN } from '../../utils/piiValidation';
 import { Card, StatBox, FormattedNumberInput, Disclaimer, ImportantDisclosures } from '../ui';
 
 /**
@@ -300,7 +301,13 @@ export const ClientWizard = ({
               placeholder="Full Name"
               className={`p-3 border rounded-lg w-full focus:ring-emerald-500 focus:border-emerald-500 ${validationError && !clientInfo.name?.trim() ? 'border-red-300 bg-red-50' : ''}`}
               value={clientInfo.name}
-              onChange={onClientChange}
+              onChange={(e) => {
+                if (containsSSN(e.target.value)) {
+                  alert('SSN/PII not allowed in this field for security purposes.');
+                  return;
+                }
+                onClientChange(e);
+              }}
             />
           </div>
           <div>
@@ -327,6 +334,10 @@ export const ClientWizard = ({
               className={`p-3 border rounded-lg w-full focus:ring-emerald-500 focus:border-emerald-500 ${validationError && !clientInfo.phone?.trim() ? 'border-red-300 bg-red-50' : ''}`}
               value={clientInfo.phone}
               onChange={(e) => {
+                if (containsSSN(e.target.value)) {
+                  alert('SSN/PII not allowed in this field for security purposes.');
+                  return;
+                }
                 const formatted = formatPhoneNumber(e.target.value);
                 onClientChange({ target: { name: 'phone', value: formatted } });
               }}
