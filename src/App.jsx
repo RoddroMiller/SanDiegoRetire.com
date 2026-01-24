@@ -3,6 +3,7 @@ import React, { useState, useMemo, useEffect, useCallback } from 'react';
 // --- Local Imports ---
 import { formatPhoneNumber, calculateAccumulation, calculateBasePlan, runSimulation, calculateSSAnalysis, calculateSSPartnerAnalysis, getAdjustedSS, calculateAlternativeAllocations, runOptimizedSimulation } from './utils';
 import { GateScreen, LoginScreen, ClientLoginScreen, AccumulationPage, ArchitectPage, ClientWizard, PlanManagement } from './components';
+import { MfaVerifyModal, MfaEnrollModal } from './components/auth/MfaModals';
 import { useAuth, useScenarios, useAdvisors, useCommandCenter } from './hooks';
 import { useSessionTimeout } from './hooks/useSessionTimeout';
 
@@ -18,12 +19,22 @@ export default function BucketPortfolioBuilder() {
     authError,
     isLoggingIn,
     resetStatus,
+    // MFA State
+    mfaRequired,
+    mfaEnrollRequired,
+    mfaError,
+    // Auth Actions
     handleProspectEntry,
     handleClientLogin,
     handleClientSignup,
     handleAdvisorLogin,
     handlePasswordReset,
-    handleLogout
+    handleLogout,
+    // MFA Actions
+    startMfaEnrollment,
+    completeMfaEnrollment,
+    verifyMfaCode,
+    cancelMfa
   } = useAuth();
 
   // --- Scenarios Hook ---
@@ -463,6 +474,29 @@ export default function BucketPortfolioBuilder() {
         onClientLoginClick={() => setViewMode('clientLogin')}
         onProspectEntry={handleProspectEntry}
         isLoggingIn={isLoggingIn}
+      />
+    );
+  }
+
+  // MFA Verification Modal (shown during sign-in)
+  if (mfaRequired) {
+    return (
+      <MfaVerifyModal
+        onVerify={verifyMfaCode}
+        onCancel={cancelMfa}
+        error={mfaError}
+      />
+    );
+  }
+
+  // MFA Enrollment Modal (shown when user needs to set up MFA)
+  if (mfaEnrollRequired) {
+    return (
+      <MfaEnrollModal
+        onStartEnrollment={startMfaEnrollment}
+        onComplete={completeMfaEnrollment}
+        onCancel={cancelMfa}
+        error={mfaError}
       />
     );
   }

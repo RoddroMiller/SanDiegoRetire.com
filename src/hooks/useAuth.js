@@ -1,11 +1,15 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import {
   signInAnonymously,
   onAuthStateChanged,
   signInWithEmailAndPassword,
   createUserWithEmailAndPassword,
   sendPasswordResetEmail,
-  signOut
+  signOut,
+  multiFactor,
+  TotpMultiFactorGenerator,
+  TotpSecret,
+  getMultiFactorResolver
 } from 'firebase/auth';
 import { collection, getDocs } from 'firebase/firestore';
 import { auth, db, appId, MASTER_EMAIL, signInToCommandCenter } from '../constants';
@@ -21,6 +25,14 @@ export const useAuth = () => {
   const [authError, setAuthError] = useState('');
   const [isLoggingIn, setIsLoggingIn] = useState(false);
   const [resetStatus, setResetStatus] = useState('idle'); // 'idle' | 'sending' | 'sent' | 'error'
+
+  // MFA State
+  const [mfaRequired, setMfaRequired] = useState(false);
+  const [mfaEnrollRequired, setMfaEnrollRequired] = useState(false);
+  const [mfaError, setMfaError] = useState('');
+  const mfaResolverRef = useRef(null);
+  const totpSecretRef = useRef(null);
+  const pendingCredentialsRef = useRef(null);
 
   // Listen to auth state changes
   useEffect(() => {
@@ -113,14 +125,28 @@ export const useAuth = () => {
   const handleClientLogin = useCallback(async (email, password) => {
     if (!auth) return;
     setAuthError('');
+    setMfaError('');
     try {
-      await signInWithEmailAndPassword(auth, email, password);
+      const userCredential = await signInWithEmailAndPassword(auth, email, password);
+      // Check if MFA is enrolled
+      const enrolledFactors = multiFactor(userCredential.user).enrolledFactors;
+      if (enrolledFactors.length === 0) {
+        // MFA not enrolled - require enrollment
+        pendingCredentialsRef.current = { email, password };
+        setMfaEnrollRequired(true);
+        return;
+      }
       // Also sign in to Command Center to enable cross-project queries
       await signInToCommandCenter(email, password);
       // The onAuthStateChanged will set the role to 'registeredClient'
       setViewMode('app');
     } catch (e) {
-      if (e.code === 'auth/user-not-found' || e.code === 'auth/wrong-password' || e.code === 'auth/invalid-credential') {
+      if (e.code === 'auth/multi-factor-auth-required') {
+        // MFA verification required
+        mfaResolverRef.current = getMultiFactorResolver(auth, e);
+        pendingCredentialsRef.current = { email, password };
+        setMfaRequired(true);
+      } else if (e.code === 'auth/user-not-found' || e.code === 'auth/wrong-password' || e.code === 'auth/invalid-credential') {
         setAuthError('Invalid email or password. If this is your first time, click "Sign up" below.');
       } else {
         setAuthError(e.message);
@@ -183,17 +209,38 @@ export const useAuth = () => {
   const handleAdvisorLogin = useCallback(async (email, password, isSignup) => {
     if (!auth) return;
     setAuthError('');
+    setMfaError('');
     try {
+      let userCredential;
       if (isSignup) {
-        await createUserWithEmailAndPassword(auth, email, password);
+        userCredential = await createUserWithEmailAndPassword(auth, email, password);
+        // New users need to enroll in MFA
+        pendingCredentialsRef.current = { email, password };
+        setMfaEnrollRequired(true);
+        return;
       } else {
-        await signInWithEmailAndPassword(auth, email, password);
+        userCredential = await signInWithEmailAndPassword(auth, email, password);
+        // Check if MFA is enrolled
+        const enrolledFactors = multiFactor(userCredential.user).enrolledFactors;
+        if (enrolledFactors.length === 0) {
+          // MFA not enrolled - require enrollment
+          pendingCredentialsRef.current = { email, password };
+          setMfaEnrollRequired(true);
+          return;
+        }
       }
       // Also sign in to Command Center to enable cross-project queries
       await signInToCommandCenter(email, password);
       setViewMode('app');
     } catch (e) {
-      setAuthError(e.message);
+      if (e.code === 'auth/multi-factor-auth-required') {
+        // MFA verification required
+        mfaResolverRef.current = getMultiFactorResolver(auth, e);
+        pendingCredentialsRef.current = { email, password };
+        setMfaRequired(true);
+      } else {
+        setAuthError(e.message);
+      }
     }
   }, []);
 
@@ -208,6 +255,140 @@ export const useAuth = () => {
     if (onLogout) onLogout();
   }, []);
 
+  /**
+   * Start MFA enrollment process - generates QR code URL
+   */
+  const startMfaEnrollment = useCallback(async () => {
+    const user = auth?.currentUser;
+    if (!user) {
+      setMfaError('You must be signed in to set up MFA.');
+      return null;
+    }
+    try {
+      const mfaSession = await multiFactor(user).getSession();
+      const totpSecret = await TotpMultiFactorGenerator.generateSecret(mfaSession);
+      totpSecretRef.current = totpSecret;
+
+      // Generate QR code URL
+      const qrUrl = totpSecret.generateQrCodeUrl(user.email, 'Portfolio Architect');
+      return {
+        qrUrl,
+        secretKey: totpSecret.secretKey
+      };
+    } catch (e) {
+      console.error('MFA enrollment error:', e);
+      setMfaError('Error setting up MFA: ' + e.message);
+      return null;
+    }
+  }, []);
+
+  /**
+   * Complete MFA enrollment with verification code
+   */
+  const completeMfaEnrollment = useCallback(async (verificationCode) => {
+    if (!totpSecretRef.current) {
+      setMfaError('MFA session expired. Please try again.');
+      return false;
+    }
+    try {
+      const user = auth?.currentUser;
+      if (!user) throw new Error('No user signed in');
+
+      const assertion = TotpMultiFactorGenerator.assertionForEnrollment(
+        totpSecretRef.current,
+        verificationCode
+      );
+      await multiFactor(user).enroll(assertion, 'Google Authenticator');
+
+      totpSecretRef.current = null;
+      setMfaEnrollRequired(false);
+
+      // Complete sign-in to Command Center if we have pending credentials
+      if (pendingCredentialsRef.current) {
+        await signInToCommandCenter(
+          pendingCredentialsRef.current.email,
+          pendingCredentialsRef.current.password
+        );
+        pendingCredentialsRef.current = null;
+      }
+
+      setViewMode('app');
+      return true;
+    } catch (e) {
+      if (e.code === 'auth/invalid-verification-code') {
+        setMfaError('Invalid code. Please check your authenticator app and try again.');
+      } else {
+        setMfaError(e.message);
+      }
+      return false;
+    }
+  }, []);
+
+  /**
+   * Verify MFA code during sign-in
+   */
+  const verifyMfaCode = useCallback(async (verificationCode) => {
+    if (!mfaResolverRef.current) {
+      setMfaError('MFA session expired. Please try logging in again.');
+      return false;
+    }
+    try {
+      const resolver = mfaResolverRef.current;
+      // Find TOTP factor
+      const totpFactor = resolver.hints.find(
+        hint => hint.factorId === TotpMultiFactorGenerator.FACTOR_ID
+      );
+      if (!totpFactor) {
+        setMfaError('No TOTP factor found. Please contact support.');
+        return false;
+      }
+
+      const assertion = TotpMultiFactorGenerator.assertionForSignIn(
+        totpFactor.uid,
+        verificationCode
+      );
+      await resolver.resolveSignIn(assertion);
+
+      mfaResolverRef.current = null;
+      setMfaRequired(false);
+
+      // Complete sign-in to Command Center
+      if (pendingCredentialsRef.current) {
+        await signInToCommandCenter(
+          pendingCredentialsRef.current.email,
+          pendingCredentialsRef.current.password
+        );
+        pendingCredentialsRef.current = null;
+      }
+
+      setViewMode('app');
+      return true;
+    } catch (e) {
+      if (e.code === 'auth/invalid-verification-code') {
+        setMfaError('Invalid code. Please check your authenticator app and try again.');
+      } else {
+        setMfaError(e.message);
+      }
+      return false;
+    }
+  }, []);
+
+  /**
+   * Cancel MFA flow
+   */
+  const cancelMfa = useCallback(async () => {
+    mfaResolverRef.current = null;
+    totpSecretRef.current = null;
+    pendingCredentialsRef.current = null;
+    setMfaRequired(false);
+    setMfaEnrollRequired(false);
+    setMfaError('');
+    // Sign out if user is partially signed in
+    if (auth?.currentUser) {
+      await signOut(auth);
+    }
+  }, []);
+
   return {
     // State
     viewMode,
@@ -218,13 +399,24 @@ export const useAuth = () => {
     isLoggingIn,
     resetStatus,
 
+    // MFA State
+    mfaRequired,
+    mfaEnrollRequired,
+    mfaError,
+
     // Actions
     handleProspectEntry,
     handleClientLogin,
     handleClientSignup,
     handleAdvisorLogin,
     handlePasswordReset,
-    handleLogout
+    handleLogout,
+
+    // MFA Actions
+    startMfaEnrollment,
+    completeMfaEnrollment,
+    verifyMfaCode,
+    cancelMfa
   };
 };
 
