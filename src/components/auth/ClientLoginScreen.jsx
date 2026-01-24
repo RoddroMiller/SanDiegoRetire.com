@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
-import { ArrowRight, Mail, Loader, CheckCircle } from 'lucide-react';
+import { ArrowRight, Mail, Loader, CheckCircle, AlertCircle } from 'lucide-react';
 import { Disclaimer } from '../ui';
+import { validatePassword, getPasswordRequirements } from '../../utils/passwordValidation';
 
 export const ClientLoginScreen = ({ onBack, onLogin, onSignup, onPasswordReset, authError, resetStatus }) => {
   const [email, setEmail] = useState('');
@@ -16,12 +17,14 @@ export const ClientLoginScreen = ({ onBack, onLogin, onSignup, onPasswordReset, 
     setPasswordError('');
 
     if (isSignupMode) {
-      if (password !== confirmPassword) {
-        setPasswordError('Passwords do not match');
+      // Validate password meets BOSP requirements
+      const validation = validatePassword(password);
+      if (!validation.valid) {
+        setPasswordError(validation.errors.join('. '));
         return;
       }
-      if (password.length < 6) {
-        setPasswordError('Password must be at least 6 characters');
+      if (password !== confirmPassword) {
+        setPasswordError('Passwords do not match');
         return;
       }
       onSignup(email, password);
@@ -150,14 +153,20 @@ export const ClientLoginScreen = ({ onBack, onLogin, onSignup, onPasswordReset, 
             required
           />
           {isSignupMode && (
-            <input
-              type="password"
-              placeholder="Confirm Password"
-              value={confirmPassword}
-              onChange={(e) => setConfirmPassword(e.target.value)}
-              className="w-full p-3 border rounded-lg outline-none focus:ring-2 focus:ring-blue-500"
-              required
-            />
+            <>
+              <input
+                type="password"
+                placeholder="Confirm Password"
+                value={confirmPassword}
+                onChange={(e) => setConfirmPassword(e.target.value)}
+                className="w-full p-3 border rounded-lg outline-none focus:ring-2 focus:ring-blue-500"
+                required
+              />
+              <div className="flex items-start gap-2 p-2 bg-amber-50 rounded-lg text-xs text-amber-700">
+                <AlertCircle className="w-4 h-4 flex-shrink-0 mt-0.5" />
+                <span>{getPasswordRequirements()}</span>
+              </div>
+            </>
           )}
           <button
             type="submit"

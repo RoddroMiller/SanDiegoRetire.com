@@ -1,9 +1,10 @@
-import React, { useState, useMemo, useEffect } from 'react';
+import React, { useState, useMemo, useEffect, useCallback } from 'react';
 
 // --- Local Imports ---
 import { formatPhoneNumber, calculateAccumulation, calculateBasePlan, runSimulation, calculateSSAnalysis, calculateSSPartnerAnalysis, getAdjustedSS, calculateAlternativeAllocations, runOptimizedSimulation } from './utils';
 import { GateScreen, LoginScreen, ClientLoginScreen, AccumulationPage, ArchitectPage, ClientWizard, PlanManagement } from './components';
 import { useAuth, useScenarios, useAdvisors, useCommandCenter } from './hooks';
+import { useSessionTimeout } from './hooks/useSessionTimeout';
 
 // --- Main Application ---
 
@@ -62,6 +63,25 @@ export default function BucketPortfolioBuilder() {
     commandCenterClients,
     isLoadingClients
   } = useCommandCenter({ currentUser });
+
+  // --- Session Timeout for BOSP compliance (15 min inactivity) ---
+  const [showSessionWarning, setShowSessionWarning] = useState(false);
+
+  const handleSessionTimeout = useCallback(() => {
+    setShowSessionWarning(false);
+    handleLogout(clearScenarios);
+  }, [handleLogout, clearScenarios]);
+
+  const isAuthenticated = currentUser && !currentUser.isAnonymous && viewMode === 'app';
+
+  useSessionTimeout(handleSessionTimeout, isAuthenticated);
+
+  // Listen for session warning
+  useEffect(() => {
+    const handleWarning = () => setShowSessionWarning(true);
+    window.addEventListener('sessionWarning', handleWarning);
+    return () => window.removeEventListener('sessionWarning', handleWarning);
+  }, []);
 
   // App State
   const [step, setStep] = useState(1);
@@ -415,6 +435,26 @@ export default function BucketPortfolioBuilder() {
     }, 500);
   };
 
+  // --- Session Warning Modal ---
+  const SessionWarningModal = () => (
+    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[9999]">
+      <div className="bg-white p-6 rounded-xl shadow-xl max-w-sm mx-4 text-center">
+        <div className="text-amber-500 text-4xl mb-3">⚠️</div>
+        <h3 className="text-lg font-bold text-slate-800 mb-2">Session Expiring</h3>
+        <p className="text-slate-600 mb-4">
+          Your session will expire in 60 seconds due to inactivity.
+          Click below to stay logged in.
+        </p>
+        <button
+          onClick={() => setShowSessionWarning(false)}
+          className="w-full bg-emerald-600 text-white py-2 px-4 rounded-lg font-semibold hover:bg-emerald-700 transition-colors"
+        >
+          Stay Logged In
+        </button>
+      </div>
+    </div>
+  );
+
   // --- RENDER FLOW ---
   if (viewMode === 'gate') {
     return (
@@ -515,6 +555,8 @@ export default function BucketPortfolioBuilder() {
   // Advisor Flow - Plan Management View
   if (advisorView === 'management') {
     return (
+      <>
+      {showSessionWarning && <SessionWarningModal />}
       <PlanManagement
         userRole={userRole}
         currentUser={currentUser}
@@ -537,12 +579,15 @@ export default function BucketPortfolioBuilder() {
         onAssignPlanToClient={assignPlanToClient}
         onRemoveClientAssignment={removeClientAssignment}
       />
+      </>
     );
   }
 
   // Advisor Flow - Step 1: Accumulation Phase
   if (step === 1) {
     return (
+      <>
+      {showSessionWarning && <SessionWarningModal />}
       <AccumulationPage
         userRole={userRole}
         onLogout={onLogout}
@@ -556,11 +601,14 @@ export default function BucketPortfolioBuilder() {
         onProceed={proceedToArchitect}
         onViewManagement={() => setAdvisorView('management')}
       />
+      </>
     );
   }
 
   // Step 2: Distribution Phase (Architect)
   return (
+    <>
+    {showSessionWarning && <SessionWarningModal />}
     <ArchitectPage
       userRole={userRole}
       onBackToInputs={() => setStep(1)}
@@ -616,5 +664,6 @@ export default function BucketPortfolioBuilder() {
       onRecalculateFromFormula={handleRecalculateFromFormula}
       formulaAllocations={formulaBasePlan}
     />
+    </>
   );
 }
