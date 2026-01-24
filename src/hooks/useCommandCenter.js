@@ -1,6 +1,7 @@
 import { useState, useCallback, useEffect } from 'react';
-import { doc, setDoc, getDoc, collection, getDocs, query, where } from 'firebase/firestore';
-import { commandCenterDb } from '../constants';
+import { doc, setDoc, getDoc, collection, getDocs } from 'firebase/firestore';
+import { onAuthStateChanged } from 'firebase/auth';
+import { commandCenterDb, commandCenterAuth } from '../constants';
 
 /**
  * Custom hook for saving Portfolio Architect data to The One Process Client Command Center
@@ -17,8 +18,20 @@ export const useCommandCenter = ({ currentUser }) => {
   const [commandCenterClients, setCommandCenterClients] = useState([]);
   const [isLoadingClients, setIsLoadingClients] = useState(false);
   const [commandCenterAdvisorId, setCommandCenterAdvisorId] = useState(null);
+  const [commandCenterUser, setCommandCenterUser] = useState(null);
 
-  // Fetch clients from Command Center when user changes
+  // Listen for Command Center auth state changes
+  useEffect(() => {
+    if (!commandCenterAuth) return;
+
+    const unsubscribe = onAuthStateChanged(commandCenterAuth, (user) => {
+      setCommandCenterUser(user);
+    });
+
+    return () => unsubscribe();
+  }, []);
+
+  // Fetch clients from Command Center when user changes or Command Center auth changes
   // We need to find the advisor profile by email since UIDs differ between Firebase projects
   useEffect(() => {
     if (!currentUser || !commandCenterDb || !currentUser.email) {
@@ -31,20 +44,30 @@ export const useCommandCenter = ({ currentUser }) => {
       setIsLoadingClients(true);
       try {
         // First, find the advisor profile by email
+        // We'll fetch all advisor profiles and filter by email (case-insensitive)
         const advisorProfilesRef = collection(commandCenterDb, 'advisorProfiles');
-        const advisorQuery = query(advisorProfilesRef, where('email', '==', currentUser.email));
-        const advisorSnapshot = await getDocs(advisorQuery);
+        const advisorSnapshot = await getDocs(advisorProfilesRef);
 
-        if (advisorSnapshot.empty) {
+        let advisorDoc = null;
+        const userEmailLower = currentUser.email.toLowerCase();
+
+        advisorSnapshot.forEach((doc) => {
+          const data = doc.data();
+          // Check both email field and the document ID (which might be the user's UID)
+          if (data.email && data.email.toLowerCase() === userEmailLower) {
+            advisorDoc = doc;
+          }
+        });
+
+        if (!advisorDoc) {
           console.log('No advisor profile found for email:', currentUser.email);
+          console.log('Available profiles:', advisorSnapshot.docs.map(d => ({ id: d.id, email: d.data().email })));
           setCommandCenterClients([]);
           setCommandCenterAdvisorId(null);
           setIsLoadingClients(false);
           return;
         }
 
-        // Use the first matching advisor profile
-        const advisorDoc = advisorSnapshot.docs[0];
         const advisorId = advisorDoc.id;
         setCommandCenterAdvisorId(advisorId);
         console.log('Found Command Center advisor ID:', advisorId);
@@ -55,10 +78,18 @@ export const useCommandCenter = ({ currentUser }) => {
         const clients = [];
         clientsSnapshot.forEach((doc) => {
           const data = doc.data();
+          // Handle different client data structures from Command Center
+          const primaryContact = data.primaryContact || {};
+          const displayName = data.displayName ||
+            data.name ||
+            (primaryContact.firstName && primaryContact.lastName
+              ? `${primaryContact.firstName} ${primaryContact.lastName}`
+              : primaryContact.firstName || 'Unknown Client');
+
           clients.push({
             id: doc.id,
-            displayName: data.displayName || data.name || 'Unknown Client',
-            email: data.email || '',
+            displayName: displayName,
+            email: data.email || primaryContact.email || '',
             ...data
           });
         });
@@ -68,6 +99,7 @@ export const useCommandCenter = ({ currentUser }) => {
         console.log('Found', clients.length, 'clients');
       } catch (error) {
         console.error('Error fetching Command Center clients:', error);
+        console.error('Error details:', error.code, error.message);
         setCommandCenterClients([]);
         setCommandCenterAdvisorId(null);
       } finally {
@@ -76,7 +108,7 @@ export const useCommandCenter = ({ currentUser }) => {
     };
 
     fetchClients();
-  }, [currentUser]);
+  }, [currentUser, commandCenterUser]);
 
   /**
    * Save portfolio architect data to the Client Command Center
