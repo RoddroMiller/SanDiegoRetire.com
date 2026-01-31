@@ -524,7 +524,9 @@ export default function BucketPortfolioBuilder() {
       <LoginScreen
         onBack={() => setViewMode('gate')}
         onLogin={handleAdvisorLogin}
+        onPasswordReset={handlePasswordReset}
         authError={authError}
+        resetStatus={resetStatus}
       />
     );
   }
