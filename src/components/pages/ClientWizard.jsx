@@ -46,6 +46,7 @@ export const ClientWizard = ({
   const [wizardStep, setWizardStep] = useState(1);
   const [showCashFlowTable, setShowCashFlowTable] = useState(false);
   const [validationError, setValidationError] = useState('');
+  const [fieldErrors, setFieldErrors] = useState({});
 
   // Improvement solution selections
   const [selectedImprovements, setSelectedImprovements] = useState({
@@ -72,6 +73,30 @@ export const ClientWizard = ({
       return () => clearInterval(intervalId);
     }
   }, [wizardStep, onSaveProgress]);
+
+  // Validate SS ages and income fields
+  useEffect(() => {
+    const errors = {};
+
+    // Validate SS start age (must be 62-70)
+    if (inputs.ssStartAge && (inputs.ssStartAge < 62 || inputs.ssStartAge > 70)) {
+      errors.ssStartAge = 'Must be between 62 and 70';
+    }
+    if (inputs.partnerSSStartAge && (inputs.partnerSSStartAge < 62 || inputs.partnerSSStartAge > 70)) {
+      errors.partnerSSStartAge = 'Must be between 62 and 70';
+    }
+
+    // Validate additional incomes
+    if (inputs.additionalIncomes) {
+      inputs.additionalIncomes.forEach(income => {
+        if (!income.isOneTime && income.endAge < income.startAge) {
+          errors[`income_${income.id}_endAge`] = 'End age must be >= start age';
+        }
+      });
+    }
+
+    setFieldErrors(errors);
+  }, [inputs.ssStartAge, inputs.partnerSSStartAge, inputs.additionalIncomes]);
 
   // Calculate improvement solutions based on actual financial picture
   const improvementSolutions = useMemo(() => {
@@ -243,10 +268,6 @@ export const ClientWizard = ({
         setValidationError('Please enter your email');
         return;
       }
-      if (!clientInfo.phone?.trim()) {
-        setValidationError('Please enter your phone number');
-        return;
-      }
     }
 
     setValidationError('');
@@ -274,8 +295,9 @@ export const ClientWizard = ({
   const renderPage1 = () => (
     <div className="space-y-6">
       <div className="text-center mb-8">
+        <p className="text-emerald-600 font-semibold text-lg mb-2">Visualize Your Retirement</p>
         <h2 className="text-2xl font-bold text-slate-800">Let's Get Started</h2>
-        <p className="text-slate-500 mt-2">Tell us about yourself and your financial picture</p>
+        <p className="text-slate-500 mt-2">See how your savings today can support your retirement lifestyle tomorrow</p>
       </div>
 
       {validationError && (
@@ -321,26 +343,6 @@ export const ClientWizard = ({
               className={`p-3 border rounded-lg w-full focus:ring-emerald-500 focus:border-emerald-500 ${validationError && !clientInfo.email?.trim() ? 'border-red-300 bg-red-50' : ''}`}
               value={clientInfo.email}
               onChange={onClientChange}
-            />
-          </div>
-          <div>
-            <label className="block text-xs font-bold text-slate-500 uppercase mb-1">
-              Phone <span className="text-red-500">*</span>
-            </label>
-            <input
-              type="text"
-              name="phone"
-              placeholder="Phone"
-              className={`p-3 border rounded-lg w-full focus:ring-emerald-500 focus:border-emerald-500 ${validationError && !clientInfo.phone?.trim() ? 'border-red-300 bg-red-50' : ''}`}
-              value={clientInfo.phone}
-              onChange={(e) => {
-                if (containsSSN(e.target.value)) {
-                  alert('SSN/PII not allowed in this field for security purposes.');
-                  return;
-                }
-                const formatted = formatPhoneNumber(e.target.value);
-                onClientChange({ target: { name: 'phone', value: formatted } });
-              }}
             />
           </div>
           <div className="flex items-center gap-2 p-3 border rounded-lg">
@@ -390,7 +392,7 @@ export const ClientWizard = ({
                   : 'bg-white text-slate-600 border-2 border-slate-300 hover:border-emerald-400'
               }`}
             >
-              {clientInfo.isRetired ? '✓ Already Retired' : 'Already Retired?'}
+              {clientInfo.isRetired ? '✓ Retired/Not Employed' : 'Already Retired/Not Employed?'}
             </button>
           </div>
           {!clientInfo.isRetired && (
@@ -440,7 +442,7 @@ export const ClientWizard = ({
                     : 'bg-white text-slate-600 border-2 border-slate-300 hover:border-emerald-400'
                 }`}
               >
-                {clientInfo.partnerIsRetired ? '✓ Already Retired' : 'Already Retired?'}
+                {clientInfo.partnerIsRetired ? '✓ Retired/Not Employed' : 'Already Retired/Not Employed?'}
               </button>
             </div>
             {!clientInfo.partnerIsRetired && (
@@ -467,7 +469,7 @@ export const ClientWizard = ({
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
         <div className="space-y-4">
           <h3 className="text-lg font-bold text-slate-800 border-b pb-2 flex items-center gap-2">
-            <DollarSign className="w-5 h-5 text-emerald-600" /> Financial Inputs
+            <DollarSign className="w-5 h-5 text-emerald-600" /> Today's Financial Inputs
           </h3>
 
           <div className="relative group">
@@ -475,7 +477,7 @@ export const ClientWizard = ({
               Current Portfolio <Info className="w-3 h-3 text-slate-400" />
             </label>
             <div className="absolute left-0 bottom-full mb-2 hidden group-hover:block w-64 bg-slate-800 text-white text-xs p-2 rounded shadow-lg z-10">
-              Total of all 401k, Roth, IRA, other retirement assets, and non-retirement investment accounts.
+              Total of all 401k-type accounts, Roth, IRA, other retirement assets, and non-retirement investment accounts.
             </div>
             <FormattedNumberInput
               name="currentPortfolio"
@@ -488,10 +490,10 @@ export const ClientWizard = ({
           <div className="grid grid-cols-2 gap-4">
             <div className="relative group">
               <label className="block text-xs font-bold text-slate-500 uppercase mb-1 flex items-center gap-1">
-                Monthly Spending <Info className="w-3 h-3 text-slate-400" />
+                Current Monthly Spending <Info className="w-3 h-3 text-slate-400" />
               </label>
               <div className="absolute left-0 bottom-full mb-2 hidden group-hover:block w-64 bg-slate-800 text-white text-xs p-2 rounded shadow-lg z-10">
-                All monthly expenses including housing, utilities, food, transportation, healthcare, vacations, and entertainment. Excludes savings and taxes.
+                Your current monthly expenses including housing, utilities, food, transportation, healthcare, vacations, and entertainment. Excludes savings and taxes.
               </div>
               <FormattedNumberInput
                 name="currentSpending"
@@ -502,10 +504,10 @@ export const ClientWizard = ({
             </div>
             <div className="relative group">
               <label className="block text-xs font-bold text-slate-500 uppercase mb-1 flex items-center gap-1">
-                Annual Savings <Info className="w-3 h-3 text-slate-400" />
+                Current Annual Savings <Info className="w-3 h-3 text-slate-400" />
               </label>
               <div className="absolute left-0 bottom-full mb-2 hidden group-hover:block w-64 bg-slate-800 text-white text-xs p-2 rounded shadow-lg z-10">
-                Total yearly contributions to all retirement accounts (401k, IRA, Roth) plus after-tax savings and investment accounts.
+                Your current yearly contributions to all retirement accounts (401k, IRA, Roth) plus after-tax savings and investment accounts.
               </div>
               <FormattedNumberInput
                 name="annualSavings"
@@ -578,6 +580,29 @@ export const ClientWizard = ({
         </div>
       </div>
 
+      {/* Key Assumptions - Full Width */}
+      <div className="p-4 bg-slate-50 rounded-lg border border-slate-200">
+        <p className="text-xs font-bold text-slate-500 uppercase mb-2">Projection Assumptions</p>
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-xs text-slate-600">
+          <div className="flex items-start gap-2">
+            <span className="text-emerald-500 mt-0.5">•</span>
+            <span>Annual savings increase with inflation each year</span>
+          </div>
+          <div className="flex items-start gap-2">
+            <span className="text-emerald-500 mt-0.5">•</span>
+            <span>Contributions made at start of year, then growth applied</span>
+          </div>
+          <div className="flex items-start gap-2">
+            <span className="text-emerald-500 mt-0.5">•</span>
+            <span>No withdrawals from portfolio before retirement</span>
+          </div>
+          <div className="flex items-start gap-2">
+            <span className="text-emerald-500 mt-0.5">•</span>
+            <span>Continuous savings until retirement date</span>
+          </div>
+        </div>
+      </div>
+
       <ImportantDisclosures />
     </div>
   );
@@ -621,7 +646,7 @@ export const ClientWizard = ({
                   Your Benefit @ FRA <Info className="w-3 h-3 text-slate-400" />
                 </label>
                 <div className="absolute left-0 bottom-full mb-2 hidden group-hover:block w-56 bg-slate-800 text-white text-xs p-2 rounded shadow-lg z-10">
-                  Your Social Security benefit at Full Retirement Age (67) from your SSA statement.
+                  Monthly Social Security benefit at Full Retirement Age (67). Find this on your SSA statement at ssa.gov.
                 </div>
                 <FormattedNumberInput
                   name="ssPIA"
@@ -644,8 +669,11 @@ export const ClientWizard = ({
                   onChange={onInputChange}
                   min={62}
                   max={70}
-                  className="p-3 border rounded-lg w-full"
+                  className={`p-3 border rounded-lg w-full ${fieldErrors.ssStartAge ? 'border-red-500 bg-red-50' : ''}`}
                 />
+                {fieldErrors.ssStartAge && (
+                  <p className="text-xs text-red-500 mt-1">{fieldErrors.ssStartAge}</p>
+                )}
               </div>
             </>
           )}
@@ -675,7 +703,7 @@ export const ClientWizard = ({
                       Partner Benefit @ FRA <Info className="w-3 h-3 text-slate-400" />
                     </label>
                     <div className="absolute left-0 bottom-full mb-2 hidden group-hover:block w-56 bg-slate-800 text-white text-xs p-2 rounded shadow-lg z-10">
-                      Your partner's Social Security benefit at Full Retirement Age.
+                      Monthly Social Security benefit at Full Retirement Age (67). Find this on your SSA statement at ssa.gov.
                     </div>
                     <FormattedNumberInput
                       name="partnerSSPIA"
@@ -698,8 +726,11 @@ export const ClientWizard = ({
                       onChange={onInputChange}
                       min={62}
                       max={70}
-                      className="p-3 border rounded-lg w-full"
+                      className={`p-3 border rounded-lg w-full ${fieldErrors.partnerSSStartAge ? 'border-red-500 bg-red-50' : ''}`}
                     />
+                    {fieldErrors.partnerSSStartAge && (
+                      <p className="text-xs text-red-500 mt-1">{fieldErrors.partnerSSStartAge}</p>
+                    )}
                   </div>
                 </>
               )}
@@ -924,7 +955,7 @@ export const ClientWizard = ({
             {/* Additional Income Streams */}
             <div className="border-t pt-4 mt-4">
               <div className="flex justify-between items-center mb-3">
-                <h4 className="text-sm font-bold text-slate-700">Additional Income & One-Time Events</h4>
+                <h4 className="text-sm font-bold text-slate-700">Additional Retirement Income & One-Time Events</h4>
                 <button
                   onClick={onAddAdditionalIncome}
                   className="flex items-center gap-1 px-3 py-1.5 text-xs bg-emerald-50 text-emerald-700 rounded-lg border border-emerald-200 hover:bg-emerald-100 transition-colors"
@@ -1024,8 +1055,11 @@ export const ClientWizard = ({
                           onChange={(e) => onUpdateAdditionalIncome(income.id, 'endAge', parseInt(e.target.value) || 100)}
                           min={income.startAge}
                           max={100}
-                          className="p-2 border rounded w-full text-sm"
+                          className={`p-2 border rounded w-full text-sm ${fieldErrors[`income_${income.id}_endAge`] ? 'border-red-500 bg-red-50' : ''}`}
                         />
+                        {fieldErrors[`income_${income.id}_endAge`] && (
+                          <p className="text-[10px] text-red-500 mt-0.5">{fieldErrors[`income_${income.id}_endAge`]}</p>
+                        )}
                       </div>
                     )}
                     <div className="flex flex-col justify-end gap-1">
@@ -1063,7 +1097,8 @@ export const ClientWizard = ({
       {/* Summary Section */}
       <div className="text-center my-8">
         <h2 className="text-2xl font-bold text-slate-800">Your Retirement Outlook</h2>
-        <p className="text-slate-500 mt-2">Summary of your retirement plan projection</p>
+        <p className="text-slate-500 mt-2">A personalized projection based on your unique financial situation</p>
+        <p className="text-xs text-slate-400 mt-1">This analysis uses Miller Wealth's proprietary methodology to model your retirement trajectory</p>
       </div>
 
       {/* Stats Row */}
@@ -1103,7 +1138,7 @@ export const ClientWizard = ({
             : `${(monteCarloData?.successRate || 0).toFixed(1)}%`}
           subtext={adjustedProjections.hasChanges
             ? <><span className="line-through opacity-60">{(monteCarloData?.successRate || 0).toFixed(1)}%</span> → +{(adjustedProjections.successRate - (monteCarloData?.successRate || 0)).toFixed(1)}%</>
-            : "30-Year Projection"}
+            : `30 years from retirement (age ${clientInfo.retirementAge + 30})`}
           icon={Activity}
           colorClass={`${(adjustedProjections.hasChanges ? adjustedProjections.successRate : monteCarloData?.successRate) > 80 ? "bg-emerald-600" : "bg-orange-500"} text-white ${adjustedProjections.hasChanges ? 'ring-2 ring-yellow-300' : ''}`}
         />
@@ -1114,7 +1149,7 @@ export const ClientWizard = ({
             : `$${((projectionData[projectionData.length - 1]?.total || 0) / 1000000).toFixed(2)}M`}
           subtext={adjustedProjections.hasChanges
             ? <><span className="line-through opacity-60">${((projectionData[projectionData.length - 1]?.total || 0) / 1000000).toFixed(2)}M</span> → +${((adjustedProjections.legacyBalance - (projectionData[projectionData.length - 1]?.total || 0)) / 1000).toFixed(0)}k</>
-            : "Year 30 Projection"}
+            : `At age ${clientInfo.retirementAge + 30}`}
           icon={Shield}
           colorClass={`bg-emerald-800 text-white ${adjustedProjections.hasChanges ? 'ring-2 ring-yellow-300' : ''}`}
         />
@@ -1144,19 +1179,25 @@ export const ClientWizard = ({
           <>
             <div className="h-80 w-full">
               <ResponsiveContainer width="100%" height="100%">
-                <ComposedChart data={projectionData}>
+                <ComposedChart data={projectionData} margin={{ top: 5, right: 5, bottom: 30, left: 5 }}>
                   <CartesianGrid strokeDasharray="3 3" vertical={false} />
-                  <XAxis dataKey="year" />
-                  <YAxis tickFormatter={(val) => val >= 2000000 ? `$${Math.round(val / 1000000)}M` : `$${Math.round(val / 1000)}k`} />
+                  <XAxis dataKey="age" tick={{ dy: 5 }} />
+                  <YAxis tickFormatter={(val) => {
+                    if (val >= 1000000) {
+                      const millions = val / 1000000;
+                      return millions >= 10 ? `$${Math.round(millions)}M` : `$${millions.toFixed(1)}M`;
+                    }
+                    return `$${Math.round(val / 1000)}k`;
+                  }} />
                   <YAxis yAxisId="right" orientation="right" tickFormatter={(val) => `${val.toFixed(1)}%`} domain={[0, 'auto']} />
                   <Tooltip
                     formatter={(val, name) => {
                       if (name === 'Distribution Rate') return `${val.toFixed(2)}%`;
                       return `$${val.toLocaleString()}`;
                     }}
-                    labelFormatter={(l) => `Year ${l}`}
+                    labelFormatter={(l) => `Age ${l}`}
                   />
-                  <Legend />
+                  <Legend verticalAlign="bottom" wrapperStyle={{ paddingTop: '30px', paddingBottom: '0px' }} />
                   <Area type="monotone" dataKey="total" name="Miller Portfolio Architect Strategy" fill={COLORS.areaFill} stroke={COLORS.areaFill} fillOpacity={0.8} />
                   <Line type="monotone" dataKey="benchmark" name="Benchmark 60/40 (Annual Rebalance)" stroke={COLORS.benchmark} strokeDasharray="5 5" strokeWidth={2} dot={false} />
                   <Line yAxisId="right" type="monotone" dataKey="distRate" name="Distribution Rate" stroke={COLORS.distRate} strokeWidth={2} dot={false} />
@@ -1379,20 +1420,58 @@ export const ClientWizard = ({
         }
       })()}
 
+      {/* Risk Factors Warning */}
+      <Card className="p-6 border-t-4 border-amber-400 bg-amber-50">
+        <h3 className="font-bold text-lg text-slate-800 mb-3 flex items-center gap-2">
+          <AlertCircle className="w-5 h-5 text-amber-600" /> Important Considerations
+        </h3>
+        <p className="text-sm text-slate-600 mb-3">
+          While this projection provides valuable insights, life rarely follows a straight line. Several factors could impact your retirement:
+        </p>
+        <div className="grid grid-cols-2 md:grid-cols-3 gap-2 text-xs text-slate-700">
+          <div className="flex items-center gap-2 p-2 bg-white rounded border border-amber-200">
+            <span className="text-amber-500">•</span> Unexpected healthcare needs
+          </div>
+          <div className="flex items-center gap-2 p-2 bg-white rounded border border-amber-200">
+            <span className="text-amber-500">•</span> Market volatility
+          </div>
+          <div className="flex items-center gap-2 p-2 bg-white rounded border border-amber-200">
+            <span className="text-amber-500">•</span> Leaving workforce early
+          </div>
+          <div className="flex items-center gap-2 p-2 bg-white rounded border border-amber-200">
+            <span className="text-amber-500">•</span> Family elder-care obligations
+          </div>
+          <div className="flex items-center gap-2 p-2 bg-white rounded border border-amber-200">
+            <span className="text-amber-500">•</span> Supporting children financially
+          </div>
+          <div className="flex items-center gap-2 p-2 bg-white rounded border border-amber-200">
+            <span className="text-amber-500">•</span> Inflation exceeding projections
+          </div>
+        </div>
+        <p className="text-xs text-slate-500 mt-3 italic">
+          A professional advisor can help you prepare for these uncertainties and build resilience into your plan.
+        </p>
+      </Card>
+
       {/* Talk to Advisor CTA */}
-      <div className="bg-black text-white p-8 rounded-xl text-center">
-        <h3 className="text-2xl font-bold mb-2">Ready to Take the Next Step?</h3>
-        <p className="text-gray-400 mb-6">
-          Schedule a free consultation with a financial advisor to discuss your personalized retirement strategy.
+      <div className="bg-gradient-to-r from-slate-900 to-slate-800 text-white p-8 rounded-xl text-center">
+        <h3 className="text-2xl font-bold mb-2">Your Projection is Just the Beginning</h3>
+        <p className="text-gray-300 mb-4">
+          This analysis shows what's possible—but achieving it requires a comprehensive strategy.
+        </p>
+        <p className="text-gray-400 mb-6 text-sm">
+          Our advisors specialize in turning projections into reality through tax optimization,
+          Social Security timing, risk management, and ongoing plan adjustments as life changes.
         </p>
         <button
           onClick={onClientSubmit}
           disabled={saveStatus === 'saving'}
-          className="inline-flex items-center gap-2 px-8 py-4 bg-emerald-600 hover:bg-emerald-700 text-white text-lg font-bold rounded-xl transition-all"
+          className="inline-flex items-center gap-2 px-8 py-4 bg-emerald-600 hover:bg-emerald-700 text-white text-lg font-bold rounded-xl transition-all shadow-lg hover:shadow-xl"
         >
           <Send className="w-5 h-5" />
-          {saveStatus === 'saving' ? 'Saving...' : 'Talk to an Advisor About My Plan'}
+          {saveStatus === 'saving' ? 'Saving...' : 'Talk to a Miller Wealth Management Advisor About My Plan'}
         </button>
+        <p className="text-xs text-gray-500 mt-4">Free, no-obligation consultation</p>
       </div>
 
       <ImportantDisclosures />
@@ -1462,7 +1541,7 @@ export const ClientWizard = ({
                 onClick={handleBack}
                 className="flex items-center gap-1 sm:gap-2 px-3 sm:px-6 py-2 sm:py-3 text-slate-600 hover:bg-slate-100 rounded-lg transition-all text-sm sm:text-base"
               >
-                <ArrowLeft className="w-4 h-4 sm:w-5 sm:h-5" /> Back
+                <ArrowLeft className="w-4 h-4 sm:w-5 sm:h-5" /> Update Input Data
               </button>
             ) : (
               <div />
