@@ -2620,6 +2620,7 @@ const ArchitectureTab = ({ inputs, basePlan, assumptions, projectionData }) => {
 
 const OptimizerTab = ({ optimizerData, inputs, basePlan, monteCarloData, projectionData, optimizerRebalanceFreq, onSetOptimizerRebalanceFreq, clientInfo, assumptions }) => {
   const [selectedIPSStrategy, setSelectedIPSStrategy] = useState(null);
+  const [selectedIPSRebalanceFreq, setSelectedIPSRebalanceFreq] = useState(optimizerRebalanceFreq);
 
   // Safety check - if optimizerData isn't ready yet, show loading
   if (!optimizerData || !optimizerData.strategy1 || !optimizerData.strategy2 || !optimizerData.strategy3) {
@@ -2837,7 +2838,7 @@ const OptimizerTab = ({ optimizerData, inputs, basePlan, monteCarloData, project
 
       {/* IPS Generation Section */}
       <Card className="p-5 bg-gradient-to-r from-indigo-50 to-purple-50 border-indigo-200">
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+        <div className="flex flex-col gap-4">
           <div className="flex items-start gap-4">
             <div className="p-3 bg-indigo-100 rounded-full">
               <FileText className="w-6 h-6 text-indigo-600" />
@@ -2846,35 +2847,59 @@ const OptimizerTab = ({ optimizerData, inputs, basePlan, monteCarloData, project
               <h4 className="font-bold text-slate-800">Investment Policy Statement</h4>
               <p className="text-slate-600 text-sm mt-1">
                 {selectedIPSStrategy
-                  ? `Generate an IPS document using the "${selectedIPSStrategy.name}" strategy with ${distributionStrategies.find(s => s.value === optimizerRebalanceFreq)?.label || 'Sequential Distribution'}.`
-                  : 'Click on a strategy above to select it for your Investment Policy Statement, then generate the document.'
+                  ? `Generate an IPS document using the "${selectedIPSStrategy.name}" strategy with ${distributionStrategies.find(s => s.value === selectedIPSRebalanceFreq)?.label || 'Sequential Distribution'}.`
+                  : 'Click on a strategy above to select it for your Investment Policy Statement, then choose a distribution strategy below.'
                 }
               </p>
             </div>
           </div>
-          <button
-            onClick={() => {
-              const strategyToUse = selectedIPSStrategy || bestStrategy;
-              generateAndDownloadIPS({
-                clientInfo,
-                inputs,
-                assumptions,
-                selectedStrategy: strategyToUse,
-                distributionFreq: optimizerRebalanceFreq,
-                monteCarloData
-              });
-            }}
-            disabled={!clientInfo?.name}
-            className={`flex items-center gap-2 px-6 py-3 rounded-lg font-medium transition-all whitespace-nowrap ${
-              clientInfo?.name
-                ? 'bg-indigo-600 text-white hover:bg-indigo-700 shadow-md'
-                : 'bg-slate-300 text-slate-500 cursor-not-allowed'
-            }`}
-            title={!clientInfo?.name ? 'Please enter client name to generate IPS' : ''}
-          >
-            <Download className="w-5 h-5" />
-            Generate IPS
-          </button>
+
+          {/* IPS Distribution Strategy Selector */}
+          <div className="flex flex-col sm:flex-row sm:items-center gap-3 pl-16">
+            <span className="text-sm font-medium text-slate-600">Distribution Strategy for IPS:</span>
+            <div className="flex flex-wrap gap-2">
+              {distributionStrategies.map((strategy) => (
+                <button
+                  key={strategy.value}
+                  onClick={() => setSelectedIPSRebalanceFreq(strategy.value)}
+                  className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-all ${
+                    selectedIPSRebalanceFreq === strategy.value
+                      ? 'bg-indigo-600 text-white shadow-md'
+                      : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
+                  }`}
+                  title={strategy.description}
+                >
+                  {strategy.label}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          <div className="flex justify-end">
+            <button
+              onClick={() => {
+                const strategyToUse = selectedIPSStrategy || bestStrategy;
+                generateAndDownloadIPS({
+                  clientInfo,
+                  inputs,
+                  assumptions,
+                  selectedStrategy: strategyToUse,
+                  distributionFreq: selectedIPSRebalanceFreq,
+                  monteCarloData
+                });
+              }}
+              disabled={!clientInfo?.name}
+              className={`flex items-center gap-2 px-6 py-3 rounded-lg font-medium transition-all whitespace-nowrap ${
+                clientInfo?.name
+                  ? 'bg-indigo-600 text-white hover:bg-indigo-700 shadow-md'
+                  : 'bg-slate-300 text-slate-500 cursor-not-allowed'
+              }`}
+              title={!clientInfo?.name ? 'Please enter client name to generate IPS' : ''}
+            >
+              <Download className="w-5 h-5" />
+              Generate IPS
+            </button>
+          </div>
         </div>
         {!clientInfo?.name && (
           <p className="text-xs text-amber-600 mt-3 flex items-center gap-1">
