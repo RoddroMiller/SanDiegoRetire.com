@@ -7,14 +7,16 @@ import { db, appId } from '../constants';
  * @param {object} params - Hook parameters
  * @param {object} params.currentUser - Current authenticated user
  * @param {string} params.userRole - Current user role (client/advisor/master)
+ * @param {string} params.planFilter - Plan filter mode ('mine', 'team', 'all')
+ * @param {string[]} params.teamMemberEmails - Array of team member email addresses
  * @returns {object} Scenario state and handlers
  */
-export const useScenarios = ({ currentUser, userRole }) => {
+export const useScenarios = ({ currentUser, userRole, planFilter = 'mine', teamMemberEmails = [] }) => {
   const [savedScenarios, setSavedScenarios] = useState([]);
   const [isLoadingScenarios, setIsLoadingScenarios] = useState(false);
   const [saveStatus, setSaveStatus] = useState('idle');
 
-  // Fetch scenarios when user/role changes
+  // Fetch scenarios when user/role/filter changes
   useEffect(() => {
     if (!currentUser || !db || userRole === 'anonymous') return;
 
@@ -35,13 +37,35 @@ export const useScenarios = ({ currentUser, userRole }) => {
             s.assignedClientEmail?.toLowerCase() === currentUser.email?.toLowerCase()
           );
         }
-        // Filter by advisor if not master - check both UID and email
-        else if (userRole !== 'master') {
-          scenarios = scenarios.filter(s =>
-            s.advisorId === currentUser.uid ||
-            s.advisorEmail?.toLowerCase() === currentUser.email?.toLowerCase() ||
-            s.advisorId?.toLowerCase() === currentUser.email?.toLowerCase()
-          );
+        // Master can see all or filter by team
+        else if (userRole === 'master') {
+          if (planFilter === 'mine') {
+            scenarios = scenarios.filter(s =>
+              s.advisorId === currentUser.uid ||
+              s.advisorEmail?.toLowerCase() === currentUser.email?.toLowerCase()
+            );
+          } else if (planFilter === 'team' && teamMemberEmails.length > 0) {
+            scenarios = scenarios.filter(s =>
+              teamMemberEmails.includes(s.advisorEmail?.toLowerCase())
+            );
+          }
+          // planFilter === 'all' shows everything for master
+        }
+        // Regular advisors: filter by mine or team
+        else {
+          if (planFilter === 'team' && teamMemberEmails.length > 0) {
+            // Show all team members' plans (including own)
+            scenarios = scenarios.filter(s =>
+              teamMemberEmails.includes(s.advisorEmail?.toLowerCase())
+            );
+          } else {
+            // Default to 'mine' - show only own plans
+            scenarios = scenarios.filter(s =>
+              s.advisorId === currentUser.uid ||
+              s.advisorEmail?.toLowerCase() === currentUser.email?.toLowerCase() ||
+              s.advisorId?.toLowerCase() === currentUser.email?.toLowerCase()
+            );
+          }
         }
 
         scenarios.sort((a, b) => b.updatedAt - a.updatedAt);
@@ -54,7 +78,7 @@ export const useScenarios = ({ currentUser, userRole }) => {
     };
 
     fetchScenarios();
-  }, [currentUser, userRole]);
+  }, [currentUser, userRole, planFilter, teamMemberEmails]);
 
   /**
    * Save a scenario (for advisors)
@@ -330,13 +354,32 @@ export const useScenarios = ({ currentUser, userRole }) => {
           s.assignedClientEmail?.toLowerCase() === currentUser.email?.toLowerCase()
         );
       }
-      // Filter by advisor if not master - check both UID and email
-      else if (userRole !== 'master') {
-        scenarios = scenarios.filter(s =>
-          s.advisorId === currentUser.uid ||
-          s.advisorEmail?.toLowerCase() === currentUser.email?.toLowerCase() ||
-          s.advisorId?.toLowerCase() === currentUser.email?.toLowerCase()
-        );
+      // Master can see all or filter by team
+      else if (userRole === 'master') {
+        if (planFilter === 'mine') {
+          scenarios = scenarios.filter(s =>
+            s.advisorId === currentUser.uid ||
+            s.advisorEmail?.toLowerCase() === currentUser.email?.toLowerCase()
+          );
+        } else if (planFilter === 'team' && teamMemberEmails.length > 0) {
+          scenarios = scenarios.filter(s =>
+            teamMemberEmails.includes(s.advisorEmail?.toLowerCase())
+          );
+        }
+      }
+      // Regular advisors: filter by mine or team
+      else {
+        if (planFilter === 'team' && teamMemberEmails.length > 0) {
+          scenarios = scenarios.filter(s =>
+            teamMemberEmails.includes(s.advisorEmail?.toLowerCase())
+          );
+        } else {
+          scenarios = scenarios.filter(s =>
+            s.advisorId === currentUser.uid ||
+            s.advisorEmail?.toLowerCase() === currentUser.email?.toLowerCase() ||
+            s.advisorId?.toLowerCase() === currentUser.email?.toLowerCase()
+          );
+        }
       }
 
       scenarios.sort((a, b) => b.updatedAt - a.updatedAt);
@@ -346,7 +389,7 @@ export const useScenarios = ({ currentUser, userRole }) => {
     } finally {
       setIsLoadingScenarios(false);
     }
-  }, [currentUser, userRole]);
+  }, [currentUser, userRole, planFilter, teamMemberEmails]);
 
   /**
    * Assign a plan to a client by email

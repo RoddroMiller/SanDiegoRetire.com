@@ -31,7 +31,11 @@ export const PlanManagement = ({
   onRefreshAdvisors,
   // Client assignment
   onAssignPlanToClient,
-  onRemoveClientAssignment
+  onRemoveClientAssignment,
+  // Plan filter
+  planFilter = 'mine',
+  onPlanFilterChange,
+  hasTeams = false
 }) => {
   const [searchTerm, setSearchTerm] = useState('');
   const [sortField, setSortField] = useState('updatedAt');
@@ -509,7 +513,24 @@ Your Financial Advisor`;
         {userRole !== 'registeredClient' && (
           <Card className="p-4 mb-6">
             <div className="flex flex-col lg:flex-row gap-4 items-start lg:items-center justify-between">
-              <div className="flex flex-wrap gap-2">
+              <div className="flex flex-wrap gap-2 items-center">
+                {/* Plan Ownership Filter */}
+                {(hasTeams || userRole === 'master') && (
+                  <select
+                    value={planFilter}
+                    onChange={(e) => onPlanFilterChange && onPlanFilterChange(e.target.value)}
+                    className="px-3 py-1.5 text-sm font-medium rounded-lg border border-slate-200 bg-white focus:ring-emerald-500 focus:border-emerald-500 mr-2"
+                  >
+                    <option value="mine">My Plans</option>
+                    {hasTeams && <option value="team">Team Plans</option>}
+                    {userRole === 'master' && <option value="all">All Plans</option>}
+                  </select>
+                )}
+                {planFilter === 'team' && (
+                  <span className="flex items-center gap-1 text-xs text-emerald-600 bg-emerald-50 px-2 py-1 rounded mr-2">
+                    <Users className="w-3 h-3" /> Team View
+                  </span>
+                )}
                 <button
                   onClick={() => setFilterType('all')}
                   className={`px-3 py-1.5 text-sm font-medium rounded-lg transition-all ${filterType === 'all' ? 'bg-slate-800 text-white' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'}`}

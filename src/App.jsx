@@ -44,6 +44,25 @@ export default function BucketPortfolioBuilder() {
     cancelPasswordExpiry
   } = useAuth();
 
+  // Advisor view state (planning vs management)
+  const [advisorView, setAdvisorView] = useState('planning');
+
+  // Plan filter state (mine, team, all)
+  const [planFilter, setPlanFilter] = useState('mine');
+
+  // --- Command Center Hook (The One Process integration) ---
+  // Must be before useScenarios since it provides team data
+  const {
+    commandCenterStatus,
+    saveToCommandCenter,
+    isCommandCenterConnected,
+    commandCenterClients,
+    isLoadingClients,
+    userTeams,
+    teamMemberEmails,
+    hasTeams
+  } = useCommandCenter({ currentUser });
+
   // --- Scenarios Hook ---
   const {
     savedScenarios,
@@ -59,10 +78,7 @@ export default function BucketPortfolioBuilder() {
     refreshScenarios,
     assignPlanToClient,
     removeClientAssignment
-  } = useScenarios({ currentUser, userRole });
-
-  // Advisor view state (planning vs management)
-  const [advisorView, setAdvisorView] = useState('planning');
+  } = useScenarios({ currentUser, userRole, planFilter, teamMemberEmails });
 
   // --- Advisors Hook ---
   const {
@@ -72,15 +88,6 @@ export default function BucketPortfolioBuilder() {
     deleteAdvisor,
     refreshAdvisors
   } = useAdvisors();
-
-  // --- Command Center Hook (The One Process integration) ---
-  const {
-    commandCenterStatus,
-    saveToCommandCenter,
-    isCommandCenterConnected,
-    commandCenterClients,
-    isLoadingClients
-  } = useCommandCenter({ currentUser });
 
   // --- Session Timeout for BOSP compliance (15 min inactivity) ---
   const [showSessionWarning, setShowSessionWarning] = useState(false);
@@ -631,6 +638,9 @@ export default function BucketPortfolioBuilder() {
         onRefreshAdvisors={refreshAdvisors}
         onAssignPlanToClient={assignPlanToClient}
         onRemoveClientAssignment={removeClientAssignment}
+        planFilter={planFilter}
+        onPlanFilterChange={setPlanFilter}
+        hasTeams={hasTeams}
       />
       </>
     );
@@ -653,6 +663,9 @@ export default function BucketPortfolioBuilder() {
         accumulationData={accumulationData}
         onProceed={proceedToArchitect}
         onViewManagement={() => setAdvisorView('management')}
+        planFilter={planFilter}
+        onPlanFilterChange={setPlanFilter}
+        hasTeams={hasTeams}
       />
       </>
     );

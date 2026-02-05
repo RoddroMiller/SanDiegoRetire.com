@@ -1,6 +1,6 @@
 import React from 'react';
 import { ResponsiveContainer, AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip } from 'recharts';
-import { User, DollarSign, ArrowRight, FolderOpen, Loader, Trash2, LogOut, Info, Settings } from 'lucide-react';
+import { User, DollarSign, ArrowRight, FolderOpen, Loader, Trash2, LogOut, Info, Settings, Users } from 'lucide-react';
 
 import { COLORS, LOGO_URL } from '../../constants';
 import { formatPhoneNumber } from '../../utils';
@@ -26,7 +26,11 @@ export const AccumulationPage = ({
   accumulationData,
   // Navigation
   onProceed,
-  onViewManagement
+  onViewManagement,
+  // Plan Filter
+  planFilter = 'mine',
+  onPlanFilterChange,
+  hasTeams = false
 }) => {
   return (
     <div className="min-h-screen bg-slate-50 font-sans text-slate-800 p-3 sm:p-6 flex flex-col items-center">
@@ -72,9 +76,28 @@ export const AccumulationPage = ({
             {/* Saved Scenarios (Advisor Only) */}
             {userRole !== 'client' && (
               <div className="mb-6 pb-6 border-b border-slate-100">
-                <h3 className="text-sm font-bold text-slate-500 uppercase mb-3 flex items-center gap-2">
-                  <FolderOpen className="w-4 h-4" /> Load Saved Client {userRole === 'master' && '(Master View)'}
-                </h3>
+                <div className="flex items-center justify-between mb-3">
+                  <h3 className="text-sm font-bold text-slate-500 uppercase flex items-center gap-2">
+                    <FolderOpen className="w-4 h-4" /> Load Saved Client
+                  </h3>
+                  {/* Plan Filter Dropdown */}
+                  {(hasTeams || userRole === 'master') && (
+                    <select
+                      value={planFilter}
+                      onChange={(e) => onPlanFilterChange && onPlanFilterChange(e.target.value)}
+                      className="text-xs border border-slate-200 rounded-lg px-2 py-1 bg-white focus:ring-emerald-500 focus:border-emerald-500"
+                    >
+                      <option value="mine">My Plans</option>
+                      {hasTeams && <option value="team">Team Plans</option>}
+                      {userRole === 'master' && <option value="all">All Plans</option>}
+                    </select>
+                  )}
+                </div>
+                {planFilter === 'team' && (
+                  <div className="flex items-center gap-1 text-xs text-emerald-600 mb-2">
+                    <Users className="w-3 h-3" /> Viewing team members' plans
+                  </div>
+                )}
                 {isLoadingScenarios ? (
                   <div className="flex items-center gap-2 text-xs text-slate-400">
                     <Loader className="w-3 h-3 animate-spin" /> Loading...
