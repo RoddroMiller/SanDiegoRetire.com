@@ -169,6 +169,288 @@ exports.onSecurityRecordUpdated = onDocumentUpdated(SECURITY_PATH, async (event)
   });
 });
 
+// ─── Callable: Account Lockout ──────────────────────────────────────
+// These run BEFORE authentication so they do NOT require request.auth.
+// The admin SDK bypasses security rules to read/write the locked-down
+// security collection.
+
+const MAX_FAILED_ATTEMPTS = 5;
+const LOCKOUT_DURATION_MS = 15 * 60 * 1000; // 15 minutes
+const PASSWORD_EXPIRY_DAYS = 90;
+const MAX_PASSWORD_HISTORY = 5;
+
+function hashEmail(email) {
+  return email.toLowerCase().replace(/[.@]/g, "_");
+}
+
+function getSecurityDocRef(email) {
+  return db.doc(`security/users/${hashEmail(email)}/data`);
+}
+
+exports.checkAccountLockout = onCall(async (request) => {
+  const { email } = request.data;
+  if (!email) {
+    throw new HttpsError("invalid-argument", "email is required.");
+  }
+
+  try {
+    const docRef = getSecurityDocRef(email);
+    const docSnap = await docRef.get();
+
+    if (!docSnap.exists) {
+      return { locked: false, remainingAttempts: MAX_FAILED_ATTEMPTS };
+    }
+
+    const data = docSnap.data();
+
+    if (data.lockoutUntil) {
+      const lockoutTime = data.lockoutUntil.toDate();
+      if (lockoutTime > new Date()) {
+        const remainingMs = lockoutTime - new Date();
+        const remainingMinutes = Math.ceil(remainingMs / 60000);
+        return {
+          locked: true,
+          remainingMinutes,
+          message: `Account locked due to too many failed attempts. Try again in ${remainingMinutes} minute${remainingMinutes !== 1 ? "s" : ""}.`,
+        };
+      }
+      // Lockout expired, reset
+      await docRef.update({
+        failedAttempts: 0,
+        lockoutUntil: null,
+        updatedAt: FieldValue.serverTimestamp(),
+      });
+    }
+
+    const remainingAttempts = MAX_FAILED_ATTEMPTS - (data.failedAttempts || 0);
+    return { locked: false, remainingAttempts };
+  } catch (error) {
+    console.error("Error checking account lockout:", error);
+    return { locked: false, remainingAttempts: MAX_FAILED_ATTEMPTS };
+  }
+});
+
+exports.recordFailedAttempt = onCall(async (request) => {
+  const { email } = request.data;
+  if (!email) {
+    throw new HttpsError("invalid-argument", "email is required.");
+  }
+
+  try {
+    const docRef = getSecurityDocRef(email);
+    const docSnap = await docRef.get();
+
+    let failedAttempts = 1;
+
+    if (docSnap.exists) {
+      failedAttempts = (docSnap.data().failedAttempts || 0) + 1;
+    }
+
+    const updateData = {
+      email: email.toLowerCase(),
+      failedAttempts,
+      updatedAt: FieldValue.serverTimestamp(),
+    };
+
+    if (failedAttempts >= MAX_FAILED_ATTEMPTS) {
+      updateData.lockoutUntil = new Date(Date.now() + LOCKOUT_DURATION_MS);
+    }
+
+    if (docSnap.exists) {
+      await docRef.update(updateData);
+    } else {
+      await docRef.set({ ...updateData, createdAt: FieldValue.serverTimestamp() });
+    }
+
+    return {
+      attemptCount: failedAttempts,
+      isLocked: failedAttempts >= MAX_FAILED_ATTEMPTS,
+      remainingAttempts: Math.max(0, MAX_FAILED_ATTEMPTS - failedAttempts),
+    };
+  } catch (error) {
+    console.error("Error recording failed attempt:", error);
+    return { attemptCount: 1, isLocked: false, remainingAttempts: MAX_FAILED_ATTEMPTS - 1 };
+  }
+});
+
+exports.resetFailedAttempts = onCall(async (request) => {
+  if (!request.auth) {
+    throw new HttpsError("unauthenticated", "Must be signed in.");
+  }
+
+  const { email } = request.data;
+  if (!email) {
+    throw new HttpsError("invalid-argument", "email is required.");
+  }
+
+  try {
+    const docRef = getSecurityDocRef(email);
+    const docSnap = await docRef.get();
+
+    if (docSnap.exists) {
+      await docRef.update({
+        failedAttempts: 0,
+        lockoutUntil: null,
+        updatedAt: FieldValue.serverTimestamp(),
+      });
+    }
+
+    return { success: true };
+  } catch (error) {
+    console.error("Error resetting failed attempts:", error);
+    return { success: false };
+  }
+});
+
+// ─── Callable: Password Expiry & History ────────────────────────────
+
+exports.checkPasswordExpiry = onCall(async (request) => {
+  if (!request.auth) {
+    throw new HttpsError("unauthenticated", "Must be signed in.");
+  }
+
+  const { email } = request.data;
+  if (!email) {
+    throw new HttpsError("invalid-argument", "email is required.");
+  }
+
+  try {
+    const docRef = getSecurityDocRef(email);
+    const docSnap = await docRef.get();
+
+    if (!docSnap.exists) {
+      return { expired: false, daysUntilExpiry: PASSWORD_EXPIRY_DAYS };
+    }
+
+    const data = docSnap.data();
+    if (!data.lastPasswordChange) {
+      return { expired: true, daysUntilExpiry: 0 };
+    }
+
+    const lastChange = data.lastPasswordChange.toDate();
+    const daysSinceChange = Math.floor((Date.now() - lastChange) / (1000 * 60 * 60 * 24));
+    const daysUntilExpiry = PASSWORD_EXPIRY_DAYS - daysSinceChange;
+
+    return {
+      expired: daysSinceChange >= PASSWORD_EXPIRY_DAYS,
+      daysUntilExpiry: Math.max(0, daysUntilExpiry),
+      daysSinceChange,
+    };
+  } catch (error) {
+    console.error("Error checking password expiry:", error);
+    return { expired: false, daysUntilExpiry: PASSWORD_EXPIRY_DAYS };
+  }
+});
+
+exports.initializeSecurityRecord = onCall(async (request) => {
+  if (!request.auth) {
+    throw new HttpsError("unauthenticated", "Must be signed in.");
+  }
+
+  const { email, passwordHash } = request.data;
+  if (!email || !passwordHash) {
+    throw new HttpsError("invalid-argument", "email and passwordHash are required.");
+  }
+
+  try {
+    const docRef = getSecurityDocRef(email);
+    await docRef.set({
+      email: email.toLowerCase(),
+      failedAttempts: 0,
+      lockoutUntil: null,
+      lastPasswordChange: FieldValue.serverTimestamp(),
+      passwordHistory: [passwordHash],
+      createdAt: FieldValue.serverTimestamp(),
+      updatedAt: FieldValue.serverTimestamp(),
+    });
+
+    return { success: true };
+  } catch (error) {
+    console.error("Error initializing security record:", error);
+    return { success: false };
+  }
+});
+
+exports.checkPasswordHistory = onCall(async (request) => {
+  if (!request.auth) {
+    throw new HttpsError("unauthenticated", "Must be signed in.");
+  }
+
+  const { email, passwordHash } = request.data;
+  if (!email || !passwordHash) {
+    throw new HttpsError("invalid-argument", "email and passwordHash are required.");
+  }
+
+  try {
+    const docRef = getSecurityDocRef(email);
+    const docSnap = await docRef.get();
+
+    if (!docSnap.exists) {
+      return { valid: true };
+    }
+
+    const data = docSnap.data();
+    const passwordHistory = data.passwordHistory || [];
+
+    if (passwordHistory.length === 0) {
+      return { valid: true };
+    }
+
+    if (passwordHistory.includes(passwordHash)) {
+      return {
+        valid: false,
+        error: "Cannot reuse your last 5 passwords. Please choose a different password.",
+      };
+    }
+
+    return { valid: true };
+  } catch (error) {
+    console.error("Error checking password history:", error);
+    return { valid: true };
+  }
+});
+
+exports.addToPasswordHistory = onCall(async (request) => {
+  if (!request.auth) {
+    throw new HttpsError("unauthenticated", "Must be signed in.");
+  }
+
+  const { email, passwordHash } = request.data;
+  if (!email || !passwordHash) {
+    throw new HttpsError("invalid-argument", "email and passwordHash are required.");
+  }
+
+  try {
+    const docRef = getSecurityDocRef(email);
+    const docSnap = await docRef.get();
+
+    let passwordHistory = [];
+    if (docSnap.exists) {
+      passwordHistory = docSnap.data().passwordHistory || [];
+    }
+
+    // Add new hash to beginning, keep only last 5
+    passwordHistory.unshift(passwordHash);
+    if (passwordHistory.length > MAX_PASSWORD_HISTORY) {
+      passwordHistory = passwordHistory.slice(0, MAX_PASSWORD_HISTORY);
+    }
+
+    await docRef.set(
+      {
+        passwordHistory,
+        lastPasswordChange: FieldValue.serverTimestamp(),
+        updatedAt: FieldValue.serverTimestamp(),
+      },
+      { merge: true }
+    );
+
+    return { success: true };
+  } catch (error) {
+    console.error("Error adding to password history:", error);
+    return { success: false };
+  }
+});
+
 // ─── Callable: Set User Role ────────────────────────────────────────
 // Future use — master can assign custom claims (roles) to users.
 

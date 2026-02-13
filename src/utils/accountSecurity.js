@@ -1,27 +1,33 @@
 /**
  * Account security utilities for BOSP compliance
- * - Account lockout after failed login attempts
- * - Password expiration (90 days)
- * - Password history (prevent reuse of last 5)
+ * All operations go through Cloud Functions (server-side).
+ * Password hashing remains client-side — only hashes are sent to the server.
  */
 
-import { doc, getDoc, setDoc, updateDoc, serverTimestamp, Timestamp } from 'firebase/firestore';
-import { db } from '../constants';
+import { getFunctions, httpsCallable } from 'firebase/functions';
+import { getApp } from 'firebase/app';
 
-// Security constants
+let functions;
+try {
+  functions = getFunctions(getApp());
+} catch {
+  // Functions will be null if Firebase isn't initialized
+  functions = null;
+}
+
+// ─── Cloud Function references ──────────────────────────────────────
+
+const callCheckAccountLockout = functions ? httpsCallable(functions, 'checkAccountLockout') : null;
+const callRecordFailedAttempt = functions ? httpsCallable(functions, 'recordFailedAttempt') : null;
+const callResetFailedAttempts = functions ? httpsCallable(functions, 'resetFailedAttempts') : null;
+const callCheckPasswordExpiry = functions ? httpsCallable(functions, 'checkPasswordExpiry') : null;
+const callInitializeSecurityRecord = functions ? httpsCallable(functions, 'initializeSecurityRecord') : null;
+const callCheckPasswordHistory = functions ? httpsCallable(functions, 'checkPasswordHistory') : null;
+const callAddToPasswordHistory = functions ? httpsCallable(functions, 'addToPasswordHistory') : null;
+
+// Security constants (keep in sync for client-side fallback values)
 const MAX_FAILED_ATTEMPTS = 5;
-const LOCKOUT_DURATION_MS = 15 * 60 * 1000; // 15 minutes
 const PASSWORD_EXPIRY_DAYS = 90;
-const MAX_PASSWORD_HISTORY = 5;
-
-/**
- * Hash email for use as Firestore document ID
- * @param {string} email
- * @returns {string}
- */
-const hashEmail = (email) => {
-  return email.toLowerCase().replace(/[.@]/g, '_');
-};
 
 /**
  * SHA-256 hash a password using Web Crypto API
@@ -36,15 +42,6 @@ const hashPassword = async (password) => {
   return hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
 };
 
-/**
- * Get security document reference for a user
- * @param {string} email
- * @returns {DocumentReference}
- */
-const getSecurityDocRef = (email) => {
-  return doc(db, 'security', 'users', hashEmail(email), 'data');
-};
-
 // ============================================
 // ACCOUNT LOCKOUT
 // ============================================
@@ -56,39 +53,13 @@ const getSecurityDocRef = (email) => {
  */
 export const checkAccountLockout = async (email) => {
   try {
-    const docRef = getSecurityDocRef(email);
-    const docSnap = await getDoc(docRef);
-
-    if (!docSnap.exists()) {
+    if (!callCheckAccountLockout) {
       return { locked: false, remainingAttempts: MAX_FAILED_ATTEMPTS };
     }
-
-    const data = docSnap.data();
-
-    if (data.lockoutUntil) {
-      const lockoutTime = data.lockoutUntil.toDate();
-      if (lockoutTime > new Date()) {
-        const remainingMs = lockoutTime - new Date();
-        const remainingMinutes = Math.ceil(remainingMs / 60000);
-        return {
-          locked: true,
-          remainingMinutes,
-          message: `Account locked due to too many failed attempts. Try again in ${remainingMinutes} minute${remainingMinutes !== 1 ? 's' : ''}.`
-        };
-      }
-      // Lockout expired, reset
-      await updateDoc(docRef, {
-        failedAttempts: 0,
-        lockoutUntil: null,
-        updatedAt: serverTimestamp()
-      });
-    }
-
-    const remainingAttempts = MAX_FAILED_ATTEMPTS - (data.failedAttempts || 0);
-    return { locked: false, remainingAttempts };
+    const result = await callCheckAccountLockout({ email });
+    return result.data;
   } catch (error) {
     console.error('Error checking account lockout:', error);
-    // On error, allow login attempt (fail open for usability)
     return { locked: false, remainingAttempts: MAX_FAILED_ATTEMPTS };
   }
 };
@@ -100,50 +71,13 @@ export const checkAccountLockout = async (email) => {
  */
 export const recordFailedAttempt = async (email) => {
   try {
-    console.log('Recording failed attempt for:', email);
-    const docRef = getSecurityDocRef(email);
-    console.log('Security doc path:', docRef.path);
-
-    const docSnap = await getDoc(docRef);
-    console.log('Doc exists:', docSnap.exists());
-
-    let failedAttempts = 1;
-
-    if (docSnap.exists()) {
-      failedAttempts = (docSnap.data().failedAttempts || 0) + 1;
+    if (!callRecordFailedAttempt) {
+      return { attemptCount: 1, isLocked: false, remainingAttempts: MAX_FAILED_ATTEMPTS - 1 };
     }
-
-    console.log('Failed attempts count:', failedAttempts);
-
-    const updateData = {
-      email: email.toLowerCase(),
-      failedAttempts,
-      updatedAt: serverTimestamp()
-    };
-
-    if (failedAttempts >= MAX_FAILED_ATTEMPTS) {
-      updateData.lockoutUntil = Timestamp.fromDate(
-        new Date(Date.now() + LOCKOUT_DURATION_MS)
-      );
-    }
-
-    if (docSnap.exists()) {
-      await updateDoc(docRef, updateData);
-    } else {
-      await setDoc(docRef, { ...updateData, createdAt: serverTimestamp() });
-    }
-
-    console.log('Successfully recorded failed attempt. Remaining:', MAX_FAILED_ATTEMPTS - failedAttempts);
-
-    return {
-      attemptCount: failedAttempts,
-      isLocked: failedAttempts >= MAX_FAILED_ATTEMPTS,
-      remainingAttempts: Math.max(0, MAX_FAILED_ATTEMPTS - failedAttempts)
-    };
+    const result = await callRecordFailedAttempt({ email });
+    return result.data;
   } catch (error) {
     console.error('Error recording failed attempt:', error);
-    console.error('Error code:', error.code);
-    console.error('Error message:', error.message);
     return { attemptCount: 1, isLocked: false, remainingAttempts: MAX_FAILED_ATTEMPTS - 1 };
   }
 };
@@ -154,16 +88,8 @@ export const recordFailedAttempt = async (email) => {
  */
 export const resetFailedAttempts = async (email) => {
   try {
-    const docRef = getSecurityDocRef(email);
-    const docSnap = await getDoc(docRef);
-
-    if (docSnap.exists()) {
-      await updateDoc(docRef, {
-        failedAttempts: 0,
-        lockoutUntil: null,
-        updatedAt: serverTimestamp()
-      });
-    }
+    if (!callResetFailedAttempts) return;
+    await callResetFailedAttempts({ email });
   } catch (error) {
     console.error('Error resetting failed attempts:', error);
   }
@@ -180,49 +106,14 @@ export const resetFailedAttempts = async (email) => {
  */
 export const checkPasswordExpiry = async (email) => {
   try {
-    const docRef = getSecurityDocRef(email);
-    const docSnap = await getDoc(docRef);
-
-    if (!docSnap.exists()) {
-      // New user - password is not expired but will be tracked on first change
+    if (!callCheckPasswordExpiry) {
       return { expired: false, daysUntilExpiry: PASSWORD_EXPIRY_DAYS };
     }
-
-    const data = docSnap.data();
-    if (!data.lastPasswordChange) {
-      // No record of password change - treat as expired to force tracking
-      return { expired: true, daysUntilExpiry: 0 };
-    }
-
-    const lastChange = data.lastPasswordChange.toDate();
-    const daysSinceChange = Math.floor((Date.now() - lastChange) / (1000 * 60 * 60 * 24));
-    const daysUntilExpiry = PASSWORD_EXPIRY_DAYS - daysSinceChange;
-
-    return {
-      expired: daysSinceChange >= PASSWORD_EXPIRY_DAYS,
-      daysUntilExpiry: Math.max(0, daysUntilExpiry),
-      daysSinceChange
-    };
+    const result = await callCheckPasswordExpiry({ email });
+    return result.data;
   } catch (error) {
     console.error('Error checking password expiry:', error);
-    // On error, don't block login
     return { expired: false, daysUntilExpiry: PASSWORD_EXPIRY_DAYS };
-  }
-};
-
-/**
- * Update the password change timestamp
- * @param {string} email
- */
-export const updatePasswordTimestamp = async (email) => {
-  try {
-    const docRef = getSecurityDocRef(email);
-    await setDoc(docRef, {
-      lastPasswordChange: serverTimestamp(),
-      updatedAt: serverTimestamp()
-    }, { merge: true });
-  } catch (error) {
-    console.error('Error updating password timestamp:', error);
   }
 };
 
@@ -238,33 +129,12 @@ export const updatePasswordTimestamp = async (email) => {
  */
 export const checkPasswordHistory = async (email, newPassword) => {
   try {
-    const docRef = getSecurityDocRef(email);
-    const docSnap = await getDoc(docRef);
-
-    if (!docSnap.exists()) {
-      return { valid: true };
-    }
-
-    const data = docSnap.data();
-    const passwordHistory = data.passwordHistory || [];
-
-    if (passwordHistory.length === 0) {
-      return { valid: true };
-    }
-
-    const newHash = await hashPassword(newPassword);
-
-    if (passwordHistory.includes(newHash)) {
-      return {
-        valid: false,
-        error: 'Cannot reuse your last 5 passwords. Please choose a different password.'
-      };
-    }
-
-    return { valid: true };
+    if (!callCheckPasswordHistory) return { valid: true };
+    const passwordHash = await hashPassword(newPassword);
+    const result = await callCheckPasswordHistory({ email, passwordHash });
+    return result.data;
   } catch (error) {
     console.error('Error checking password history:', error);
-    // On error, allow the password change
     return { valid: true };
   }
 };
@@ -276,27 +146,9 @@ export const checkPasswordHistory = async (email, newPassword) => {
  */
 export const addToPasswordHistory = async (email, password) => {
   try {
-    const docRef = getSecurityDocRef(email);
-    const docSnap = await getDoc(docRef);
-
-    let passwordHistory = [];
-    if (docSnap.exists()) {
-      passwordHistory = docSnap.data().passwordHistory || [];
-    }
-
-    const newHash = await hashPassword(password);
-
-    // Add new hash to beginning, keep only last 5
-    passwordHistory.unshift(newHash);
-    if (passwordHistory.length > MAX_PASSWORD_HISTORY) {
-      passwordHistory = passwordHistory.slice(0, MAX_PASSWORD_HISTORY);
-    }
-
-    await setDoc(docRef, {
-      passwordHistory,
-      lastPasswordChange: serverTimestamp(),
-      updatedAt: serverTimestamp()
-    }, { merge: true });
+    if (!callAddToPasswordHistory) return;
+    const passwordHash = await hashPassword(password);
+    await callAddToPasswordHistory({ email, passwordHash });
   } catch (error) {
     console.error('Error adding to password history:', error);
   }
@@ -309,18 +161,9 @@ export const addToPasswordHistory = async (email, password) => {
  */
 export const initializeSecurityRecord = async (email, password) => {
   try {
-    const newHash = await hashPassword(password);
-    const docRef = getSecurityDocRef(email);
-
-    await setDoc(docRef, {
-      email: email.toLowerCase(),
-      failedAttempts: 0,
-      lockoutUntil: null,
-      lastPasswordChange: serverTimestamp(),
-      passwordHistory: [newHash],
-      createdAt: serverTimestamp(),
-      updatedAt: serverTimestamp()
-    });
+    if (!callInitializeSecurityRecord) return;
+    const passwordHash = await hashPassword(password);
+    await callInitializeSecurityRecord({ email, passwordHash });
   } catch (error) {
     console.error('Error initializing security record:', error);
   }
@@ -331,7 +174,6 @@ export default {
   recordFailedAttempt,
   resetFailedAttempts,
   checkPasswordExpiry,
-  updatePasswordTimestamp,
   checkPasswordHistory,
   addToPasswordHistory,
   initializeSecurityRecord

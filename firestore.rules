@@ -85,12 +85,12 @@ service cloud.firestore {
     // ─── Security Records ───────────────────────────────────────────
     // Path: security/users/{hashedEmail}/data
     //
-    // KNOWN COMPROMISE: checkAccountLockout() and recordFailedAttempt()
-    // run BEFORE the user is authenticated. Moving to Cloud Functions
-    // would be the proper fix but is out of scope.
+    // Fully locked down — all access goes through Cloud Functions
+    // (checkAccountLockout, recordFailedAttempt, etc.) which use the
+    // admin SDK and bypass these rules.
 
     match /security/users/{hashedEmail}/data {
-      allow read, write: if true;
+      allow read, write: if false;
     }
 
     // ─── Audit Logs ─────────────────────────────────────────────────
