@@ -7,7 +7,10 @@ export {
   calculateBasePlan,
   runSimulation,
   calculateAlternativeAllocations,
-  runOptimizedSimulation
+  runOptimizedSimulation,
+  calculateAnnualTax,
+  calculateTaxableSS,
+  calculateFederalTax
 } from './calculations';
 export {
   calculateSSAnalysis,

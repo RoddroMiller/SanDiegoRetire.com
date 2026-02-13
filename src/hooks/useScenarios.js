@@ -86,7 +86,7 @@ export const useScenarios = ({ currentUser, userRole, planFilter = 'mine', teamM
    * @returns {Promise<boolean>} Success status
    */
   const saveScenario = useCallback(async (scenarioState) => {
-    const { clientInfo, inputs, assumptions, targetMaxPortfolioAge, rebalanceFreq } = scenarioState;
+    const { clientInfo, inputs, assumptions, targetMaxPortfolioAge, rebalanceFreq, vaEnabled, vaInputs } = scenarioState;
 
     if (!currentUser || !db) {
       alert("Database not connected.");
@@ -106,6 +106,8 @@ export const useScenarios = ({ currentUser, userRole, planFilter = 'mine', teamM
       assumptions,
       targetMaxPortfolioAge,
       rebalanceFreq,
+      vaEnabled: vaEnabled || false,
+      vaInputs: vaInputs || null,
       updatedAt: Date.now()
     };
 
@@ -138,7 +140,7 @@ export const useScenarios = ({ currentUser, userRole, planFilter = 'mine', teamM
    * @returns {Promise<boolean>} Success status
    */
   const saveProgress = useCallback(async (scenarioState, role) => {
-    const { clientInfo, inputs, assumptions, targetMaxPortfolioAge, rebalanceFreq } = scenarioState;
+    const { clientInfo, inputs, assumptions, targetMaxPortfolioAge, rebalanceFreq, vaEnabled, vaInputs } = scenarioState;
 
     if (!currentUser || !db) {
       console.log("Database not connected - progress not saved.");
@@ -160,6 +162,8 @@ export const useScenarios = ({ currentUser, userRole, planFilter = 'mine', teamM
       assumptions,
       targetMaxPortfolioAge,
       rebalanceFreq,
+      vaEnabled: vaEnabled || false,
+      vaInputs: vaInputs || null,
       updatedAt: Date.now()
     };
 
@@ -190,7 +194,7 @@ export const useScenarios = ({ currentUser, userRole, planFilter = 'mine', teamM
    * @returns {Promise<boolean>} Success status
    */
   const submitClientScenario = useCallback(async (scenarioState) => {
-    const { clientInfo, inputs, assumptions, targetMaxPortfolioAge, rebalanceFreq } = scenarioState;
+    const { clientInfo, inputs, assumptions, targetMaxPortfolioAge, rebalanceFreq, vaEnabled, vaInputs } = scenarioState;
 
     if (!currentUser || !db) {
       alert("Connection error. Please ensure you are online.");
@@ -214,6 +218,8 @@ export const useScenarios = ({ currentUser, userRole, planFilter = 'mine', teamM
       assumptions,
       targetMaxPortfolioAge,
       rebalanceFreq,
+      vaEnabled: vaEnabled || false,
+      vaInputs: vaInputs || null,
       updatedAt: Date.now()
     };
 

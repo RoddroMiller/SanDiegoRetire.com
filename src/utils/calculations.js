@@ -38,6 +38,215 @@ export const getAdjustedSS = (pia, startAge) => {
   return pia;
 };
 
+// ============================================
+// TAX CALCULATION UTILITIES
+// ============================================
+
+// 2024 Federal Tax Brackets
+const FEDERAL_BRACKETS = {
+  single: [
+    { min: 0, max: 11600, rate: 0.10 },
+    { min: 11600, max: 47150, rate: 0.12 },
+    { min: 47150, max: 100525, rate: 0.22 },
+    { min: 100525, max: 191950, rate: 0.24 },
+    { min: 191950, max: 243725, rate: 0.32 },
+    { min: 243725, max: 609350, rate: 0.35 },
+    { min: 609350, max: Infinity, rate: 0.37 }
+  ],
+  married: [
+    { min: 0, max: 23200, rate: 0.10 },
+    { min: 23200, max: 94300, rate: 0.12 },
+    { min: 94300, max: 201050, rate: 0.22 },
+    { min: 201050, max: 383900, rate: 0.24 },
+    { min: 383900, max: 487450, rate: 0.32 },
+    { min: 487450, max: 731200, rate: 0.35 },
+    { min: 731200, max: Infinity, rate: 0.37 }
+  ]
+};
+
+// 2024 Qualified Dividend / LTCG Brackets
+const QDIV_BRACKETS = {
+  single: [
+    { min: 0, max: 47025, rate: 0 },
+    { min: 47025, max: 518900, rate: 0.15 },
+    { min: 518900, max: Infinity, rate: 0.20 }
+  ],
+  married: [
+    { min: 0, max: 94050, rate: 0 },
+    { min: 94050, max: 583750, rate: 0.15 },
+    { min: 583750, max: Infinity, rate: 0.20 }
+  ]
+};
+
+// Standard deduction (2024)
+const STANDARD_DEDUCTION = {
+  single: 14600,
+  married: 29200,
+  // Additional deduction for 65+
+  seniorBonus: { single: 1950, married: 1550 }
+};
+
+/**
+ * Calculate the taxable portion of Social Security benefits
+ * Uses the "combined income" method (AGI + nontaxable interest + 50% of SS)
+ * @param {number} ssIncome - Total Social Security income
+ * @param {number} otherIncome - Other taxable income (excluding SS)
+ * @param {string} filingStatus - 'single' or 'married'
+ * @returns {number} Taxable portion of SS (0%, 50%, or up to 85%)
+ */
+export const calculateTaxableSS = (ssIncome, otherIncome, filingStatus) => {
+  if (ssIncome <= 0) return 0;
+
+  // Combined income = AGI + nontaxable interest + 50% of SS
+  const combinedIncome = otherIncome + (ssIncome * 0.5);
+
+  // Thresholds for SS taxation
+  const thresholds = filingStatus === 'married'
+    ? { low: 32000, high: 44000 }
+    : { low: 25000, high: 34000 };
+
+  if (combinedIncome <= thresholds.low) {
+    // Below threshold: 0% taxable
+    return 0;
+  } else if (combinedIncome <= thresholds.high) {
+    // Between thresholds: up to 50% taxable
+    const taxableAmount = Math.min(ssIncome * 0.5, (combinedIncome - thresholds.low) * 0.5);
+    return taxableAmount;
+  } else {
+    // Above high threshold: up to 85% taxable
+    const baseAmount = (thresholds.high - thresholds.low) * 0.5;
+    const additionalAmount = (combinedIncome - thresholds.high) * 0.85;
+    const taxableAmount = Math.min(ssIncome * 0.85, baseAmount + additionalAmount);
+    return taxableAmount;
+  }
+};
+
+/**
+ * Calculate federal income tax using marginal brackets
+ * @param {number} taxableIncome - Taxable income after deductions
+ * @param {string} filingStatus - 'single' or 'married'
+ * @returns {number} Federal tax amount
+ */
+export const calculateFederalTax = (taxableIncome, filingStatus) => {
+  if (taxableIncome <= 0) return 0;
+
+  const brackets = FEDERAL_BRACKETS[filingStatus] || FEDERAL_BRACKETS.married;
+  let tax = 0;
+  let remainingIncome = taxableIncome;
+
+  for (const bracket of brackets) {
+    if (remainingIncome <= 0) break;
+
+    const taxableInBracket = Math.min(remainingIncome, bracket.max - bracket.min);
+    tax += taxableInBracket * bracket.rate;
+    remainingIncome -= taxableInBracket;
+  }
+
+  return tax;
+};
+
+/**
+ * Calculate tax on qualified dividends and long-term capital gains
+ * @param {number} qualifiedIncome - Qualified dividend/LTCG income
+ * @param {number} ordinaryIncome - Ordinary taxable income (determines starting bracket)
+ * @param {string} filingStatus - 'single' or 'married'
+ * @returns {number} Tax on qualified income
+ */
+export const calculateQualifiedDividendTax = (qualifiedIncome, ordinaryIncome, filingStatus) => {
+  if (qualifiedIncome <= 0) return 0;
+
+  const brackets = QDIV_BRACKETS[filingStatus] || QDIV_BRACKETS.married;
+  let tax = 0;
+  let incomePosition = ordinaryIncome; // Start where ordinary income ends
+  let remainingQualified = qualifiedIncome;
+
+  for (const bracket of brackets) {
+    if (remainingQualified <= 0) break;
+
+    // How much room is left in this bracket?
+    const roomInBracket = Math.max(0, bracket.max - incomePosition);
+    if (roomInBracket <= 0) {
+      incomePosition = bracket.max;
+      continue;
+    }
+
+    const taxableInBracket = Math.min(remainingQualified, roomInBracket);
+    tax += taxableInBracket * bracket.rate;
+    remainingQualified -= taxableInBracket;
+    incomePosition += taxableInBracket;
+  }
+
+  return tax;
+};
+
+/**
+ * Calculate total tax for a year given income breakdown
+ * @param {object} incomeBreakdown - Object containing different income types
+ * @param {object} taxSettings - Tax settings from inputs
+ * @param {boolean} isSenior - Whether taxpayer is 65+
+ * @returns {object} Tax breakdown { federal, state, qdivTax, total, effectiveRate }
+ */
+export const calculateAnnualTax = (incomeBreakdown, taxSettings, isSenior = true) => {
+  const {
+    ssIncome = 0,
+    pensionIncome = 0,
+    traditionalWithdrawal = 0,
+    rothWithdrawal = 0,
+    qualifiedDividends = 0,
+    otherIncome = 0
+  } = incomeBreakdown;
+
+  const { filingStatus = 'married', stateRate = 0 } = taxSettings;
+
+  // Calculate taxable SS
+  const ordinaryIncomeBeforeSS = pensionIncome + traditionalWithdrawal + otherIncome;
+  const taxableSS = calculateTaxableSS(ssIncome, ordinaryIncomeBeforeSS, filingStatus);
+
+  // Total ordinary taxable income
+  const grossOrdinaryIncome = taxableSS + pensionIncome + traditionalWithdrawal + otherIncome;
+
+  // Standard deduction (with senior bonus)
+  let deduction = STANDARD_DEDUCTION[filingStatus] || STANDARD_DEDUCTION.married;
+  if (isSenior) {
+    // Assume both spouses are 65+ for married
+    const seniorBonus = STANDARD_DEDUCTION.seniorBonus[filingStatus] || STANDARD_DEDUCTION.seniorBonus.married;
+    deduction += filingStatus === 'married' ? seniorBonus * 2 : seniorBonus;
+  }
+
+  // Taxable ordinary income after deduction
+  const taxableOrdinaryIncome = Math.max(0, grossOrdinaryIncome - deduction);
+
+  // Federal tax on ordinary income
+  const federalOrdinaryTax = calculateFederalTax(taxableOrdinaryIncome, filingStatus);
+
+  // Tax on qualified dividends (at preferential rates)
+  const qdivTax = calculateQualifiedDividendTax(qualifiedDividends, taxableOrdinaryIncome, filingStatus);
+
+  // Total federal tax
+  const federalTax = federalOrdinaryTax + qdivTax;
+
+  // State tax (simplified: flat rate on all taxable income including qualified)
+  const stateTaxableIncome = taxableOrdinaryIncome + qualifiedDividends;
+  const stateTax = stateTaxableIncome * (stateRate / 100);
+
+  // Total tax
+  const totalTax = federalTax + stateTax;
+
+  // Effective rate (based on gross income excluding Roth)
+  const grossTaxableIncome = ssIncome + pensionIncome + traditionalWithdrawal + qualifiedDividends + otherIncome;
+  const effectiveRate = grossTaxableIncome > 0 ? (totalTax / grossTaxableIncome) * 100 : 0;
+
+  return {
+    taxableSS,
+    federalTax: Math.round(federalTax),
+    stateTax: Math.round(stateTax),
+    qdivTax: Math.round(qdivTax),
+    totalTax: Math.round(totalTax),
+    effectiveRate: effectiveRate.toFixed(1),
+    deduction
+  };
+};
+
 /**
  * Calculate accumulation phase data (portfolio growth before retirement)
  * @param {object} clientInfo - Client information object
@@ -94,15 +303,35 @@ export const calculateWeightedReturn = (assumptions) => {
  * @param {object} inputs - Portfolio inputs
  * @param {object} assumptions - Return assumptions
  * @param {object} clientInfo - Client information
+ * @param {boolean} vaEnabled - Whether VA GIB is enabled
+ * @param {object} vaInputs - VA GIB inputs (allocation, withdrawal rate, etc.)
  * @returns {object} Base plan with bucket values and helper functions
  */
-export const calculateBasePlan = (inputs, assumptions, clientInfo) => {
+export const calculateBasePlan = (inputs, assumptions, clientInfo, vaEnabled = false, vaInputs = null) => {
   const {
     totalPortfolio, monthlySpending, ssPIA, partnerSSPIA,
     ssStartAge, partnerSSStartAge, monthlyPension, pensionStartAge, pensionCOLA,
     partnerMonthlyPension, partnerPensionStartAge, partnerPensionCOLA,
     inflationRate, personalInflationRate, additionalIncomes
   } = inputs;
+
+  // Calculate VA allocation and adjust portfolio for bucket calculations
+  let vaAllocationAmount = 0;
+  let vaAnnualIncome = 0;
+  let vaIncomeStartAge = 65;
+
+  if (vaEnabled && vaInputs) {
+    if (vaInputs.allocationType === 'percentage') {
+      vaAllocationAmount = totalPortfolio * (vaInputs.allocationPercent / 100);
+    } else {
+      vaAllocationAmount = Math.min(vaInputs.allocationFixed || 0, totalPortfolio);
+    }
+    vaAnnualIncome = vaAllocationAmount * ((vaInputs.withdrawalRate || 5) / 100);
+    vaIncomeStartAge = vaInputs.incomeStartAge || 65;
+  }
+
+  // Portfolio available for bucket allocation (excluding VA allocation)
+  const bucketPortfolio = totalPortfolio - vaAllocationAmount;
 
   // If already retired (currentAge > retirementAge), start simulation from currentAge
   const simulationStartAge = Math.max(clientInfo.currentAge, clientInfo.retirementAge);
@@ -123,22 +352,28 @@ export const calculateBasePlan = (inputs, assumptions, clientInfo) => {
     const incomeInflationFactor = Math.pow(1 + (inflationRate / 100), yearIndex);
     const expenses = monthlySpending * 12 * expenseInflationFactor;
 
-    let income = 0;
-    // For clients 67+, assume already collecting SS; otherwise check start age
+    // Track income by source for tax calculations
+    let ssIncome = 0;
+    let pensionIncome = 0;
+    let otherIncome = 0;
+    let vaIncome = 0;
+
+    // Social Security income
     if (clientInfo.currentAge >= 67 || simAge >= ssStartAge) {
-      income += clientSS * 12 * incomeInflationFactor;
+      ssIncome += clientSS * 12 * incomeInflationFactor;
     }
     if (clientInfo.isMarried && (clientInfo.partnerAge >= 67 || currentPartnerAge >= partnerSSStartAge)) {
-      income += partnerSS * 12 * incomeInflationFactor;
+      ssIncome += partnerSS * 12 * incomeInflationFactor;
     }
 
+    // Pension income
     if (simAge >= pensionStartAge) {
-      income += monthlyPension * 12 * (pensionCOLA ? incomeInflationFactor : 1);
+      pensionIncome += monthlyPension * 12 * (pensionCOLA ? incomeInflationFactor : 1);
     }
 
     // Partner pension (if married and has pension)
     if (clientInfo.isMarried && partnerMonthlyPension > 0 && currentPartnerAge >= (partnerPensionStartAge || 65)) {
-      income += partnerMonthlyPension * 12 * (partnerPensionCOLA ? incomeInflationFactor : 1);
+      pensionIncome += partnerMonthlyPension * 12 * (partnerPensionCOLA ? incomeInflationFactor : 1);
     }
 
     // Recurring additional incomes (monthly * 12)
@@ -148,9 +383,19 @@ export const calculateBasePlan = (inputs, assumptions, clientInfo) => {
       if (!stream.isOneTime && ownerAge >= stream.startAge && ownerAge <= (stream.endAge || 100)) {
         let streamAmount = stream.amount * 12;
         if (stream.inflationAdjusted) streamAmount *= incomeInflationFactor;
-        income += streamAmount;
+        otherIncome += streamAmount;
       }
     });
+
+    // VA GIB guaranteed income (when enabled and age >= income start age)
+    // Note: VA income is not inflation-adjusted in this model
+    // VA income is taxed as ordinary income
+    if (vaEnabled && vaInputs && simAge >= vaIncomeStartAge) {
+      vaIncome = vaAnnualIncome;
+    }
+
+    // Total income
+    const income = ssIncome + pensionIncome + otherIncome + vaIncome;
 
     // One-time contributions (added to portfolio, not income)
     let oneTimeContributions = 0;
@@ -165,7 +410,19 @@ export const calculateBasePlan = (inputs, assumptions, clientInfo) => {
     });
 
     const gap = Math.max(0, expenses - income);
-    return { expenses, income, gap, simAge, currentPartnerAge, oneTimeContributions };
+    return {
+      expenses,
+      income,
+      gap,
+      simAge,
+      currentPartnerAge,
+      oneTimeContributions,
+      // Income breakdown for tax calculations
+      ssIncome,
+      pensionIncome,
+      otherIncome,
+      vaIncome
+    };
   };
 
   const getAnnualGap = (yearIndex) => getAnnualDetails(yearIndex).gap;
@@ -182,13 +439,25 @@ export const calculateBasePlan = (inputs, assumptions, clientInfo) => {
 
   const b1Val = Math.round(calculateBucketNeed(1, 3, assumptions.b1.return) / 1000) * 1000;
   const b2Val = Math.round(calculateBucketNeed(4, 6, assumptions.b2.return) / 1000) * 1000;
-  // B3 covers years 7-15 with minimum 20% allocation
+  // B3 covers years 7-15 with minimum 20% and maximum 35% allocation
   const b3Calculated = Math.round(calculateBucketNeed(7, 15, assumptions.b3.return) / 1000) * 1000;
-  const b3Min = Math.round((totalPortfolio * 0.20) / 1000) * 1000;
-  const b3Val = Math.max(b3Calculated, b3Min);
-  const b4Val = Math.round((totalPortfolio * 0.10) / 1000) * 1000;
+  const b3Min = Math.round((bucketPortfolio * 0.20) / 1000) * 1000;
+  const b3Max = Math.round((bucketPortfolio * 0.35) / 1000) * 1000;
+  const b3Val = Math.min(Math.max(b3Calculated, b3Min), b3Max);
+
+  // B4 is 10% but may be reduced to ensure B5 >= 2x B4
+  // B5 = bucketPortfolio - b1 - b2 - b3 - b4
+  // Constraint: B5 >= 2 * B4
+  // So: bucketPortfolio - b1 - b2 - b3 - b4 >= 2 * b4
+  // bucketPortfolio - b1 - b2 - b3 >= 3 * b4
+  // b4 <= (bucketPortfolio - b1 - b2 - b3) / 3
+  const remainingAfterB3 = bucketPortfolio - b1Val - b2Val - b3Val;
+  const b4Target = Math.round((bucketPortfolio * 0.10) / 1000) * 1000;
+  const b4MaxForB5Constraint = Math.round((remainingAfterB3 / 3) / 1000) * 1000;
+  const b4Val = Math.min(b4Target, Math.max(0, b4MaxForB5Constraint));
+
   const allocatedSoFar = b1Val + b2Val + b3Val + b4Val;
-  const b5Val = totalPortfolio - allocatedSoFar;
+  const b5Val = bucketPortfolio - allocatedSoFar;
 
   return {
     b1Val,
@@ -200,7 +469,9 @@ export const calculateBasePlan = (inputs, assumptions, clientInfo) => {
     getAnnualGap,
     getAnnualDetails,
     totalSS,
-    getAdjustedSS
+    getAdjustedSS,
+    vaAllocationAmount,
+    vaAnnualIncome
   };
 };
 
@@ -211,9 +482,11 @@ export const calculateBasePlan = (inputs, assumptions, clientInfo) => {
  * @param {object} inputs - Portfolio inputs
  * @param {number} rebalanceFreq - Rebalancing frequency (0 = never)
  * @param {boolean} isMonteCarlo - Whether to run Monte Carlo simulation
+ * @param {object} vaInputs - VA GIB inputs (optional)
+ * @param {object} rebalanceTargets - Manual rebalance target percentages (optional)
  * @returns {Array|object} Simulation results
  */
-export const runSimulation = (basePlan, assumptions, inputs, rebalanceFreq, isMonteCarlo = false) => {
+export const runSimulation = (basePlan, assumptions, inputs, rebalanceFreq, isMonteCarlo = false, vaInputs = null, rebalanceTargets = null) => {
   const { b1Val, b2Val, b3Val, b4Val, b5Val, getAnnualGap, getAnnualDetails } = basePlan;
   const years = 30;
   let results = [];
@@ -221,8 +494,40 @@ export const runSimulation = (basePlan, assumptions, inputs, rebalanceFreq, isMo
   const iterations = isMonteCarlo ? 500 : 1;
   const benchmarkReturn = assumptions.b3.return / 100;
 
+  // Calculate VA allocation if enabled
+  let vaAllocationAmount = 0;
+  if (vaInputs) {
+    if (vaInputs.allocationType === 'percentage') {
+      vaAllocationAmount = inputs.totalPortfolio * (vaInputs.allocationPercent / 100);
+    } else {
+      vaAllocationAmount = Math.min(vaInputs.allocationFixed, inputs.totalPortfolio);
+    }
+  }
+
   for (let iter = 0; iter < iterations; iter++) {
+    // Start with base bucket allocations
     let balances = { b1: b1Val, b2: b2Val, b3: b3Val, b4: b4Val, b5: b5Val };
+
+    // If VA is enabled, reduce bucket balances proportionally to fund the VA
+    let vaAccountValue = 0;
+    let vaBenefitBase = 0;
+    let vaHighWaterMark = 0;
+
+    if (vaInputs && vaAllocationAmount > 0) {
+      const totalBuckets = b1Val + b2Val + b3Val + b4Val + b5Val;
+      if (totalBuckets > 0) {
+        const reductionRatio = vaAllocationAmount / totalBuckets;
+        balances.b1 = b1Val * (1 - reductionRatio);
+        balances.b2 = b2Val * (1 - reductionRatio);
+        balances.b3 = b3Val * (1 - reductionRatio);
+        balances.b4 = b4Val * (1 - reductionRatio);
+        balances.b5 = b5Val * (1 - reductionRatio);
+      }
+      vaAccountValue = vaAllocationAmount;
+      vaBenefitBase = vaAllocationAmount;
+      vaHighWaterMark = vaAllocationAmount;
+    }
+
     let benchmarkBalance = inputs.totalPortfolio;
     let history = [];
     let failed = false;
@@ -245,7 +550,10 @@ export const runSimulation = (basePlan, assumptions, inputs, rebalanceFreq, isMo
         rates.b5 = assumptions.b5.return / 100;
       }
 
-      const { expenses, income, gap, simAge, currentPartnerAge, oneTimeContributions } = getAnnualDetails(i - 1);
+      const {
+        expenses, income, gap, simAge, currentPartnerAge, oneTimeContributions,
+        ssIncome, pensionIncome, otherIncome, vaIncome
+      } = getAnnualDetails(i - 1);
 
       balances.b1 *= (1 + rates.b1);
       balances.b2 *= (1 + rates.b2);
@@ -271,8 +579,38 @@ export const runSimulation = (basePlan, assumptions, inputs, rebalanceFreq, isMo
         benchmarkBalance += oneTimeContributions;
       }
 
-      let withdrawalAmount = gap;
-      const totalWithdrawal = gap;
+      // VA GIB: Calculate guaranteed income and update VA account
+      let vaGuaranteedIncome = 0;
+      if (vaInputs && vaBenefitBase > 0) {
+        // VA account grows with market (using B5 long-term returns)
+        vaAccountValue *= (1 + rates.b5);
+
+        // Apply VA fees (typically 1.5% annually)
+        const vaFeeRate = 0.015;
+        vaAccountValue *= (1 - vaFeeRate);
+
+        // High water mark: step-up benefit base if account grows
+        if (vaInputs.highWaterMark && vaAccountValue > vaHighWaterMark) {
+          vaHighWaterMark = vaAccountValue;
+          vaBenefitBase = vaAccountValue;
+        }
+
+        // Only start guaranteed income withdrawals when simAge >= incomeStartAge
+        const incomeStartAge = vaInputs.incomeStartAge || 65;
+        if (simAge >= incomeStartAge) {
+          // Calculate guaranteed withdrawal from benefit base
+          vaGuaranteedIncome = vaBenefitBase * (vaInputs.withdrawalRate / 100);
+
+          // Withdraw guaranteed income from VA account (can go negative, but income continues)
+          vaAccountValue = Math.max(0, vaAccountValue - vaGuaranteedIncome);
+        }
+      }
+
+      // Adjust gap by VA guaranteed income - this is what the buckets need to cover
+      const adjustedGap = vaInputs ? Math.max(0, gap - vaGuaranteedIncome) : gap;
+
+      let withdrawalAmount = adjustedGap;
+      const totalWithdrawal = adjustedGap;
 
       if (benchmarkBalance >= gap) {
         benchmarkBalance -= gap;
@@ -299,59 +637,110 @@ export const runSimulation = (basePlan, assumptions, inputs, rebalanceFreq, isMo
       }
 
       if (rebalanceFreq > 0 && i % rebalanceFreq === 0) {
-        // Dynamic rebalancing with rolling window targets
         const currentTotal = Object.values(balances).reduce((a, b) => a + b, 0);
 
-        // Helper to calculate present value of spending gaps for a range of years
-        const calcPVGaps = (startYear, endYear, rate) => {
-          let totalPV = 0;
-          for (let yr = startYear; yr <= endYear; yr++) {
-            if (yr > years) break; // Don't go beyond simulation
-            const futureGap = getAnnualGap(yr - 1);
-            const yearsOut = yr - i; // Years from current rebalance point
-            const pvFactor = Math.pow(1 + (rate / 100), yearsOut);
-            totalPV += futureGap / pvFactor;
+        // Check if using manual rebalance targets (percentages)
+        if (rebalanceTargets && rebalanceTargets.b1 !== undefined) {
+          // Use manual percentage targets for rebalancing
+          balances.b1 = currentTotal * (rebalanceTargets.b1 / 100);
+          balances.b2 = currentTotal * (rebalanceTargets.b2 / 100);
+          balances.b3 = currentTotal * (rebalanceTargets.b3 / 100);
+          balances.b4 = currentTotal * (rebalanceTargets.b4 / 100);
+          balances.b5 = currentTotal * (rebalanceTargets.b5 / 100);
+
+          // Normalize to ensure total matches (handle rounding)
+          const allocatedTotal = balances.b1 + balances.b2 + balances.b3 + balances.b4 + balances.b5;
+          if (Math.abs(allocatedTotal - currentTotal) > 1) {
+            const adjustment = currentTotal - allocatedTotal;
+            balances.b5 += adjustment; // Add any difference to B5
           }
-          return totalPV;
-        };
+        } else {
+          // Dynamic rebalancing with rolling window targets (formula-based)
 
-        // Calculate dynamic targets based on current year (rolling window)
-        // B1: Next 3 years (i+1 to i+3)
-        const b1Target = calcPVGaps(i + 1, i + 3, assumptions.b1.return);
-        // B2: Years 4-6 from now (i+4 to i+6)
-        const b2Target = calcPVGaps(i + 4, i + 6, assumptions.b2.return);
-        // B3: Years 7-15 from now (i+7 to i+15) with minimum 20% allocation
-        const b3Calculated = calcPVGaps(i + 7, i + 15, assumptions.b3.return);
-        const b3Min = currentTotal * 0.20;
-        const b3Target = Math.max(b3Calculated, b3Min);
-        // B4: Always 10% of current total
-        const b4Target = currentTotal * 0.10;
-        // B5: Everything else
+          // Helper to calculate present value of spending gaps for a range of years
+          const calcPVGaps = (startYear, endYear, rate) => {
+            let totalPV = 0;
+            for (let yr = startYear; yr <= endYear; yr++) {
+              if (yr > years) break; // Don't go beyond simulation
+              const futureGap = getAnnualGap(yr - 1);
+              const yearsOut = yr - i; // Years from current rebalance point
+              const pvFactor = Math.pow(1 + (rate / 100), yearsOut);
+              totalPV += futureGap / pvFactor;
+            }
+            return totalPV;
+          };
 
-        // Collect all funds
-        let availableFunds = currentTotal;
+          // Calculate dynamic targets based on current year (rolling window)
+          // B1: Next 3 years (i+1 to i+3)
+          const b1Target = calcPVGaps(i + 1, i + 3, assumptions.b1.return);
+          // B2: Years 4-6 from now (i+4 to i+6)
+          const b2Target = calcPVGaps(i + 4, i + 6, assumptions.b2.return);
+          // B3: Years 7-15 from now (i+7 to i+15) with minimum 20% allocation
+          const b3Calculated = calcPVGaps(i + 7, i + 15, assumptions.b3.return);
+          const b3Min = currentTotal * 0.20;
+          const b3Target = Math.max(b3Calculated, b3Min);
+          // B4: Always 10% of current total
+          const b4Target = currentTotal * 0.10;
+          // B5: Everything else
 
-        // Fill buckets in priority order: B1 → B2 → B3 → B4 → B5
-        balances.b1 = Math.min(b1Target, availableFunds);
-        availableFunds -= balances.b1;
+          // Collect all funds
+          let availableFunds = currentTotal;
 
-        balances.b2 = Math.min(b2Target, Math.max(0, availableFunds));
-        availableFunds -= balances.b2;
+          // Fill buckets in priority order: B1 → B2 → B3 → B4 → B5
+          balances.b1 = Math.min(b1Target, availableFunds);
+          availableFunds -= balances.b1;
 
-        balances.b3 = Math.min(b3Target, Math.max(0, availableFunds));
-        availableFunds -= balances.b3;
+          balances.b2 = Math.min(b2Target, Math.max(0, availableFunds));
+          availableFunds -= balances.b2;
 
-        balances.b4 = Math.min(b4Target, Math.max(0, availableFunds));
-        availableFunds -= balances.b4;
+          balances.b3 = Math.min(b3Target, Math.max(0, availableFunds));
+          availableFunds -= balances.b3;
 
-        // B5 gets whatever remains (no negatives)
-        balances.b5 = Math.max(0, availableFunds);
+          balances.b4 = Math.min(b4Target, Math.max(0, availableFunds));
+          availableFunds -= balances.b4;
+
+          // B5 gets whatever remains (no negatives)
+          balances.b5 = Math.max(0, availableFunds);
+        }
       }
 
-      const total = Object.values(balances).reduce((a, b) => a + b, 0);
+      // Total includes bucket balances plus VA account value
+      const bucketTotal = Object.values(balances).reduce((a, b) => a + b, 0);
+      const total = bucketTotal + (vaInputs ? vaAccountValue : 0);
       if (total <= 0) failed = true;
 
       const distRate = startTotal > 0 ? (totalWithdrawal / startTotal) * 100 : 0;
+
+      // Calculate tax if enabled
+      let taxData = { federalTax: 0, stateTax: 0, totalTax: 0, effectiveRate: '0.0' };
+      if (inputs.taxEnabled) {
+        // Split withdrawal between traditional (pre-tax) and Roth (tax-free)
+        const traditionalPercent = (inputs.traditionalPercent || 70) / 100;
+        const traditionalWithdrawal = totalWithdrawal * traditionalPercent;
+        const rothWithdrawal = totalWithdrawal * (1 - traditionalPercent);
+
+        // Estimate qualified dividends from portfolio growth
+        // Use a portion of growth as qualified (applies to brokerage accounts, which are a subset)
+        const qualifiedDividendPercent = (inputs.qualifiedDividendPercent || 30) / 100;
+        const estimatedQualifiedDividends = Math.max(0, annualGrowth * qualifiedDividendPercent * 0.3); // ~30% of growth may be distributed as dividends
+
+        // Build income breakdown for tax calculation
+        const incomeBreakdown = {
+          ssIncome: ssIncome,
+          pensionIncome: pensionIncome + (vaIncome || 0), // VA income taxed as ordinary income like pension
+          traditionalWithdrawal: traditionalWithdrawal,
+          rothWithdrawal: rothWithdrawal,
+          qualifiedDividends: estimatedQualifiedDividends,
+          otherIncome: otherIncome
+        };
+
+        // Calculate tax (assumes retiree is 65+ for senior deduction)
+        const isSenior = simAge >= 65;
+        taxData = calculateAnnualTax(incomeBreakdown, {
+          filingStatus: inputs.filingStatus || 'married',
+          stateRate: inputs.stateRate || 0
+        }, isSenior);
+      }
 
       history.push({
         year: i,
@@ -359,7 +748,7 @@ export const runSimulation = (basePlan, assumptions, inputs, rebalanceFreq, isMo
         partnerAge: currentPartnerAge,
         startBalance: Math.round(startTotal),
         growth: Math.round(annualGrowth),
-        ssIncome: Math.round(income),
+        ssIncome: Math.round(income + vaGuaranteedIncome), // Include VA income in reported income
         contribution: Math.round(oneTimeContributions),
         expenses: Math.round(expenses),
         distribution: Math.round(totalWithdrawal),
@@ -377,7 +766,21 @@ export const runSimulation = (basePlan, assumptions, inputs, rebalanceFreq, isMo
         w2: Math.round(withdrawalsFromBucket.b2),
         w3: Math.round(withdrawalsFromBucket.b3),
         w4: Math.round(withdrawalsFromBucket.b4),
-        w5: Math.round(withdrawalsFromBucket.b5)
+        w5: Math.round(withdrawalsFromBucket.b5),
+        // VA GIB tracking
+        vaAccountValue: vaInputs ? Math.round(vaAccountValue) : 0,
+        vaBenefitBase: vaInputs ? Math.round(vaBenefitBase) : 0,
+        vaGuaranteedIncome: Math.round(vaGuaranteedIncome),
+        // Tax data
+        federalTax: taxData.federalTax,
+        stateTax: taxData.stateTax,
+        totalTax: taxData.totalTax,
+        effectiveRate: taxData.effectiveRate,
+        // Income breakdown (for detailed views)
+        ssIncomeDetail: Math.round(ssIncome),
+        pensionIncomeDetail: Math.round(pensionIncome),
+        otherIncomeDetail: Math.round(otherIncome),
+        vaIncomeDetail: Math.round(vaIncome || 0)
       });
     }
 
@@ -396,7 +799,21 @@ export const runSimulation = (basePlan, assumptions, inputs, rebalanceFreq, isMo
         p90: vals[Math.floor(iterations * 0.9)]
       });
     }
-    return { data: processed, successRate: ((iterations - failureCount) / iterations) * 100 };
+
+    // Calculate median legacy (final year balance from successful iterations)
+    const finalBalances = results
+      .map(r => r[years - 1]?.total || 0)
+      .filter(val => val > 0)
+      .sort((a, b) => a - b);
+    const medianLegacy = finalBalances.length > 0
+      ? finalBalances[Math.floor(finalBalances.length / 2)]
+      : 0;
+
+    return {
+      data: processed,
+      successRate: ((iterations - failureCount) / iterations) * 100,
+      medianLegacy: Math.round(medianLegacy)
+    };
   }
 
   return results[0];
@@ -489,9 +906,10 @@ export const calculateAlternativeAllocations = (inputs, basePlan) => {
  * @param {object} inputs - Client inputs
  * @param {object} clientInfo - Client information
  * @param {number} rebalanceFreq - Rebalancing frequency (0 = sequential/never, 1 = annual, 3 = every 3 years)
+ * @param {object} vaInputs - Optional VA GIB inputs
  * @returns {object} Simulation results with successRate and finalBalance
  */
-export const runOptimizedSimulation = (allocation, assumptions, inputs, clientInfo, rebalanceFreq = 0) => {
+export const runOptimizedSimulation = (allocation, assumptions, inputs, clientInfo, rebalanceFreq = 0, vaInputs = null) => {
   const { monthlySpending, ssPIA, partnerSSPIA, ssStartAge, partnerSSStartAge,
     monthlyPension, pensionStartAge, pensionCOLA,
     partnerMonthlyPension, partnerPensionStartAge, partnerPensionCOLA,
@@ -501,7 +919,17 @@ export const runOptimizedSimulation = (allocation, assumptions, inputs, clientIn
   const years = 30;
   const iterations = 500;
 
-  // Calculate initial allocation percentages for rebalancing
+  // Calculate VA allocation if enabled
+  let vaAllocationAmount = 0;
+  if (vaInputs) {
+    if (vaInputs.allocationType === 'percentage') {
+      vaAllocationAmount = inputs.totalPortfolio * (vaInputs.allocationPercent / 100);
+    } else {
+      vaAllocationAmount = Math.min(vaInputs.allocationFixed || 0, inputs.totalPortfolio);
+    }
+  }
+
+  // Calculate initial allocation percentages for rebalancing (excluding VA)
   const initialTotal = allocation.b1Val + allocation.b2Val + allocation.b3Val + allocation.b4Val + allocation.b5Val;
   const targetPcts = {
     b1: initialTotal > 0 ? allocation.b1Val / initialTotal : 0,
@@ -570,13 +998,34 @@ export const runOptimizedSimulation = (allocation, assumptions, inputs, clientIn
   const finalBalances = [];
 
   for (let iter = 0; iter < iterations; iter++) {
-    const balances = {
+    // Start with allocation, reduced proportionally for VA
+    let balances = {
       b1: allocation.b1Val,
       b2: allocation.b2Val,
       b3: allocation.b3Val,
       b4: allocation.b4Val,
       b5: allocation.b5Val
     };
+
+    // Initialize VA tracking
+    let vaAccountValue = 0;
+    let vaBenefitBase = 0;
+    let vaHighWaterMark = 0;
+
+    if (vaInputs && vaAllocationAmount > 0) {
+      const totalBuckets = allocation.b1Val + allocation.b2Val + allocation.b3Val + allocation.b4Val + allocation.b5Val;
+      if (totalBuckets > 0) {
+        const reductionRatio = vaAllocationAmount / totalBuckets;
+        balances.b1 = allocation.b1Val * (1 - reductionRatio);
+        balances.b2 = allocation.b2Val * (1 - reductionRatio);
+        balances.b3 = allocation.b3Val * (1 - reductionRatio);
+        balances.b4 = allocation.b4Val * (1 - reductionRatio);
+        balances.b5 = allocation.b5Val * (1 - reductionRatio);
+      }
+      vaAccountValue = vaAllocationAmount;
+      vaBenefitBase = vaAllocationAmount;
+      vaHighWaterMark = vaAllocationAmount;
+    }
 
     for (let i = 0; i < years; i++) {
       // Generate random returns
@@ -599,8 +1048,35 @@ export const runOptimizedSimulation = (allocation, assumptions, inputs, clientIn
       const details = getAnnualDetails(i);
       balances.b5 += details.oneTimeContributions;
 
+      // VA GIB: Calculate guaranteed income and update VA account
+      let vaGuaranteedIncome = 0;
+      if (vaInputs && vaBenefitBase > 0) {
+        // VA account grows with B5 returns
+        vaAccountValue *= (1 + rates.b5);
+
+        // Apply VA fees (1.5% annually)
+        const vaFeeRate = 0.015;
+        vaAccountValue *= (1 - vaFeeRate);
+
+        // High water mark: step-up benefit base if account grows
+        if (vaInputs.highWaterMark && vaAccountValue > vaHighWaterMark) {
+          vaHighWaterMark = vaAccountValue;
+          vaBenefitBase = vaAccountValue;
+        }
+
+        // Only start guaranteed income at income start age
+        const incomeStartAge = vaInputs.incomeStartAge || 65;
+        if (details.simAge >= incomeStartAge) {
+          vaGuaranteedIncome = vaBenefitBase * (vaInputs.withdrawalRate / 100);
+          vaAccountValue = Math.max(0, vaAccountValue - vaGuaranteedIncome);
+        }
+      }
+
+      // Adjust gap by VA guaranteed income
+      const adjustedGap = vaInputs ? Math.max(0, details.gap - vaGuaranteedIncome) : details.gap;
+
       // Withdraw for spending gap
-      let withdrawalAmount = details.gap;
+      let withdrawalAmount = adjustedGap;
       const withdrawOrder = ['b1', 'b2', 'b3', 'b4', 'b5'];
       for (let b of withdrawOrder) {
         if (withdrawalAmount <= 0) break;
@@ -626,14 +1102,17 @@ export const runOptimizedSimulation = (allocation, assumptions, inputs, clientIn
         }
       }
 
-      const total = balances.b1 + balances.b2 + balances.b3 + balances.b4 + balances.b5;
+      // Total includes bucket balances plus VA account
+      const bucketTotal = balances.b1 + balances.b2 + balances.b3 + balances.b4 + balances.b5;
+      const total = bucketTotal + (vaInputs ? vaAccountValue : 0);
       if (total <= 0) {
         failureCount++;
         break;
       }
     }
 
-    const finalTotal = balances.b1 + balances.b2 + balances.b3 + balances.b4 + balances.b5;
+    const bucketFinal = balances.b1 + balances.b2 + balances.b3 + balances.b4 + balances.b5;
+    const finalTotal = bucketFinal + (vaInputs ? vaAccountValue : 0);
     if (finalTotal > 0) {
       finalBalances.push(finalTotal);
     }

@@ -520,6 +520,21 @@ export const ClientWizard = ({
 
           <div className="relative group">
             <label className="block text-xs font-bold text-slate-500 uppercase mb-1 flex items-center gap-1">
+              Annual Income (Including Bonus) <Info className="w-3 h-3 text-slate-400" />
+            </label>
+            <div className="absolute left-0 bottom-full mb-2 hidden group-hover:block w-64 bg-slate-800 text-white text-xs p-2 rounded shadow-lg z-10">
+              Your total annual income including salary, bonuses, and other regular employment income before taxes.
+            </div>
+            <FormattedNumberInput
+              name="annualIncome"
+              value={clientInfo.annualIncome}
+              onChange={onClientChange}
+              className="p-3 border rounded-lg w-full"
+            />
+          </div>
+
+          <div className="relative group">
+            <label className="block text-xs font-bold text-slate-500 uppercase mb-1 flex items-center gap-1">
               Expected Return (%) <Info className="w-3 h-3 text-slate-400" />
             </label>
             <div className="absolute left-0 bottom-full mb-2 hidden group-hover:block w-64 bg-slate-800 text-white text-xs p-2 rounded shadow-lg z-10">

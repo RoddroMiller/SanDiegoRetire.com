@@ -122,8 +122,24 @@ export default function BucketPortfolioBuilder() {
 
   // Manual Allocation Override
   const [useManualAllocation, setUseManualAllocation] = useState(false);
+  const [useManualForRebalance, setUseManualForRebalance] = useState(false);
+  const [manualAllocationMode, setManualAllocationMode] = useState('dollar'); // 'dollar' or 'percentage'
   const [manualAllocations, setManualAllocations] = useState({
     b1: 0, b2: 0, b3: 0, b4: 0, b5: 0
+  });
+  const [manualPercentages, setManualPercentages] = useState({
+    b1: 0, b2: 0, b3: 0, b4: 0, b5: 0
+  });
+
+  // VA GIB (Variable Annuity with Guaranteed Income Benefit) Override
+  const [vaEnabled, setVaEnabled] = useState(false);
+  const [vaInputs, setVaInputs] = useState({
+    allocationType: 'percentage',  // 'percentage' or 'fixed'
+    allocationPercent: 20,
+    allocationFixed: 100000,
+    withdrawalRate: 5.0,
+    highWaterMark: true,
+    incomeStartAge: 65
   });
 
   // Client Data
@@ -141,6 +157,7 @@ export default function BucketPortfolioBuilder() {
     currentPortfolio: 500000,
     currentSpending: 8000,
     annualSavings: 25000,
+    annualIncome: 0,
     expectedReturn: 7.0,
   });
 
@@ -161,7 +178,13 @@ export default function BucketPortfolioBuilder() {
     inflationRate: 2.5,
     personalInflationRate: 1.5,
     ssReinvestRate: 4.5,
-    additionalIncomes: []
+    additionalIncomes: [],
+    // Tax Settings
+    taxEnabled: false,
+    filingStatus: 'married', // 'single' or 'married'
+    stateRate: 4.5, // State tax rate %
+    traditionalPercent: 70, // % of portfolio in traditional (pre-tax) accounts
+    qualifiedDividendPercent: 30 // % of investment income that's qualified dividends
   });
 
   // Return Assumptions
@@ -175,7 +198,7 @@ export default function BucketPortfolioBuilder() {
 
   // --- Scenario Action Wrappers ---
   const handleSaveScenario = () => {
-    saveScenario({ clientInfo, inputs, assumptions, targetMaxPortfolioAge, rebalanceFreq });
+    saveScenario({ clientInfo, inputs, assumptions, targetMaxPortfolioAge, rebalanceFreq, vaEnabled, vaInputs });
   };
 
   const handleSaveToCommandCenter = async (selectedClientId) => {
@@ -193,7 +216,7 @@ export default function BucketPortfolioBuilder() {
   };
 
   const handleClientSubmit = () => {
-    submitClientScenario({ clientInfo, inputs, assumptions, targetMaxPortfolioAge, rebalanceFreq });
+    submitClientScenario({ clientInfo, inputs, assumptions, targetMaxPortfolioAge, rebalanceFreq, vaEnabled, vaInputs });
   };
 
   const handleLoadScenario = (scenario) => {
@@ -203,6 +226,9 @@ export default function BucketPortfolioBuilder() {
       setAssumptions(s.assumptions);
       if (s.targetMaxPortfolioAge) setTargetMaxPortfolioAge(s.targetMaxPortfolioAge);
       if (s.rebalanceFreq !== undefined) setRebalanceFreq(s.rebalanceFreq);
+      // Load VA settings if present
+      if (s.vaEnabled !== undefined) setVaEnabled(s.vaEnabled);
+      if (s.vaInputs) setVaInputs(s.vaInputs);
       setStep(2);
     });
   };
@@ -216,38 +242,86 @@ export default function BucketPortfolioBuilder() {
   };
 
   // --- Manual Allocation Handlers ---
-  const handleManualAllocationChange = (bucket, value) => {
-    setManualAllocations(prev => ({ ...prev, [bucket]: value }));
+  const handleManualAllocationChange = (bucket, value, mode = manualAllocationMode) => {
+    if (mode === 'percentage') {
+      // Update percentage and calculate dollar amount
+      setManualPercentages(prev => ({ ...prev, [bucket]: value }));
+      const dollarValue = (value / 100) * inputs.totalPortfolio;
+      setManualAllocations(prev => ({ ...prev, [bucket]: dollarValue }));
+    } else {
+      // Update dollar amount and calculate percentage
+      setManualAllocations(prev => ({ ...prev, [bucket]: value }));
+      const percentValue = inputs.totalPortfolio > 0 ? (value / inputs.totalPortfolio) * 100 : 0;
+      setManualPercentages(prev => ({ ...prev, [bucket]: percentValue }));
+    }
+  };
+
+  const handleManualAllocationModeChange = (newMode) => {
+    setManualAllocationMode(newMode);
   };
 
   const handleRecalculateFromFormula = () => {
     // Reset to formula-calculated values
-    setManualAllocations({
+    const dollarAllocations = {
       b1: formulaBasePlan.b1Val,
       b2: formulaBasePlan.b2Val,
       b3: formulaBasePlan.b3Val,
       b4: formulaBasePlan.b4Val,
       b5: formulaBasePlan.b5Val
+    };
+    setManualAllocations(dollarAllocations);
+    // Calculate percentages
+    const total = inputs.totalPortfolio || 1;
+    setManualPercentages({
+      b1: (dollarAllocations.b1 / total) * 100,
+      b2: (dollarAllocations.b2 / total) * 100,
+      b3: (dollarAllocations.b3 / total) * 100,
+      b4: (dollarAllocations.b4 / total) * 100,
+      b5: (dollarAllocations.b5 / total) * 100
     });
   };
 
   const handleToggleManualAllocation = (enabled) => {
     if (enabled && !useManualAllocation) {
       // When enabling manual mode, initialize with current formula values
-      setManualAllocations({
+      const dollarAllocations = {
         b1: formulaBasePlan.b1Val,
         b2: formulaBasePlan.b2Val,
         b3: formulaBasePlan.b3Val,
         b4: formulaBasePlan.b4Val,
         b5: formulaBasePlan.b5Val
+      };
+      setManualAllocations(dollarAllocations);
+      // Calculate percentages
+      const total = inputs.totalPortfolio || 1;
+      setManualPercentages({
+        b1: (dollarAllocations.b1 / total) * 100,
+        b2: (dollarAllocations.b2 / total) * 100,
+        b3: (dollarAllocations.b3 / total) * 100,
+        b4: (dollarAllocations.b4 / total) * 100,
+        b5: (dollarAllocations.b5 / total) * 100
       });
     }
     setUseManualAllocation(enabled);
   };
 
+  // --- VA GIB Handlers ---
+  const handleVaInputChange = (field, value) => {
+    setVaInputs(prev => ({ ...prev, [field]: value }));
+  };
+  const handleToggleVa = (enabled) => setVaEnabled(enabled);
+
   // --- Calculations (using imported utilities) ---
   const accumulationData = useMemo(() => calculateAccumulation(clientInfo, inputs.inflationRate, inputs.additionalIncomes), [clientInfo, inputs.inflationRate, inputs.additionalIncomes]);
+
+  // Standard bucket calculations (no VA)
   const formulaBasePlan = useMemo(() => calculateBasePlan(inputs, assumptions, clientInfo), [inputs, assumptions, clientInfo]);
+
+  // VA-adjusted bucket calculations (with VA income factored in)
+  const vaAdjustedBasePlan = useMemo(() => {
+    if (!vaEnabled) return null;
+    return calculateBasePlan(inputs, assumptions, clientInfo, true, vaInputs);
+  }, [inputs, assumptions, clientInfo, vaEnabled, vaInputs]);
 
   // Use manual allocations if enabled, otherwise use formula-calculated values
   const basePlan = useMemo(() => {
@@ -279,8 +353,22 @@ export default function BucketPortfolioBuilder() {
     clientSSWinner: ssAnalysis.winner
   }), [inputs, clientInfo, targetMaxPortfolioAge, assumptions, ssAnalysis.winner]);
 
-  const projectionData = useMemo(() => runSimulation(basePlan, assumptions, inputs, rebalanceFreq, false), [basePlan, assumptions, inputs, rebalanceFreq]);
-  const monteCarloData = useMemo(() => runSimulation(basePlan, assumptions, inputs, rebalanceFreq, true), [basePlan, assumptions, inputs, rebalanceFreq]);
+  // Rebalance targets: use manual percentages when enabled, otherwise null for formula-based
+  const rebalanceTargets = useMemo(() => {
+    if (useManualAllocation && useManualForRebalance) {
+      return manualPercentages;
+    }
+    return null;
+  }, [useManualAllocation, useManualForRebalance, manualPercentages]);
+
+  const projectionData = useMemo(() => runSimulation(basePlan, assumptions, inputs, rebalanceFreq, false, null, rebalanceTargets), [basePlan, assumptions, inputs, rebalanceFreq, rebalanceTargets]);
+  const monteCarloData = useMemo(() => runSimulation(basePlan, assumptions, inputs, rebalanceFreq, true, null, rebalanceTargets), [basePlan, assumptions, inputs, rebalanceFreq, rebalanceTargets]);
+
+  // VA GIB Monte Carlo - uses VA-adjusted bucket allocations
+  const vaMonteCarloData = useMemo(() => {
+    if (!vaEnabled || !vaAdjustedBasePlan) return null;
+    return runSimulation(vaAdjustedBasePlan, assumptions, inputs, rebalanceFreq, true, vaInputs, rebalanceTargets);
+  }, [vaAdjustedBasePlan, assumptions, inputs, rebalanceFreq, vaEnabled, vaInputs, rebalanceTargets]);
 
   // Optimizer data - compare six allocation strategies with consistent rebalancing
   const optimizerData = useMemo(() => {
@@ -299,6 +387,25 @@ export default function BucketPortfolioBuilder() {
       return null;
     }
   }, [inputs, basePlan, assumptions, clientInfo, optimizerRebalanceFreq]);
+
+  // VA-enabled optimizer data
+  const vaOptimizerData = useMemo(() => {
+    if (!vaEnabled) return null;
+    try {
+      const allocations = calculateAlternativeAllocations(inputs, basePlan);
+      return {
+        strategy1: runOptimizedSimulation(allocations.strategy1, assumptions, inputs, clientInfo, optimizerRebalanceFreq, vaInputs),
+        strategy2: runOptimizedSimulation(allocations.strategy2, assumptions, inputs, clientInfo, optimizerRebalanceFreq, vaInputs),
+        strategy3: runOptimizedSimulation(allocations.strategy3, assumptions, inputs, clientInfo, optimizerRebalanceFreq, vaInputs),
+        strategy4: runOptimizedSimulation(allocations.strategy4, assumptions, inputs, clientInfo, optimizerRebalanceFreq, vaInputs),
+        strategy5: runOptimizedSimulation(allocations.strategy5, assumptions, inputs, clientInfo, optimizerRebalanceFreq, vaInputs),
+        strategy6: runOptimizedSimulation(allocations.strategy6, assumptions, inputs, clientInfo, optimizerRebalanceFreq, vaInputs)
+      };
+    } catch (error) {
+      console.error('VA Optimizer calculation error:', error);
+      return null;
+    }
+  }, [inputs, basePlan, assumptions, clientInfo, optimizerRebalanceFreq, vaEnabled, vaInputs]);
 
   // Keep totalPortfolio in sync with accumulation data
   const finalAccumulationBalance = accumulationData.length > 0 ? accumulationData[accumulationData.length - 1].balance : 0;
@@ -352,7 +459,16 @@ export default function BucketPortfolioBuilder() {
 
   const handleInputChange = (e) => {
     const { name, value, type, checked } = e.target;
-    let val = type === 'checkbox' ? checked : (parseFloat(value) || 0);
+    // Handle string fields that shouldn't be converted to numbers
+    const stringFields = ['filingStatus'];
+    let val;
+    if (type === 'checkbox') {
+      val = checked;
+    } else if (stringFields.includes(name)) {
+      val = value;
+    } else {
+      val = parseFloat(value) || 0;
+    }
     if ((name === 'ssStartAge' || name === 'partnerSSStartAge') && val > 70) val = 70;
     setInputs(prev => ({ ...prev, [name]: val }));
   };
@@ -429,7 +545,7 @@ export default function BucketPortfolioBuilder() {
     const updatedInputs = { ...inputs, totalPortfolio: finalAccumulation, monthlySpending: Math.round(futureSpending) };
 
     // Save progress silently
-    saveProgress({ clientInfo, inputs: updatedInputs, assumptions, targetMaxPortfolioAge, rebalanceFreq }, userRole);
+    saveProgress({ clientInfo, inputs: updatedInputs, assumptions, targetMaxPortfolioAge, rebalanceFreq, vaEnabled, vaInputs }, userRole);
 
     setInputs(updatedInputs);
     setStep(2);
@@ -448,7 +564,7 @@ export default function BucketPortfolioBuilder() {
     };
 
     setInputs(updatedInputs);
-    saveProgress({ clientInfo, inputs: updatedInputs, assumptions, targetMaxPortfolioAge, rebalanceFreq }, userRole);
+    saveProgress({ clientInfo, inputs: updatedInputs, assumptions, targetMaxPortfolioAge, rebalanceFreq, vaEnabled, vaInputs }, userRole);
   };
 
   const generateReport = () => {
@@ -724,11 +840,24 @@ export default function BucketPortfolioBuilder() {
       isLoadingClients={isLoadingClients}
       // Manual Allocation Override
       useManualAllocation={useManualAllocation}
+      manualAllocationMode={manualAllocationMode}
       manualAllocations={manualAllocations}
+      manualPercentages={manualPercentages}
+      useManualForRebalance={useManualForRebalance}
       onToggleManualAllocation={handleToggleManualAllocation}
+      onToggleManualForRebalance={setUseManualForRebalance}
       onManualAllocationChange={handleManualAllocationChange}
+      onManualAllocationModeChange={handleManualAllocationModeChange}
       onRecalculateFromFormula={handleRecalculateFromFormula}
       formulaAllocations={formulaBasePlan}
+      // VA GIB Override
+      vaEnabled={vaEnabled}
+      vaInputs={vaInputs}
+      onToggleVa={handleToggleVa}
+      onVaInputChange={handleVaInputChange}
+      vaMonteCarloData={vaMonteCarloData}
+      vaAdjustedBasePlan={vaAdjustedBasePlan}
+      vaOptimizerData={vaOptimizerData}
     />
     </>
   );
