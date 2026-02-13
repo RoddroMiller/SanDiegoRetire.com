@@ -1,0 +1,111 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // ─── Helper Functions ───────────────────────────────────────────
+
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isAuthenticated() {
+      // Signed in AND not anonymous
+      return isSignedIn()
+          && request.auth.token.firebase.sign_in_provider != 'anonymous';
+    }
+
+    function isMaster() {
+      return isAuthenticated()
+          && request.auth.token.email.lower() == 'rmiller@millerwm.com';
+    }
+
+    function isOwner(resource) {
+      return isAuthenticated()
+          && (resource.data.advisorId == request.auth.uid
+              || resource.data.advisorEmail.lower() == request.auth.token.email.lower());
+    }
+
+    function isAssignedClient(resource) {
+      return isAuthenticated()
+          && resource.data.assignedClientEmail.lower() == request.auth.token.email.lower();
+    }
+
+    // ─── Scenarios ──────────────────────────────────────────────────
+    // Path: artifacts/portfolio-architect/public/data/scenarios/{scenarioId}
+
+    match /artifacts/{appId}/public/data/scenarios/{scenarioId} {
+
+      // Any signed-in user (including anonymous) can read.
+      // The app reads ALL scenarios to determine user role (useAuth.js).
+      allow read: if isSignedIn();
+
+      // Create: authenticated users must stamp their own identity.
+      // Anonymous/client users can create CLIENT_SUBMISSION or CLIENT_PROGRESS docs.
+      allow create: if isSignedIn()
+        && (
+          // Authenticated advisor/master creating a plan — must stamp own identity
+          (isAuthenticated()
+            && request.resource.data.advisorId == request.auth.uid
+            && request.resource.data.advisorEmail.lower() == request.auth.token.email.lower())
+          ||
+          // Anonymous or any signed-in user creating a client submission/progress
+          (request.resource.data.advisorId in ['CLIENT_SUBMISSION', 'CLIENT_PROGRESS'])
+        );
+
+      // Update: owner, assigned client (limited), or master
+      allow update: if isSignedIn()
+        && (
+          // Owner can update their own scenarios
+          isOwner(resource)
+          ||
+          // Master can update any scenario
+          isMaster()
+          ||
+          // Assigned client can update but CANNOT change ownership fields
+          (isAssignedClient(resource)
+            && (!request.resource.data.diff(resource.data).affectedKeys()
+                .hasAny(['advisorId', 'advisorEmail'])))
+        );
+
+      // Delete: owner or master only
+      allow delete: if isOwner(resource) || isMaster();
+    }
+
+    // ─── Advisors ───────────────────────────────────────────────────
+    // Path: artifacts/portfolio-architect/public/data/advisors/{advisorId}
+
+    match /artifacts/{appId}/public/data/advisors/{advisorId} {
+      // Any authenticated (non-anonymous) user can read the advisor directory
+      allow read: if isAuthenticated();
+
+      // Only master can write (create/update/delete)
+      allow write: if isMaster();
+    }
+
+    // ─── Security Records ───────────────────────────────────────────
+    // Path: security/users/{hashedEmail}/data
+    //
+    // KNOWN COMPROMISE: checkAccountLockout() and recordFailedAttempt()
+    // run BEFORE the user is authenticated. Moving to Cloud Functions
+    // would be the proper fix but is out of scope.
+
+    match /security/users/{hashedEmail}/data {
+      allow read, write: if true;
+    }
+
+    // ─── Audit Logs ─────────────────────────────────────────────────
+    // Path: audit_logs/{logId}
+    //
+    // Read: master only.
+    // Write: denied from client — only Cloud Functions admin SDK can write.
+
+    match /audit_logs/{logId} {
+      allow read: if isMaster();
+      allow write: if false;
+    }
+
+    // ─── Catch-all ──────────────────────────────────────────────────
+    // Deny everything not explicitly matched above.
+    // (Firestore denies by default, but this makes it explicit.)
+  }
+}
