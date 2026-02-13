@@ -4,8 +4,7 @@ import App from './App.jsx'
 import './index.css'
 
 const PasswordApp = () => {
-  // CHANGE '1234' TO YOUR DESIRED PASSWORD
-  const PASSWORD = '4428'; 
+  const PASSWORD = import.meta.env.VITE_GATE_PASSWORD || '4428';
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [input, setInput] = useState('');
 
