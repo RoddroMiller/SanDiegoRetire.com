@@ -642,14 +642,17 @@ export default function BucketPortfolioBuilder() {
   };
 
   // Client wizard save progress (auto-save after each page)
-  // Note: We preserve user-modified monthlySpending - don't recalculate it here
+  // Initialize monthlySpending from currentSpending on first transition, then preserve user modifications
   const handleClientSaveProgress = () => {
     const finalAccumulation = accumulationData[accumulationData.length - 1]?.balance || 0;
+    const yearsToRetire = Math.max(0, clientInfo.retirementAge - clientInfo.currentAge);
+    const futureSpending = clientInfo.currentSpending * Math.pow(1 + (inputs.personalInflationRate / 100), yearsToRetire);
 
     const updatedInputs = {
       ...inputs,
-      totalPortfolio: finalAccumulation
-      // monthlySpending is preserved from user's manual adjustments
+      totalPortfolio: finalAccumulation,
+      // Initialize monthlySpending from currentSpending if it hasn't been set yet
+      monthlySpending: inputs.monthlySpending === 0 ? Math.round(futureSpending) : inputs.monthlySpending
     };
 
     setInputs(updatedInputs);
@@ -778,6 +781,9 @@ export default function BucketPortfolioBuilder() {
         onAddAdditionalIncome={addAdditionalIncome}
         onUpdateAdditionalIncome={updateAdditionalIncome}
         onRemoveAdditionalIncome={removeAdditionalIncome}
+        onAddCashFlowAdjustment={addCashFlowAdjustment}
+        onUpdateCashFlowAdjustment={updateCashFlowAdjustment}
+        onRemoveCashFlowAdjustment={removeCashFlowAdjustment}
       />
     );
   }
@@ -811,6 +817,9 @@ export default function BucketPortfolioBuilder() {
         onAddAdditionalIncome={addAdditionalIncome}
         onUpdateAdditionalIncome={updateAdditionalIncome}
         onRemoveAdditionalIncome={removeAdditionalIncome}
+        onAddCashFlowAdjustment={addCashFlowAdjustment}
+        onUpdateCashFlowAdjustment={updateCashFlowAdjustment}
+        onRemoveCashFlowAdjustment={removeCashFlowAdjustment}
         isRegisteredClient={true}
         onLogout={onLogout}
       />

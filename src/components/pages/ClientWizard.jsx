@@ -1,6 +1,6 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import { ResponsiveContainer, AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ComposedChart, Line, Legend } from 'recharts';
-import { User, DollarSign, ArrowRight, ArrowLeft, Shield, Info, Activity, Briefcase, Send, TrendingUp, Clock, PiggyBank, BarChart2, Table as TableIcon, Plus, Trash2, AlertCircle, LogOut } from 'lucide-react';
+import { User, DollarSign, ArrowRight, ArrowLeft, Shield, Info, Activity, Briefcase, Send, TrendingUp, Clock, PiggyBank, BarChart2, Table as TableIcon, Plus, Trash2, AlertCircle, LogOut, ExternalLink } from 'lucide-react';
 
 import { COLORS, LOGO_URL } from '../../constants';
 import { formatPhoneNumber, getAdjustedSS } from '../../utils';
@@ -39,6 +39,10 @@ export const ClientWizard = ({
   onAddAdditionalIncome,
   onUpdateAdditionalIncome,
   onRemoveAdditionalIncome,
+  // Cash Flow Adjustments
+  onAddCashFlowAdjustment,
+  onUpdateCashFlowAdjustment,
+  onRemoveCashFlowAdjustment,
   // Registered client props
   isRegisteredClient = false,
   onLogout
@@ -47,6 +51,12 @@ export const ClientWizard = ({
   const [showCashFlowTable, setShowCashFlowTable] = useState(false);
   const [validationError, setValidationError] = useState('');
   const [fieldErrors, setFieldErrors] = useState({});
+
+  // Cap projection data at age 95 to avoid projecting legacy balances at unrealistic ages
+  const cappedProjectionData = useMemo(() => {
+    if (!projectionData || projectionData.length === 0) return projectionData;
+    return projectionData.filter(row => row.age <= 95);
+  }, [projectionData]);
 
   // Improvement solution selections
   const [selectedImprovements, setSelectedImprovements] = useState({
@@ -189,7 +199,7 @@ export const ClientWizard = ({
         portfolio: inputs.totalPortfolio,
         monthlyNeed: inputs.monthlySpending,
         successRate: monteCarloData?.successRate || 0,
-        legacyBalance: projectionData[projectionData.length - 1]?.total || 0
+        legacyBalance: cappedProjectionData[cappedProjectionData.length - 1]?.total || 0
       };
     }
 
@@ -242,7 +252,7 @@ export const ClientWizard = ({
       adjustedSuccessRate = Math.max(5, 20 - (distributionRate - 10) * 5);
     }
 
-    const baseLegacy = projectionData[projectionData.length - 1]?.total || 0;
+    const baseLegacy = cappedProjectionData[cappedProjectionData.length - 1]?.total || 0;
     const portfolioRatio = adjustedPortfolio / (inputs.totalPortfolio || 1);
     const spendingRatio = adjustedMonthlyNeed / (inputs.monthlySpending || 1);
     const legacyMultiplier = portfolioRatio * (2 - spendingRatio);
@@ -255,7 +265,7 @@ export const ClientWizard = ({
       successRate: adjustedSuccessRate,
       legacyBalance: adjustedLegacy
     };
-  }, [selectedImprovements, customImprovements, inputs, clientInfo, monteCarloData, projectionData, accumulationData]);
+  }, [selectedImprovements, customImprovements, inputs, clientInfo, monteCarloData, cappedProjectionData, accumulationData]);
 
   const handleNext = () => {
     // Validate contact info on page 1
@@ -518,19 +528,37 @@ export const ClientWizard = ({
             </div>
           </div>
 
-          <div className="relative group">
-            <label className="block text-xs font-bold text-slate-500 uppercase mb-1 flex items-center gap-1">
-              Annual Income (Including Bonus) <Info className="w-3 h-3 text-slate-400" />
-            </label>
-            <div className="absolute left-0 bottom-full mb-2 hidden group-hover:block w-64 bg-slate-800 text-white text-xs p-2 rounded shadow-lg z-10">
-              Your total annual income including salary, bonuses, and other regular employment income before taxes.
+          <div className={`grid ${clientInfo.isMarried ? 'grid-cols-2' : 'grid-cols-1'} gap-4`}>
+            <div className="relative group">
+              <label className="block text-xs font-bold text-slate-500 uppercase mb-1 flex items-center gap-1">
+                {clientInfo.isMarried ? 'Your Annual Income' : 'Annual Income (Including Bonus)'} <Info className="w-3 h-3 text-slate-400" />
+              </label>
+              <div className="absolute left-0 bottom-full mb-2 hidden group-hover:block w-64 bg-slate-800 text-white text-xs p-2 rounded shadow-lg z-10">
+                Your total annual income including salary, bonuses, and other regular employment income before taxes.
+              </div>
+              <FormattedNumberInput
+                name="annualIncome"
+                value={clientInfo.annualIncome}
+                onChange={onClientChange}
+                className="p-3 border rounded-lg w-full"
+              />
             </div>
-            <FormattedNumberInput
-              name="annualIncome"
-              value={clientInfo.annualIncome}
-              onChange={onClientChange}
-              className="p-3 border rounded-lg w-full"
-            />
+            {clientInfo.isMarried && (
+              <div className="relative group">
+                <label className="block text-xs font-bold text-slate-500 uppercase mb-1 flex items-center gap-1">
+                  Partner Annual Income <Info className="w-3 h-3 text-slate-400" />
+                </label>
+                <div className="absolute left-0 bottom-full mb-2 hidden group-hover:block w-64 bg-slate-800 text-white text-xs p-2 rounded shadow-lg z-10">
+                  Partner's total annual income including salary, bonuses, and other regular employment income before taxes.
+                </div>
+                <FormattedNumberInput
+                  name="partnerAnnualIncome"
+                  value={clientInfo.partnerAnnualIncome}
+                  onChange={onClientChange}
+                  className="p-3 border rounded-lg w-full"
+                />
+              </div>
+            )}
           </div>
 
           <div className="relative group">
@@ -775,7 +803,9 @@ export const ClientWizard = ({
             >
               <div className="flex justify-between items-center">
                 <div>
-                  <p className="text-sm font-bold text-slate-800">Maximize Legacy</p>
+                  <p className="text-sm font-bold text-slate-800">
+                    Maximize Legacy{ssAnalysis?.winner?.age === 70 ? ' (Recommended)' : ''}
+                  </p>
                   <p className="text-xs text-slate-500">Delay claiming for highest lifetime benefits</p>
                 </div>
                 <span className="text-lg font-bold text-emerald-700">Age 70</span>
@@ -789,26 +819,30 @@ export const ClientWizard = ({
             >
               <div className="flex justify-between items-center">
                 <div>
-                  <p className="text-sm font-bold text-slate-800">Full Retirement Age</p>
+                  <p className="text-sm font-bold text-slate-800">
+                    Full Retirement Age{ssAnalysis?.winner?.age === 67 ? ' (Recommended)' : ''}
+                  </p>
                   <p className="text-xs text-slate-500">Claim at FRA with no reduction or increase</p>
                 </div>
                 <span className="text-lg font-bold text-emerald-700">Age 67</span>
               </div>
             </div>
 
-            {/* Option 3: Optimized / Recommended */}
-            <div
-              className={`p-3 rounded-lg border-2 cursor-pointer transition-all ${inputs.ssStartAge === (ssAnalysis?.winner?.age || 67) && inputs.ssStartAge !== 70 && inputs.ssStartAge !== 67 && inputs.ssStartAge !== 62 ? 'border-emerald-500 bg-emerald-50' : 'border-slate-200 bg-white hover:border-emerald-300'}`}
-              onClick={() => onUpdateSSStartAge(ssAnalysis?.winner?.age || 67)}
-            >
-              <div className="flex justify-between items-center">
-                <div>
-                  <p className="text-sm font-bold text-slate-800">Optimized (Recommended)</p>
-                  <p className="text-xs text-slate-500">Maximizes portfolio at age 80</p>
+            {/* Option 3: Optimized / Recommended - only show if different from fixed options */}
+            {ssAnalysis?.winner?.age && ![62, 67, 70].includes(ssAnalysis.winner.age) && (
+              <div
+                className={`p-3 rounded-lg border-2 cursor-pointer transition-all ${inputs.ssStartAge === ssAnalysis.winner.age ? 'border-emerald-500 bg-emerald-50' : 'border-slate-200 bg-white hover:border-emerald-300'}`}
+                onClick={() => onUpdateSSStartAge(ssAnalysis.winner.age)}
+              >
+                <div className="flex justify-between items-center">
+                  <div>
+                    <p className="text-sm font-bold text-slate-800">Optimized (Recommended)</p>
+                    <p className="text-xs text-slate-500">Maximizes portfolio at age 80</p>
+                  </div>
+                  <span className="text-lg font-bold text-emerald-700">Age {ssAnalysis.winner.age}</span>
                 </div>
-                <span className="text-lg font-bold text-emerald-700">Age {ssAnalysis?.winner?.age || 67}</span>
               </div>
-            </div>
+            )}
 
             {/* Option 4: Maximize Early Portfolio */}
             <div
@@ -817,7 +851,9 @@ export const ClientWizard = ({
             >
               <div className="flex justify-between items-center">
                 <div>
-                  <p className="text-sm font-bold text-slate-800">Maximize Early Portfolio</p>
+                  <p className="text-sm font-bold text-slate-800">
+                    Maximize Early Portfolio{ssAnalysis?.winner?.age === 62 ? ' (Recommended)' : ''}
+                  </p>
                   <p className="text-xs text-slate-500">Start benefits early, preserve investments</p>
                 </div>
                 <span className="text-lg font-bold text-emerald-700">Age 62</span>
@@ -1106,6 +1142,161 @@ export const ClientWizard = ({
                 </div>
               ))}
             </div>
+
+            {/* Spending Adjustments */}
+            <div className="border-t pt-4 mt-4">
+              <div className="flex justify-between items-center mb-3">
+                <div className="relative group">
+                  <h4 className="text-sm font-bold text-slate-700 flex items-center gap-1 cursor-help">
+                    Spending Adjustments <Info className="w-3 h-3 text-slate-400" />
+                  </h4>
+                  <div className="absolute left-0 bottom-full mb-2 hidden group-hover:block w-72 bg-slate-800 text-white text-xs p-3 rounded shadow-lg z-20">
+                    Add expected changes to your spending in retirement, such as a mortgage payoff (reduction), health insurance before Medicare (increase), or one-time expenses like a home renovation.
+                  </div>
+                </div>
+                <button
+                  onClick={onAddCashFlowAdjustment}
+                  className="flex items-center gap-1 px-3 py-1.5 text-xs bg-amber-50 text-amber-700 rounded-lg border border-amber-200 hover:bg-amber-100 transition-colors"
+                >
+                  <Plus className="w-3 h-3" /> Add Adjustment
+                </button>
+              </div>
+
+              {(!inputs.cashFlowAdjustments || inputs.cashFlowAdjustments.length === 0) && (
+                <p className="text-xs text-slate-400 italic">
+                  Mortgage payoff, reverse mortgage, health insurance, home renovation, etc.
+                </p>
+              )}
+
+              {(inputs.cashFlowAdjustments || []).map((adj) => (
+                <div key={adj.id} className="p-3 bg-amber-50/50 rounded-lg border border-amber-200 mb-3">
+                  <div className="flex justify-between items-start mb-3 gap-2">
+                    <select
+                      value={adj.name}
+                      onChange={(e) => {
+                        const preset = e.target.value;
+                        onUpdateCashFlowAdjustment(adj.id, 'name', preset);
+                        const presetConfig = {
+                          'Mortgage Payoff': { type: 'reduction' },
+                          'Reverse Mortgage': { type: 'reduction' },
+                          'Downsizing': { type: 'reduction' },
+                          'Health Insurance (pre-Medicare)': { type: 'increase', endAge: 65 },
+                          'Long-Term Care Insurance': { type: 'increase' },
+                          'Grandchild College': { type: 'one-time' },
+                          'Wedding': { type: 'one-time' },
+                          'Major Medical': { type: 'one-time' },
+                          'Home Renovation': { type: 'one-time' }
+                        };
+                        if (presetConfig[preset]) {
+                          onUpdateCashFlowAdjustment(adj.id, 'type', presetConfig[preset].type);
+                          if (presetConfig[preset].endAge) {
+                            onUpdateCashFlowAdjustment(adj.id, 'endAge', presetConfig[preset].endAge);
+                          }
+                          if (presetConfig[preset].type === 'one-time') {
+                            onUpdateCashFlowAdjustment(adj.id, 'endAge', adj.startAge);
+                          }
+                        }
+                      }}
+                      className="text-sm font-medium text-slate-700 bg-white border rounded px-2 py-1"
+                    >
+                      <option value="">Select Type...</option>
+                      <option value="Mortgage Payoff">Mortgage Payoff</option>
+                      <option value="Reverse Mortgage">Reverse Mortgage</option>
+                      <option value="Downsizing">Downsizing</option>
+                      <option value="Health Insurance (pre-Medicare)">Health Insurance (pre-Medicare)</option>
+                      <option value="Long-Term Care Insurance">Long-Term Care Insurance</option>
+                      <option value="Grandchild College">Grandchild College</option>
+                      <option value="Wedding">Wedding</option>
+                      <option value="Major Medical">Major Medical</option>
+                      <option value="Home Renovation">Home Renovation</option>
+                      <option value="Other">Other</option>
+                    </select>
+                    {clientInfo.isMarried && (
+                      <select
+                        value={adj.owner || 'client'}
+                        onChange={(e) => onUpdateCashFlowAdjustment(adj.id, 'owner', e.target.value)}
+                        className="text-sm font-medium text-slate-700 bg-white border rounded px-2 py-1"
+                      >
+                        <option value="client">{clientInfo.name || 'Client'}</option>
+                        <option value="partner">{clientInfo.partnerName || 'Partner'}</option>
+                      </select>
+                    )}
+                    <button
+                      onClick={() => onRemoveCashFlowAdjustment(adj.id)}
+                      className="p-1 text-red-500 hover:bg-red-50 rounded"
+                    >
+                      <Trash2 className="w-4 h-4" />
+                    </button>
+                  </div>
+
+                  <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                    <div>
+                      <label className="block text-[12px] text-slate-500 uppercase mb-1">
+                        {adj.type === 'one-time' ? 'Amount' : 'Monthly Amount'}
+                      </label>
+                      <FormattedNumberInput
+                        value={adj.amount}
+                        onChange={(e) => onUpdateCashFlowAdjustment(adj.id, 'amount', parseFloat(e.target.value) || 0)}
+                        className="p-2 border rounded w-full text-sm"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-[12px] text-slate-500 uppercase mb-1">
+                        {adj.type === 'one-time' ? 'Age' : 'Start Age'}
+                      </label>
+                      <input
+                        type="number"
+                        value={adj.startAge}
+                        onChange={(e) => {
+                          const age = parseInt(e.target.value) || 0;
+                          onUpdateCashFlowAdjustment(adj.id, 'startAge', age);
+                          if (adj.type === 'one-time') onUpdateCashFlowAdjustment(adj.id, 'endAge', age);
+                        }}
+                        min={55}
+                        max={100}
+                        className="p-2 border rounded w-full text-sm"
+                      />
+                    </div>
+                    {adj.type !== 'one-time' && (
+                      <div>
+                        <label className="block text-[12px] text-slate-500 uppercase mb-1">End Age</label>
+                        <input
+                          type="number"
+                          value={adj.endAge}
+                          onChange={(e) => onUpdateCashFlowAdjustment(adj.id, 'endAge', parseInt(e.target.value) || 100)}
+                          min={adj.startAge}
+                          max={100}
+                          className="p-2 border rounded w-full text-sm"
+                        />
+                      </div>
+                    )}
+                    <div className="flex flex-col justify-end gap-1">
+                      <select
+                        value={adj.type}
+                        onChange={(e) => {
+                          onUpdateCashFlowAdjustment(adj.id, 'type', e.target.value);
+                          if (e.target.value === 'one-time') onUpdateCashFlowAdjustment(adj.id, 'endAge', adj.startAge);
+                        }}
+                        className="text-sm bg-white border rounded px-1 py-1"
+                      >
+                        <option value="reduction">Reduction</option>
+                        <option value="increase">Increase</option>
+                        <option value="one-time">One-Time</option>
+                      </select>
+                      <label className="flex items-center gap-1 text-[12px] text-slate-500">
+                        <input
+                          type="checkbox"
+                          checked={adj.inflationAdjusted}
+                          onChange={(e) => onUpdateCashFlowAdjustment(adj.id, 'inflationAdjusted', e.target.checked)}
+                          className="w-3 h-3"
+                        />
+                        Inflation Adjusted
+                      </label>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
           </div>
         </Card>
 
@@ -1113,7 +1304,7 @@ export const ClientWizard = ({
       <div className="text-center my-8">
         <h2 className="text-2xl font-bold text-slate-800">Your Retirement Outlook</h2>
         <p className="text-slate-500 mt-2">A personalized projection based on your unique financial situation</p>
-        <p className="text-xs text-slate-400 mt-1">This analysis uses Miller Wealth's proprietary methodology to model your retirement trajectory</p>
+        <p className="text-sm font-bold text-emerald-700 mt-2">This analysis uses Miller Wealth's proprietary methodology to model your retirement trajectory</p>
       </div>
 
       {/* Stats Row */}
@@ -1153,7 +1344,7 @@ export const ClientWizard = ({
             : `${(monteCarloData?.successRate || 0).toFixed(1)}%`}
           subtext={adjustedProjections.hasChanges
             ? <><span className="line-through opacity-60">{(monteCarloData?.successRate || 0).toFixed(1)}%</span> → +{(adjustedProjections.successRate - (monteCarloData?.successRate || 0)).toFixed(1)}%</>
-            : `30 years from retirement (age ${clientInfo.retirementAge + 30})`}
+            : `At age ${Math.min(clientInfo.retirementAge + 30, 95)}`}
           icon={Activity}
           colorClass={`${(adjustedProjections.hasChanges ? adjustedProjections.successRate : monteCarloData?.successRate) > 80 ? "bg-emerald-600" : "bg-orange-500"} text-white ${adjustedProjections.hasChanges ? 'ring-2 ring-yellow-300' : ''}`}
         />
@@ -1161,10 +1352,10 @@ export const ClientWizard = ({
           label="Legacy Balance"
           value={adjustedProjections.hasChanges
             ? `$${(adjustedProjections.legacyBalance / 1000000).toFixed(2)}M`
-            : `$${((projectionData[projectionData.length - 1]?.total || 0) / 1000000).toFixed(2)}M`}
+            : `$${((cappedProjectionData[cappedProjectionData.length - 1]?.total || 0) / 1000000).toFixed(2)}M`}
           subtext={adjustedProjections.hasChanges
-            ? <><span className="line-through opacity-60">${((projectionData[projectionData.length - 1]?.total || 0) / 1000000).toFixed(2)}M</span> → +${((adjustedProjections.legacyBalance - (projectionData[projectionData.length - 1]?.total || 0)) / 1000).toFixed(0)}k</>
-            : `At age ${clientInfo.retirementAge + 30}`}
+            ? <><span className="line-through opacity-60">${((cappedProjectionData[cappedProjectionData.length - 1]?.total || 0) / 1000000).toFixed(2)}M</span> → +${((adjustedProjections.legacyBalance - (cappedProjectionData[cappedProjectionData.length - 1]?.total || 0)) / 1000).toFixed(0)}k</>
+            : `At age ${cappedProjectionData[cappedProjectionData.length - 1]?.age || Math.min(clientInfo.retirementAge + 30, 95)}`}
           icon={Shield}
           colorClass={`bg-emerald-800 text-white ${adjustedProjections.hasChanges ? 'ring-2 ring-yellow-300' : ''}`}
         />
@@ -1194,7 +1385,7 @@ export const ClientWizard = ({
           <>
             <div className="h-80 w-full">
               <ResponsiveContainer width="100%" height="100%">
-                <ComposedChart data={projectionData} margin={{ top: 5, right: 5, bottom: 30, left: 5 }}>
+                <ComposedChart data={cappedProjectionData} margin={{ top: 5, right: 5, bottom: 30, left: 5 }}>
                   <CartesianGrid strokeDasharray="3 3" vertical={false} />
                   <XAxis dataKey="age" tick={{ dy: 5 }} />
                   <YAxis tickFormatter={(val) => {
@@ -1235,7 +1426,7 @@ export const ClientWizard = ({
                 </tr>
               </thead>
               <tbody>
-                {projectionData.map((row) => (
+                {cappedProjectionData.map((row) => (
                   <tr key={row.year} className="border-b border-slate-50 hover:bg-slate-50">
                     <td className="p-2 text-left font-bold text-slate-700">{row.age}</td>
                     <td className="p-2 text-slate-500">${row.startBalance.toLocaleString()}</td>
@@ -1353,7 +1544,7 @@ export const ClientWizard = ({
       {/* Planning Guidance */}
       {(() => {
         const successRate = monteCarloData?.successRate || 0;
-        const legacyBalance = projectionData[projectionData.length - 1]?.total || 0;
+        const legacyBalance = cappedProjectionData[cappedProjectionData.length - 1]?.total || 0;
         const annualSpending = inputs.monthlySpending * 12;
         const legacyToSpendingRatio = legacyBalance / annualSpending;
         const isLowSuccess = successRate < 80;
@@ -1444,6 +1635,10 @@ export const ClientWizard = ({
           While this projection provides valuable insights, life rarely follows a straight line. Several factors could impact your retirement:
         </p>
         <div className="grid grid-cols-2 md:grid-cols-3 gap-2 text-xs text-slate-700">
+          <div className="flex items-center gap-2 p-2 bg-white rounded border border-amber-300 col-span-2 md:col-span-3">
+            <span className="text-amber-600 font-bold">•</span>
+            <span className="font-semibold text-amber-800">Taxes are not reflected in this illustration and can have a substantial impact on take-home pay</span>
+          </div>
           <div className="flex items-center gap-2 p-2 bg-white rounded border border-amber-200">
             <span className="text-amber-500">•</span> Unexpected healthcare needs
           </div>
@@ -1550,7 +1745,7 @@ export const ClientWizard = ({
           {wizardStep === 2 && renderPage2()}
 
           {/* Navigation Buttons */}
-          <div className="flex justify-between mt-6 sm:mt-8 pt-4 sm:pt-6 border-t">
+          <div className="flex justify-between items-center mt-6 sm:mt-8 pt-4 sm:pt-6 border-t">
             {wizardStep > 1 ? (
               <button
                 onClick={handleBack}
@@ -1562,12 +1757,32 @@ export const ClientWizard = ({
               <div />
             )}
 
+            {wizardStep === 2 && (
+              <a
+                href="https://www.millerwm.com"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="flex items-center gap-1 sm:gap-2 px-3 sm:px-4 py-2 text-emerald-700 hover:text-emerald-800 hover:bg-emerald-50 rounded-lg transition-all text-sm sm:text-base"
+              >
+                <ExternalLink className="w-4 h-4" /> Visit Miller Wealth Management Website
+              </a>
+            )}
+
             {wizardStep < 2 && (
               <button
                 onClick={handleNext}
                 className="flex items-center gap-1 sm:gap-2 px-4 sm:px-8 py-2 sm:py-3 bg-emerald-700 hover:bg-emerald-800 text-white font-bold rounded-lg transition-all text-sm sm:text-base"
               >
                 Next <ArrowRight className="w-4 h-4 sm:w-5 sm:h-5" />
+              </button>
+            )}
+
+            {wizardStep === 2 && (
+              <button
+                onClick={onLogout || (() => window.location.reload())}
+                className="flex items-center gap-1 sm:gap-2 px-3 sm:px-6 py-2 sm:py-3 text-slate-600 hover:bg-slate-100 rounded-lg transition-all text-sm sm:text-base"
+              >
+                I Am Finished <LogOut className="w-4 h-4 sm:w-5 sm:h-5" />
               </button>
             )}
           </div>
