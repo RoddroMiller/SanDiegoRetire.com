@@ -158,6 +158,7 @@ export default function BucketPortfolioBuilder() {
     currentSpending: 8000,
     annualSavings: 25000,
     annualIncome: 0,
+    partnerAnnualIncome: 0,
     expectedReturn: 7.0,
   });
 
@@ -179,12 +180,18 @@ export default function BucketPortfolioBuilder() {
     personalInflationRate: 1.5,
     ssReinvestRate: 4.5,
     additionalIncomes: [],
+    cashFlowAdjustments: [],
     // Tax Settings
     taxEnabled: false,
     filingStatus: 'married', // 'single' or 'married'
     stateRate: 4.5, // State tax rate %
-    traditionalPercent: 70, // % of portfolio in traditional (pre-tax) accounts
-    qualifiedDividendPercent: 30 // % of investment income that's qualified dividends
+    traditionalPercent: 60, // % of portfolio in traditional (pre-tax) accounts
+    rothPercent: 25, // % of portfolio in Roth accounts
+    nqPercent: 15, // % of portfolio in non-qualified (brokerage) accounts
+    nqDividendYield: 2.0, // Annual dividend yield on NQ holdings %
+    nqQualifiedDividendPercent: 80, // % of NQ dividends that are qualified
+    nqCapitalGainRate: 50, // % of NQ withdrawal that is capital gain (vs cost basis)
+    withdrawalOverrides: {} // Per-age overrides: { [age]: { traditionalPercent, rothPercent, nqPercent } }
   });
 
   // Return Assumptions
@@ -221,8 +228,18 @@ export default function BucketPortfolioBuilder() {
 
   const handleLoadScenario = (scenario) => {
     loadScenario(scenario, (s) => {
-      setClientInfo(s.clientInfo);
-      setInputs(s.inputs);
+      setClientInfo({ ...s.clientInfo, partnerAnnualIncome: s.clientInfo.partnerAnnualIncome || 0 });
+      setInputs({
+        ...s.inputs,
+        cashFlowAdjustments: s.inputs.cashFlowAdjustments || [],
+        // Migration defaults for 3-way account split
+        rothPercent: s.inputs.rothPercent ?? (100 - (s.inputs.traditionalPercent || 70)),
+        nqPercent: s.inputs.nqPercent ?? 0,
+        nqDividendYield: s.inputs.nqDividendYield ?? 2.0,
+        nqQualifiedDividendPercent: s.inputs.nqQualifiedDividendPercent ?? 80,
+        nqCapitalGainRate: s.inputs.nqCapitalGainRate ?? 50,
+        withdrawalOverrides: s.inputs.withdrawalOverrides || {},
+      });
       setAssumptions(s.assumptions);
       if (s.targetMaxPortfolioAge) setTargetMaxPortfolioAge(s.targetMaxPortfolioAge);
       if (s.rebalanceFreq !== undefined) setRebalanceFreq(s.rebalanceFreq);
@@ -473,6 +490,42 @@ export default function BucketPortfolioBuilder() {
     setInputs(prev => ({ ...prev, [name]: val }));
   };
 
+  // Account Split Handler (3-way: Traditional/Roth/NQ)
+  const handleAccountSplitChange = (field, newValue) => {
+    const clamped = Math.max(0, Math.min(100, Math.round(newValue)));
+    setInputs(prev => {
+      const fields = ['traditionalPercent', 'rothPercent', 'nqPercent'];
+      const otherFields = fields.filter(f => f !== field);
+      const remainder = 100 - clamped;
+      const otherSum = prev[otherFields[0]] + prev[otherFields[1]];
+      let val1, val2;
+      if (otherSum === 0) {
+        val1 = Math.round(remainder / 2);
+        val2 = remainder - val1;
+      } else {
+        val1 = Math.round((prev[otherFields[0]] / otherSum) * remainder);
+        val2 = remainder - val1;
+      }
+      return { ...prev, [field]: clamped, [otherFields[0]]: val1, [otherFields[1]]: val2 };
+    });
+  };
+
+  // Withdrawal Override Handler (per-age overrides)
+  const handleWithdrawalOverrideChange = (age, overrideData) => {
+    setInputs(prev => {
+      if (age === '__reset_all__') {
+        return { ...prev, withdrawalOverrides: {} };
+      }
+      const overrides = { ...prev.withdrawalOverrides };
+      if (overrideData === null) {
+        delete overrides[age];
+      } else {
+        overrides[age] = overrideData;
+      }
+      return { ...prev, withdrawalOverrides: overrides };
+    });
+  };
+
   // Additional Income Stream Handlers
   const addAdditionalIncome = () => {
     setInputs(prev => ({
@@ -497,6 +550,42 @@ export default function BucketPortfolioBuilder() {
     setInputs(prev => ({
       ...prev,
       additionalIncomes: prev.additionalIncomes.filter(income => income.id !== id)
+    }));
+  };
+
+  // Cash Flow Adjustment Handlers
+  const addCashFlowAdjustment = () => {
+    setInputs(prev => ({
+      ...prev,
+      cashFlowAdjustments: [
+        ...(prev.cashFlowAdjustments || []),
+        {
+          id: Date.now(),
+          name: '',
+          type: 'reduction',
+          amount: 0,
+          startAge: clientInfo.retirementAge,
+          endAge: 100,
+          inflationAdjusted: false,
+          owner: 'client'
+        }
+      ]
+    }));
+  };
+
+  const updateCashFlowAdjustment = (id, field, value) => {
+    setInputs(prev => ({
+      ...prev,
+      cashFlowAdjustments: (prev.cashFlowAdjustments || []).map(adj =>
+        adj.id === id ? { ...adj, [field]: value } : adj
+      )
+    }));
+  };
+
+  const removeCashFlowAdjustment = (id) => {
+    setInputs(prev => ({
+      ...prev,
+      cashFlowAdjustments: (prev.cashFlowAdjustments || []).filter(adj => adj.id !== id)
     }));
   };
 
@@ -776,6 +865,8 @@ export default function BucketPortfolioBuilder() {
         onDeleteScenario={handleDeleteScenario}
         clientInfo={clientInfo}
         onClientChange={handleClientChange}
+        inputs={inputs}
+        onInputChange={handleInputChange}
         accumulationData={accumulationData}
         onProceed={proceedToArchitect}
         onViewManagement={() => setAdvisorView('management')}
@@ -831,6 +922,9 @@ export default function BucketPortfolioBuilder() {
       onAddAdditionalIncome={addAdditionalIncome}
       onUpdateAdditionalIncome={updateAdditionalIncome}
       onRemoveAdditionalIncome={removeAdditionalIncome}
+      onAddCashFlowAdjustment={addCashFlowAdjustment}
+      onUpdateCashFlowAdjustment={updateCashFlowAdjustment}
+      onRemoveCashFlowAdjustment={removeCashFlowAdjustment}
       onViewManagement={() => setAdvisorView('management')}
       // Command Center (The One Process) integration
       commandCenterStatus={commandCenterStatus}
@@ -858,6 +952,9 @@ export default function BucketPortfolioBuilder() {
       vaMonteCarloData={vaMonteCarloData}
       vaAdjustedBasePlan={vaAdjustedBasePlan}
       vaOptimizerData={vaOptimizerData}
+      // 3-Way Account Split
+      onAccountSplitChange={handleAccountSplitChange}
+      onWithdrawalOverrideChange={handleWithdrawalOverrideChange}
     />
     </>
   );

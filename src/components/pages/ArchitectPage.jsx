@@ -12,7 +12,7 @@ import {
 } from 'lucide-react';
 
 import { COLORS, LOGO_URL } from '../../constants';
-import { getAdjustedSS, generateAndDownloadIPS } from '../../utils';
+import { getAdjustedSS, generateAndDownloadIPS, calculateAnnualTax, calculateTaxableSS, calculateFederalTax } from '../../utils';
 import { Card, StatBox, AllocationRow, FormattedNumberInput, Disclaimer } from '../ui';
 
 /**
@@ -67,6 +67,10 @@ export const ArchitectPage = ({
   onAddAdditionalIncome,
   onUpdateAdditionalIncome,
   onRemoveAdditionalIncome,
+  // Cash Flow Adjustments
+  onAddCashFlowAdjustment,
+  onUpdateCashFlowAdjustment,
+  onRemoveCashFlowAdjustment,
   // Navigation
   onViewManagement,
   // Command Center (The One Process) integration
@@ -94,11 +98,17 @@ export const ArchitectPage = ({
   onVaInputChange,
   vaMonteCarloData,
   vaAdjustedBasePlan,
-  vaOptimizerData
+  vaOptimizerData,
+  // 3-Way Account Split
+  onAccountSplitChange,
+  onWithdrawalOverrideChange
 }) => {
   // Command Center client selector state
   const [showClientSelector, setShowClientSelector] = useState(false);
   const [selectedCommandCenterClient, setSelectedCommandCenterClient] = useState(null);
+
+  // Withdrawal Override modal state
+  const [showWithdrawalOverrides, setShowWithdrawalOverrides] = useState(false);
 
   // Improvement solution selections
   const [selectedImprovements, setSelectedImprovements] = useState({
@@ -551,44 +561,127 @@ export const ArchitectPage = ({
                               />
                             </div>
                           </div>
-                          <div className="grid grid-cols-2 gap-2">
-                            <div className="relative group">
-                              <label className="text-[12px] text-slate-500 uppercase flex items-center gap-1">
-                                Pre-Tax Acct % <Info className="w-3 h-3 text-slate-400" />
-                              </label>
-                              <div className="absolute left-0 bottom-full mb-1 hidden group-hover:block w-56 bg-slate-800 text-white text-xs p-2 rounded shadow-lg z-10">
-                                Percentage of portfolio in traditional (pre-tax) accounts like 401k or Traditional IRA. Remainder is Roth/after-tax.
+                          {/* Account Type Mix */}
+                          <div>
+                            <label className="text-[10px] text-slate-400 uppercase font-semibold">Account Type Mix</label>
+                            <div className="grid grid-cols-3 gap-1.5 mt-0.5">
+                              <div className="relative group">
+                                <label className="text-[10px] text-slate-500 uppercase flex items-center gap-0.5">
+                                  Trad % <Info className="w-2.5 h-2.5 text-slate-400" />
+                                </label>
+                                <div className="absolute left-0 bottom-full mb-1 hidden group-hover:block w-44 bg-slate-800 text-white text-xs p-2 rounded shadow-lg z-10">
+                                  Traditional (pre-tax) accounts: 401k, Traditional IRA. Withdrawals taxed as ordinary income.
+                                </div>
+                                <input
+                                  type="number" step="5" min="0" max="100"
+                                  value={inputs.traditionalPercent}
+                                  onChange={(e) => onAccountSplitChange('traditionalPercent', parseFloat(e.target.value) || 0)}
+                                  className="w-full px-1.5 py-1 text-xs border rounded"
+                                />
                               </div>
-                              <input
-                                type="number"
-                                step="5"
-                                name="traditionalPercent"
-                                value={inputs.traditionalPercent}
-                                onChange={onInputChange}
-                                min="0"
-                                max="100"
-                                className="w-full px-2 py-1 text-xs border rounded"
-                              />
+                              <div className="relative group">
+                                <label className="text-[10px] text-slate-500 uppercase flex items-center gap-0.5">
+                                  Roth % <Info className="w-2.5 h-2.5 text-slate-400" />
+                                </label>
+                                <div className="absolute left-0 bottom-full mb-1 hidden group-hover:block w-44 bg-slate-800 text-white text-xs p-2 rounded shadow-lg z-10">
+                                  Roth accounts: Roth IRA, Roth 401k. Withdrawals are tax-free.
+                                </div>
+                                <input
+                                  type="number" step="5" min="0" max="100"
+                                  value={inputs.rothPercent}
+                                  onChange={(e) => onAccountSplitChange('rothPercent', parseFloat(e.target.value) || 0)}
+                                  className="w-full px-1.5 py-1 text-xs border rounded"
+                                />
+                              </div>
+                              <div className="relative group">
+                                <label className="text-[10px] text-slate-500 uppercase flex items-center gap-0.5">
+                                  NQ % <Info className="w-2.5 h-2.5 text-slate-400" />
+                                </label>
+                                <div className="absolute left-0 bottom-full mb-1 hidden group-hover:block w-44 bg-slate-800 text-white text-xs p-2 rounded shadow-lg z-10">
+                                  Non-qualified (brokerage). Only capital gains taxed at LTCG rates; dividends taxed annually.
+                                </div>
+                                <input
+                                  type="number" step="5" min="0" max="100"
+                                  value={inputs.nqPercent}
+                                  onChange={(e) => onAccountSplitChange('nqPercent', parseFloat(e.target.value) || 0)}
+                                  className="w-full px-1.5 py-1 text-xs border rounded"
+                                />
+                              </div>
                             </div>
-                            <div className="relative group">
-                              <label className="text-[12px] text-slate-500 uppercase flex items-center gap-1">
-                                Qual. Div % <Info className="w-3 h-3 text-slate-400" />
-                              </label>
-                              <div className="absolute left-0 bottom-full mb-1 hidden group-hover:block w-56 bg-slate-800 text-white text-xs p-2 rounded shadow-lg z-10">
-                                Estimated % of investment income that qualifies for preferential tax rates (qualified dividends, LTCG).
-                              </div>
-                              <input
-                                type="number"
-                                step="5"
-                                name="qualifiedDividendPercent"
-                                value={inputs.qualifiedDividendPercent}
-                                onChange={onInputChange}
-                                min="0"
-                                max="100"
-                                className="w-full px-2 py-1 text-xs border rounded"
-                              />
+                            <div className={`text-[10px] mt-0.5 font-medium ${inputs.traditionalPercent + inputs.rothPercent + inputs.nqPercent === 100 ? 'text-emerald-600' : 'text-red-500'}`}>
+                              Sum: {inputs.traditionalPercent + inputs.rothPercent + inputs.nqPercent}%{inputs.traditionalPercent + inputs.rothPercent + inputs.nqPercent !== 100 ? ' (must equal 100%)' : ''}
                             </div>
                           </div>
+
+                          {/* NQ Assumptions (only when NQ > 0) */}
+                          {inputs.nqPercent > 0 && (
+                            <div>
+                              <label className="text-[10px] text-slate-400 uppercase font-semibold">NQ Assumptions</label>
+                              <div className="grid grid-cols-3 gap-1.5 mt-0.5">
+                                <div className="relative group">
+                                  <label className="text-[10px] text-slate-500 uppercase flex items-center gap-0.5">
+                                    Div Yield % <Info className="w-2.5 h-2.5 text-slate-400" />
+                                  </label>
+                                  <div className="absolute left-0 bottom-full mb-1 hidden group-hover:block w-44 bg-slate-800 text-white text-xs p-2 rounded shadow-lg z-10">
+                                    Annual dividend yield on NQ holdings. Dividends are taxed annually regardless of withdrawal.
+                                  </div>
+                                  <input
+                                    type="number" step="0.25" min="0" max="10"
+                                    name="nqDividendYield"
+                                    value={inputs.nqDividendYield}
+                                    onChange={onInputChange}
+                                    className="w-full px-1.5 py-1 text-xs border rounded"
+                                  />
+                                </div>
+                                <div className="relative group">
+                                  <label className="text-[10px] text-slate-500 uppercase flex items-center gap-0.5">
+                                    Qual Div % <Info className="w-2.5 h-2.5 text-slate-400" />
+                                  </label>
+                                  <div className="absolute left-0 bottom-full mb-1 hidden group-hover:block w-44 bg-slate-800 text-white text-xs p-2 rounded shadow-lg z-10">
+                                    % of NQ dividends that qualify for preferential LTCG tax rates.
+                                  </div>
+                                  <input
+                                    type="number" step="5" min="0" max="100"
+                                    name="nqQualifiedDividendPercent"
+                                    value={inputs.nqQualifiedDividendPercent}
+                                    onChange={onInputChange}
+                                    className="w-full px-1.5 py-1 text-xs border rounded"
+                                  />
+                                </div>
+                                <div className="relative group">
+                                  <label className="text-[10px] text-slate-500 uppercase flex items-center gap-0.5">
+                                    Gain Rate % <Info className="w-2.5 h-2.5 text-slate-400" />
+                                  </label>
+                                  <div className="absolute left-0 bottom-full mb-1 hidden group-hover:block w-44 bg-slate-800 text-white text-xs p-2 rounded shadow-lg z-10">
+                                    Estimated % of NQ withdrawal that is capital gain (vs. cost basis return). Higher = more taxable.
+                                  </div>
+                                  <input
+                                    type="number" step="5" min="0" max="100"
+                                    name="nqCapitalGainRate"
+                                    value={inputs.nqCapitalGainRate}
+                                    onChange={onInputChange}
+                                    className="w-full px-1.5 py-1 text-xs border rounded"
+                                  />
+                                </div>
+                              </div>
+                            </div>
+                          )}
+
+                          {/* Withdrawal Strategy Button */}
+                          {projectionData && projectionData.length > 0 && (
+                            <button
+                              type="button"
+                              onClick={() => setShowWithdrawalOverrides(true)}
+                              className="w-full mt-1 flex items-center justify-center gap-1.5 px-2 py-1.5 text-xs bg-amber-50 text-amber-700 rounded border border-amber-200 hover:bg-amber-100 transition-colors font-medium"
+                            >
+                              <TableIcon className="w-3 h-3" /> Withdrawal Strategy by Year
+                              {Object.keys(inputs.withdrawalOverrides || {}).length > 0 && (
+                                <span className="bg-amber-200 text-amber-800 text-[10px] px-1.5 rounded-full ml-1">
+                                  {Object.keys(inputs.withdrawalOverrides).length}
+                                </span>
+                              )}
+                            </button>
+                          )}
                         </div>
                       )}
                     </div>
@@ -861,6 +954,147 @@ export const ArchitectPage = ({
                       </div>
                     ))}
                   </div>
+
+                  {/* Spending Adjustments */}
+                  <div className="border-t border-slate-100 pt-3 mt-3">
+                    <div className="flex justify-between items-center mb-2">
+                      <span className="text-[12px] font-bold text-slate-500 uppercase">Spending Adjustments</span>
+                      <button
+                        onClick={onAddCashFlowAdjustment}
+                        className="flex items-center gap-1 px-2 py-1 text-[12px] bg-amber-50 text-amber-700 rounded border border-amber-200 hover:bg-amber-100"
+                      >
+                        <Plus className="w-3 h-3" /> Add
+                      </button>
+                    </div>
+
+                    {(!inputs.cashFlowAdjustments || inputs.cashFlowAdjustments.length === 0) && (
+                      <p className="text-[12px] text-slate-400 italic">
+                        Mortgage payoff, reverse mortgage, health insurance, etc.
+                      </p>
+                    )}
+
+                    {(inputs.cashFlowAdjustments || []).map((adj) => (
+                      <div key={adj.id} className="p-2 bg-amber-50/50 rounded border border-amber-200 mb-2">
+                        <div className="flex justify-between items-center mb-2 gap-1">
+                          <select
+                            value={adj.name}
+                            onChange={(e) => {
+                              const preset = e.target.value;
+                              onUpdateCashFlowAdjustment(adj.id, 'name', preset);
+                              // Auto-configure based on preset
+                              const presetConfig = {
+                                'Mortgage Payoff': { type: 'reduction' },
+                                'Reverse Mortgage': { type: 'reduction' },
+                                'Downsizing': { type: 'reduction' },
+                                'Health Insurance (pre-Medicare)': { type: 'increase', endAge: 65 },
+                                'Long-Term Care Insurance': { type: 'increase' },
+                                'Grandchild College': { type: 'one-time' },
+                                'Wedding': { type: 'one-time' },
+                                'Major Medical': { type: 'one-time' },
+                                'Home Renovation': { type: 'one-time' }
+                              };
+                              if (presetConfig[preset]) {
+                                onUpdateCashFlowAdjustment(adj.id, 'type', presetConfig[preset].type);
+                                if (presetConfig[preset].endAge) {
+                                  onUpdateCashFlowAdjustment(adj.id, 'endAge', presetConfig[preset].endAge);
+                                }
+                                if (presetConfig[preset].type === 'one-time') {
+                                  onUpdateCashFlowAdjustment(adj.id, 'endAge', adj.startAge);
+                                }
+                              }
+                            }}
+                            className="text-[12px] font-medium bg-white border rounded px-1 py-0.5"
+                          >
+                            <option value="">Type...</option>
+                            <option value="Mortgage Payoff">Mortgage Payoff</option>
+                            <option value="Reverse Mortgage">Reverse Mortgage</option>
+                            <option value="Downsizing">Downsizing</option>
+                            <option value="Health Insurance (pre-Medicare)">Health Insurance (pre-Medicare)</option>
+                            <option value="Long-Term Care Insurance">Long-Term Care Insurance</option>
+                            <option value="Grandchild College">Grandchild College</option>
+                            <option value="Wedding">Wedding</option>
+                            <option value="Major Medical">Major Medical</option>
+                            <option value="Home Renovation">Home Renovation</option>
+                            <option value="Other">Other</option>
+                          </select>
+                          {clientInfo.isMarried && (
+                            <select
+                              value={adj.owner || 'client'}
+                              onChange={(e) => onUpdateCashFlowAdjustment(adj.id, 'owner', e.target.value)}
+                              className="text-[12px] font-medium bg-white border rounded px-1 py-0.5"
+                            >
+                              <option value="client">{clientInfo.name || 'Client'}</option>
+                              <option value="partner">{clientInfo.partnerName || 'Partner'}</option>
+                            </select>
+                          )}
+                          <button onClick={() => onRemoveCashFlowAdjustment(adj.id)} className="p-0.5 text-red-500 hover:bg-red-50 rounded">
+                            <Trash2 className="w-3 h-3" />
+                          </button>
+                        </div>
+                        <div className="grid grid-cols-4 gap-1">
+                          <div>
+                            <label className="block text-[12px] text-slate-500 uppercase">
+                              {adj.type === 'one-time' ? 'Amount' : 'Monthly'}
+                            </label>
+                            <FormattedNumberInput
+                              value={adj.amount}
+                              onChange={(e) => onUpdateCashFlowAdjustment(adj.id, 'amount', parseFloat(e.target.value) || 0)}
+                              className="w-full px-1 py-0.5 border rounded text-[12px]"
+                            />
+                          </div>
+                          <div>
+                            <label className="block text-[12px] text-slate-500 uppercase">
+                              {adj.type === 'one-time' ? 'Age' : 'Start'}
+                            </label>
+                            <input
+                              type="number"
+                              value={adj.startAge}
+                              onChange={(e) => {
+                                const age = parseInt(e.target.value) || 0;
+                                onUpdateCashFlowAdjustment(adj.id, 'startAge', age);
+                                if (adj.type === 'one-time') onUpdateCashFlowAdjustment(adj.id, 'endAge', age);
+                              }}
+                              className="w-full px-1 py-0.5 border rounded text-[12px]"
+                            />
+                          </div>
+                          {adj.type !== 'one-time' && (
+                            <div>
+                              <label className="block text-[12px] text-slate-500 uppercase">End</label>
+                              <input
+                                type="number"
+                                value={adj.endAge}
+                                onChange={(e) => onUpdateCashFlowAdjustment(adj.id, 'endAge', parseInt(e.target.value) || 100)}
+                                className="w-full px-1 py-0.5 border rounded text-[12px]"
+                              />
+                            </div>
+                          )}
+                          <div className="flex flex-col justify-end gap-0.5">
+                            <select
+                              value={adj.type}
+                              onChange={(e) => {
+                                onUpdateCashFlowAdjustment(adj.id, 'type', e.target.value);
+                                if (e.target.value === 'one-time') onUpdateCashFlowAdjustment(adj.id, 'endAge', adj.startAge);
+                              }}
+                              className="text-[12px] bg-white border rounded px-0.5 py-0.5"
+                            >
+                              <option value="reduction">Reduction</option>
+                              <option value="increase">Increase</option>
+                              <option value="one-time">One-Time</option>
+                            </select>
+                            <label className="flex items-center gap-0.5 text-[12px] text-slate-500">
+                              <input
+                                type="checkbox"
+                                checked={adj.inflationAdjusted}
+                                onChange={(e) => onUpdateCashFlowAdjustment(adj.id, 'inflationAdjusted', e.target.checked)}
+                                className="w-2.5 h-2.5"
+                              />
+                              Inflation Adj
+                            </label>
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
                 </div>
               </div>
             </div>
@@ -1056,6 +1290,9 @@ export const ArchitectPage = ({
               onManualAllocationModeChange={onManualAllocationModeChange}
               onRecalculateFromFormula={onRecalculateFromFormula}
               formulaAllocations={formulaAllocations}
+              onInputChange={onInputChange}
+              onAccountSplitChange={onAccountSplitChange}
+              onWithdrawalOverrideChange={onWithdrawalOverrideChange}
             />
           )}
 
@@ -2025,6 +2262,16 @@ export const ArchitectPage = ({
           </div>
         </div>
       )}
+
+      {/* Withdrawal Strategy Override Modal */}
+      {showWithdrawalOverrides && projectionData && (
+        <WithdrawalOverrideModal
+          projectionData={projectionData}
+          inputs={inputs}
+          onWithdrawalOverrideChange={onWithdrawalOverrideChange}
+          onClose={() => setShowWithdrawalOverrides(false)}
+        />
+      )}
     </div>
   );
 };
@@ -2036,8 +2283,117 @@ const AllocationTab = ({
   useManualAllocation, manualAllocationMode, manualAllocations, manualPercentages,
   useManualForRebalance, onToggleManualAllocation, onToggleManualForRebalance,
   onManualAllocationChange, onManualAllocationModeChange,
-  onRecalculateFromFormula, formulaAllocations
-}) => (
+  onRecalculateFromFormula, formulaAllocations,
+  onInputChange, onAccountSplitChange, onWithdrawalOverrideChange
+}) => {
+  const [selectedTaxRow, setSelectedTaxRow] = useState(null);
+
+  // Compute tax detail when a row is selected
+  const taxDetail = useMemo(() => {
+    if (!selectedTaxRow || !inputs.taxEnabled) return null;
+    const row = selectedTaxRow;
+
+    // Use actual percentages from simulation row (supports per-year overrides)
+    const tradPctVal = row.traditionalPctUsed ?? inputs.traditionalPercent ?? 60;
+    const rothPctVal = row.rothPctUsed ?? inputs.rothPercent ?? 25;
+    const nqPctVal = row.nqPctUsed ?? inputs.nqPercent ?? 15;
+    const tradPct = tradPctVal / 100;
+    const rothPct = rothPctVal / 100;
+    const nqPct = nqPctVal / 100;
+
+    const traditionalWithdrawal = row.distribution * tradPct;
+    const rothWithdrawal = row.distribution * rothPct;
+    const nqWithdrawal = row.distribution * nqPct;
+
+    // NQ breakdown from simulation row
+    const nqTaxableGain = row.nqTaxableGain || 0;
+    const nqCostBasis = row.nqCostBasis || 0;
+    const nqQualifiedDividends = row.nqQualifiedDividends || 0;
+    const nqOrdinaryDividends = row.nqOrdinaryDividends || 0;
+
+    const ssIncome = row.ssIncomeDetail || 0;
+    const pensionIncome = row.pensionIncomeDetail || 0;
+    const vaIncome = row.vaIncomeDetail || 0;
+    const otherIncome = row.otherIncomeDetail || 0;
+    const employmentIncome = row.employmentIncomeDetail || 0;
+    const filingStatus = inputs.filingStatus || 'married';
+    const stateRate = inputs.stateRate || 0;
+
+    // Pension + VA treated as ordinary income in tax calc
+    const pensionForTax = pensionIncome + vaIncome;
+
+    // Step 1: Taxable SS (NQ ordinary dividends count as ordinary income)
+    const ordinaryIncomeBeforeSS = pensionForTax + traditionalWithdrawal + nqOrdinaryDividends + otherIncome;
+    const taxableSS = calculateTaxableSS(ssIncome, ordinaryIncomeBeforeSS, filingStatus);
+
+    // Determine SS tier
+    const combinedIncome = ordinaryIncomeBeforeSS + (ssIncome * 0.5);
+    const thresholds = filingStatus === 'married'
+      ? { low: 32000, high: 44000 }
+      : { low: 25000, high: 34000 };
+    const ssTier = ssIncome <= 0 ? 'N/A' : combinedIncome <= thresholds.low ? '0%' : combinedIncome <= thresholds.high ? '50%' : '85%';
+
+    // Step 2: Gross ordinary income (includes NQ ordinary dividends)
+    const grossOrdinaryIncome = taxableSS + pensionForTax + traditionalWithdrawal + nqOrdinaryDividends + otherIncome;
+
+    // Step 3: Standard deduction
+    const isSenior = row.age >= 65;
+    const baseDeduction = filingStatus === 'married' ? 29200 : 14600;
+    const seniorBonusPer = filingStatus === 'married' ? 1550 : 1950;
+    const seniorBonus = isSenior ? (filingStatus === 'married' ? seniorBonusPer * 2 : seniorBonusPer) : 0;
+    const totalDeduction = baseDeduction + seniorBonus;
+
+    // Step 4: Taxable ordinary income
+    const taxableOrdinaryIncome = Math.max(0, grossOrdinaryIncome - totalDeduction);
+
+    // Step 5: Federal tax on ordinary income
+    const federalOrdinaryTax = calculateFederalTax(taxableOrdinaryIncome, filingStatus);
+
+    // Marginal bracket
+    const brackets = filingStatus === 'married'
+      ? [{ max: 23200, rate: 10 }, { max: 94300, rate: 12 }, { max: 201050, rate: 22 }, { max: 383900, rate: 24 }, { max: 487450, rate: 32 }, { max: 731200, rate: 35 }, { max: Infinity, rate: 37 }]
+      : [{ max: 11600, rate: 10 }, { max: 47150, rate: 12 }, { max: 100525, rate: 22 }, { max: 191950, rate: 24 }, { max: 243725, rate: 32 }, { max: 609350, rate: 35 }, { max: Infinity, rate: 37 }];
+    const marginalBracket = taxableOrdinaryIncome > 0
+      ? (brackets.find(b => taxableOrdinaryIncome <= b.max)?.rate || 37)
+      : 0;
+
+    // Preferential income: NQ capital gains + NQ qualified dividends
+    const totalPreferentialIncome = nqTaxableGain + nqQualifiedDividends;
+
+    // Use calculateAnnualTax for the final numbers (ensures consistency)
+    const taxResult = calculateAnnualTax({
+      ssIncome,
+      pensionIncome: pensionForTax,
+      traditionalWithdrawal,
+      rothWithdrawal,
+      nqTaxableGain,
+      nqQualifiedDividends,
+      nqOrdinaryDividends,
+      otherIncome
+    }, { filingStatus, stateRate }, isSenior);
+
+    return {
+      ssIncome, pensionIncome, vaIncome, employmentIncome, otherIncome,
+      traditionalWithdrawal, rothWithdrawal,
+      traditionalPercent: tradPctVal,
+      rothPercent: rothPctVal,
+      nqPercent: nqPctVal,
+      nqWithdrawal, nqCostBasis, nqTaxableGain, nqQualifiedDividends, nqOrdinaryDividends,
+      totalPreferentialIncome,
+      taxableSS, ssTier,
+      grossOrdinaryIncome, baseDeduction, seniorBonus, totalDeduction, isSenior,
+      taxableOrdinaryIncome, federalOrdinaryTax: Math.round(federalOrdinaryTax),
+      marginalBracket,
+      qdivTax: taxResult.qdivTax,
+      totalFederalTax: taxResult.federalTax,
+      stateTax: taxResult.stateTax,
+      totalTax: taxResult.totalTax,
+      effectiveRate: taxResult.effectiveRate,
+      filingStatus, stateRate
+    };
+  }, [selectedTaxRow, inputs]);
+
+  return (
   <div className="mt-6 animate-in fade-in duration-300">
     <div className="flex justify-between items-start mb-4 hidden print:flex">
       <h2 className="text-2xl font-bold text-slate-900">Phase 2: Distribution Allocation</h2>
@@ -2330,7 +2686,7 @@ const AllocationTab = ({
                 <th className="p-2">Start Balance</th>
                 <th className="p-2 text-emerald-600">Growth</th>
                 <th className="p-2 text-purple-600">Contribution</th>
-                <th className="p-2 text-blue-600">Income (SS/Pens)</th>
+                <th className="p-2 text-blue-600">Income</th>
                 <th className="p-2 text-orange-600">Withdrawal</th>
                 {inputs.taxEnabled && <th className="p-2 text-red-600">Est. Tax</th>}
                 <th className="p-2 text-slate-800">{inputs.taxEnabled ? 'Gross Spend' : 'Total Spend'}</th>
@@ -2346,10 +2702,17 @@ const AllocationTab = ({
                   <td className="p-2 text-slate-500">${row.startBalance.toLocaleString()}</td>
                   <td className="p-2 text-emerald-600">+${row.growth.toLocaleString()}</td>
                   <td className="p-2 text-purple-600">{row.contribution > 0 ? `+$${row.contribution.toLocaleString()}` : '-'}</td>
-                  <td className="p-2 text-blue-600">+${row.ssIncome.toLocaleString()}</td>
+                  <td className="p-2 text-blue-600" title={`SS: $${(row.ssIncomeDetail || 0).toLocaleString()} | Pension: $${(row.pensionIncomeDetail || 0).toLocaleString()}${row.employmentIncomeDetail ? ` | Employment: $${row.employmentIncomeDetail.toLocaleString()}` : ''}${row.otherIncomeDetail ? ` | Other: $${row.otherIncomeDetail.toLocaleString()}` : ''}`}>
+                    +${row.ssIncome.toLocaleString()}
+                    {row.employmentIncomeDetail > 0 && <span className="text-teal-600 text-[10px] ml-0.5" title="Includes employment income">*</span>}
+                  </td>
                   <td className="p-2 text-orange-600">-${row.distribution.toLocaleString()}</td>
                   {inputs.taxEnabled && (
-                    <td className="p-2 text-red-600" title={`Federal: $${(row.federalTax || 0).toLocaleString()} | State: $${(row.stateTax || 0).toLocaleString()} | Eff: ${row.effectiveRate || '0'}%`}>
+                    <td
+                      className="p-2 text-red-600 cursor-pointer hover:bg-red-50 hover:underline transition-colors"
+                      title={`Federal: $${(row.federalTax || 0).toLocaleString()} | State: $${(row.stateTax || 0).toLocaleString()} | Eff: ${row.effectiveRate || '0'}% — Click for detail`}
+                      onClick={() => setSelectedTaxRow(row)}
+                    >
                       -${(row.totalTax || 0).toLocaleString()}
                     </td>
                   )}
@@ -2364,14 +2727,334 @@ const AllocationTab = ({
           </table>
           {inputs.taxEnabled && (
             <div className="mt-3 p-2 bg-amber-50 text-xs text-amber-800 rounded border border-amber-100">
-              <strong>Tax Note:</strong> Estimated taxes based on {inputs.filingStatus === 'married' ? 'Married Filing Jointly' : 'Single'} status, {inputs.traditionalPercent}% pre-tax accounts, {inputs.stateRate}% state rate. Hover over tax amounts for breakdown. Actual taxes may vary.
+              <strong>Tax Note:</strong> Estimated taxes based on {inputs.filingStatus === 'married' ? 'Married Filing Jointly' : 'Single'} status, {inputs.traditionalPercent}% Trad / {inputs.rothPercent}% Roth / {inputs.nqPercent}% NQ, {inputs.stateRate}% state rate.{Object.keys(inputs.withdrawalOverrides || {}).length > 0 ? ` ${Object.keys(inputs.withdrawalOverrides).length} custom year override(s) applied.` : ''} Hover over tax amounts for breakdown. Click for detail.
             </div>
           )}
         </div>
       )}
     </Card>
+
+    {/* Tax Detail Modal */}
+    {selectedTaxRow && taxDetail && (
+      <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4" onClick={() => setSelectedTaxRow(null)}>
+        <div className="bg-white rounded-xl shadow-2xl max-w-lg w-full max-h-[85vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
+          {/* Header */}
+          <div className="p-4 border-b border-slate-200 flex justify-between items-center sticky top-0 bg-white rounded-t-xl">
+            <h3 className="font-bold text-lg text-slate-800">Tax Estimate Detail — Age {selectedTaxRow.age}</h3>
+            <button onClick={() => setSelectedTaxRow(null)} className="text-slate-400 hover:text-slate-600 text-2xl leading-none">&times;</button>
+          </div>
+
+          <div className="p-4 space-y-4 text-sm">
+            {/* Income Sources */}
+            <div>
+              <h4 className="font-semibold text-slate-700 mb-2">Income Sources</h4>
+              <table className="w-full text-sm">
+                <tbody>
+                  {taxDetail.ssIncome > 0 && (
+                    <tr className="border-b border-slate-100"><td className="py-1 text-slate-600">Social Security</td><td className="py-1 text-right font-medium">${taxDetail.ssIncome.toLocaleString()}</td></tr>
+                  )}
+                  {taxDetail.pensionIncome > 0 && (
+                    <tr className="border-b border-slate-100"><td className="py-1 text-slate-600">Pension</td><td className="py-1 text-right font-medium">${taxDetail.pensionIncome.toLocaleString()}</td></tr>
+                  )}
+                  {taxDetail.vaIncome > 0 && (
+                    <tr className="border-b border-slate-100"><td className="py-1 text-slate-600">VA Income</td><td className="py-1 text-right font-medium">${taxDetail.vaIncome.toLocaleString()}</td></tr>
+                  )}
+                  {taxDetail.employmentIncome > 0 && (
+                    <tr className="border-b border-slate-100"><td className="py-1 text-slate-600">Employment</td><td className="py-1 text-right font-medium">${taxDetail.employmentIncome.toLocaleString()}</td></tr>
+                  )}
+                  {taxDetail.otherIncome > 0 && (
+                    <tr className="border-b border-slate-100"><td className="py-1 text-slate-600">Other Income</td><td className="py-1 text-right font-medium">${taxDetail.otherIncome.toLocaleString()}</td></tr>
+                  )}
+                  <tr className="border-b border-slate-100">
+                    <td className="py-1 text-slate-600">Portfolio Withdrawal</td>
+                    <td className="py-1 text-right font-medium">${selectedTaxRow.distribution.toLocaleString()}</td>
+                  </tr>
+                  <tr className="border-b border-slate-100">
+                    <td className="py-1 pl-4 text-slate-500 text-xs">Traditional ({taxDetail.traditionalPercent}%)</td>
+                    <td className="py-1 text-right text-xs">${Math.round(taxDetail.traditionalWithdrawal).toLocaleString()}</td>
+                  </tr>
+                  <tr className="border-b border-slate-100">
+                    <td className="py-1 pl-4 text-slate-500 text-xs">Roth ({taxDetail.rothPercent}%) — tax-free</td>
+                    <td className="py-1 text-right text-xs text-emerald-600">${Math.round(taxDetail.rothWithdrawal).toLocaleString()}</td>
+                  </tr>
+                  {taxDetail.nqPercent > 0 && (
+                    <>
+                      <tr className="border-b border-slate-100">
+                        <td className="py-1 pl-4 text-slate-500 text-xs">NQ ({taxDetail.nqPercent}%)</td>
+                        <td className="py-1 text-right text-xs">${Math.round(taxDetail.nqWithdrawal).toLocaleString()}</td>
+                      </tr>
+                      <tr className="border-b border-slate-100">
+                        <td className="py-1 pl-8 text-slate-400 text-[11px]">Cost Basis (tax-free)</td>
+                        <td className="py-1 text-right text-[11px] text-emerald-600">${Math.round(taxDetail.nqCostBasis).toLocaleString()}</td>
+                      </tr>
+                      <tr className="border-b border-slate-100">
+                        <td className="py-1 pl-8 text-slate-400 text-[11px]">Capital Gain (LTCG)</td>
+                        <td className="py-1 text-right text-[11px] text-red-500">${Math.round(taxDetail.nqTaxableGain).toLocaleString()}</td>
+                      </tr>
+                    </>
+                  )}
+                  {(taxDetail.nqQualifiedDividends > 0 || taxDetail.nqOrdinaryDividends > 0) && (
+                    <>
+                      <tr className="border-b border-slate-100">
+                        <td className="py-1 text-slate-600">NQ Dividends (annual)</td>
+                        <td className="py-1 text-right font-medium">${(taxDetail.nqQualifiedDividends + taxDetail.nqOrdinaryDividends).toLocaleString()}</td>
+                      </tr>
+                      <tr className="border-b border-slate-100">
+                        <td className="py-1 pl-8 text-slate-400 text-[11px]">Qualified (LTCG rates)</td>
+                        <td className="py-1 text-right text-[11px]">${taxDetail.nqQualifiedDividends.toLocaleString()}</td>
+                      </tr>
+                      <tr className="border-b border-slate-100">
+                        <td className="py-1 pl-8 text-slate-400 text-[11px]">Ordinary (marginal rate)</td>
+                        <td className="py-1 text-right text-[11px]">${taxDetail.nqOrdinaryDividends.toLocaleString()}</td>
+                      </tr>
+                    </>
+                  )}
+                </tbody>
+              </table>
+            </div>
+
+            {/* Tax Calculation Steps */}
+            <div>
+              <h4 className="font-semibold text-slate-700 mb-2">Tax Calculation</h4>
+              <table className="w-full text-sm">
+                <tbody>
+                  <tr className="border-b border-slate-100">
+                    <td className="py-1 text-slate-600">1. Taxable Social Security</td>
+                    <td className="py-1 text-right font-medium">${Math.round(taxDetail.taxableSS).toLocaleString()}</td>
+                    <td className="py-1 pl-2 text-xs text-slate-400 w-20">{taxDetail.ssTier} tier</td>
+                  </tr>
+                  <tr className="border-b border-slate-100">
+                    <td className="py-1 text-slate-600">2. Gross Ordinary Income</td>
+                    <td className="py-1 text-right font-medium">${Math.round(taxDetail.grossOrdinaryIncome).toLocaleString()}</td>
+                    <td className="py-1 pl-2 text-xs text-slate-400"></td>
+                  </tr>
+                  <tr className="border-b border-slate-100">
+                    <td className="py-1 text-slate-600">3. Standard Deduction</td>
+                    <td className="py-1 text-right font-medium text-emerald-600">-${taxDetail.totalDeduction.toLocaleString()}</td>
+                    <td className="py-1 pl-2 text-xs text-slate-400">{taxDetail.isSenior ? `+$${taxDetail.seniorBonus.toLocaleString()} senior` : ''}</td>
+                  </tr>
+                  <tr className="border-b border-slate-100">
+                    <td className="py-1 text-slate-600">4. Taxable Ordinary Income</td>
+                    <td className="py-1 text-right font-medium">${Math.round(taxDetail.taxableOrdinaryIncome).toLocaleString()}</td>
+                    <td className="py-1 pl-2 text-xs text-slate-400"></td>
+                  </tr>
+                  <tr className="border-b border-slate-100">
+                    <td className="py-1 text-slate-600">5. Federal Tax (ordinary)</td>
+                    <td className="py-1 text-right font-medium text-red-600">${taxDetail.federalOrdinaryTax.toLocaleString()}</td>
+                    <td className="py-1 pl-2 text-xs text-slate-400">{taxDetail.marginalBracket}% bracket</td>
+                  </tr>
+                  <tr className="border-b border-slate-100">
+                    <td className="py-1 text-slate-600">6. Preferential Tax (LTCG/QDiv)</td>
+                    <td className="py-1 text-right font-medium text-red-600">${taxDetail.qdivTax.toLocaleString()}</td>
+                    <td className="py-1 pl-2 text-xs text-slate-400">pref. rate</td>
+                  </tr>
+                  <tr className="border-b border-slate-100">
+                    <td className="py-1 text-slate-600">7. Total Federal Tax</td>
+                    <td className="py-1 text-right font-medium text-red-600">${taxDetail.totalFederalTax.toLocaleString()}</td>
+                    <td className="py-1 pl-2 text-xs text-slate-400"></td>
+                  </tr>
+                  <tr className="border-b border-slate-100">
+                    <td className="py-1 text-slate-600">8. State Tax ({taxDetail.stateRate}%)</td>
+                    <td className="py-1 text-right font-medium text-red-600">${taxDetail.stateTax.toLocaleString()}</td>
+                    <td className="py-1 pl-2 text-xs text-slate-400"></td>
+                  </tr>
+                  <tr className="border-b border-slate-200 bg-slate-50">
+                    <td className="py-1.5 font-bold text-slate-800">9. Total Estimated Tax</td>
+                    <td className="py-1.5 text-right font-bold text-red-700">${taxDetail.totalTax.toLocaleString()}</td>
+                    <td className="py-1.5 pl-2 text-xs text-slate-400"></td>
+                  </tr>
+                  <tr className="bg-slate-50">
+                    <td className="py-1.5 font-bold text-slate-800">10. Effective Rate</td>
+                    <td className="py-1.5 text-right font-bold text-red-700">{taxDetail.effectiveRate}%</td>
+                    <td className="py-1.5 pl-2 text-xs text-slate-400"></td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+
+            {/* Assumptions footnote */}
+            <div className="p-2 bg-slate-50 text-xs text-slate-500 rounded border border-slate-100">
+              <strong>Assumptions:</strong> {taxDetail.filingStatus === 'married' ? 'Married Filing Jointly' : 'Single'} filing status, {taxDetail.traditionalPercent}% Traditional / {taxDetail.rothPercent}% Roth / {taxDetail.nqPercent}% NQ, {taxDetail.stateRate}% state tax rate{taxDetail.isSenior ? ', 65+ senior deduction applied' : ''}.
+            </div>
+          </div>
+        </div>
+      </div>
+    )}
+
   </div>
-);
+  );
+};
+
+const WithdrawalOverrideModal = ({ projectionData, inputs, onWithdrawalOverrideChange, onClose }) => {
+  const [rangeFrom, setRangeFrom] = useState(projectionData[0]?.age || 65);
+  const [rangeTo, setRangeTo] = useState(projectionData[Math.min(7, projectionData.length - 1)]?.age || 72);
+  const [rangeTrad, setRangeTrad] = useState(inputs.traditionalPercent);
+  const [rangeRoth, setRangeRoth] = useState(inputs.rothPercent);
+  const [rangeNq, setRangeNq] = useState(inputs.nqPercent);
+
+  const handleOverrideEdit = (age, field, newValue) => {
+    const clamped = Math.max(0, Math.min(100, Math.round(newValue)));
+    const override = inputs.withdrawalOverrides?.[age] || {
+      traditionalPercent: inputs.traditionalPercent,
+      rothPercent: inputs.rothPercent,
+      nqPercent: inputs.nqPercent
+    };
+    const fields = ['traditionalPercent', 'rothPercent', 'nqPercent'];
+    const otherFields = fields.filter(f => f !== field);
+    const remainder = 100 - clamped;
+    const otherSum = override[otherFields[0]] + override[otherFields[1]];
+    let val1, val2;
+    if (otherSum === 0) {
+      val1 = Math.round(remainder / 2);
+      val2 = remainder - val1;
+    } else {
+      val1 = Math.round((override[otherFields[0]] / otherSum) * remainder);
+      val2 = remainder - val1;
+    }
+    onWithdrawalOverrideChange(age, { ...override, [field]: clamped, [otherFields[0]]: val1, [otherFields[1]]: val2 });
+  };
+
+  const applyRange = () => {
+    if (rangeTrad + rangeRoth + rangeNq !== 100) return;
+    for (let age = rangeFrom; age <= rangeTo; age++) {
+      const row = projectionData.find(r => r.age === age);
+      if (row) {
+        onWithdrawalOverrideChange(age, { traditionalPercent: rangeTrad, rothPercent: rangeRoth, nqPercent: rangeNq });
+      }
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4" onClick={onClose}>
+      <div className="bg-white rounded-xl shadow-2xl max-w-4xl w-full max-h-[85vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
+        {/* Header */}
+        <div className="p-4 border-b border-slate-200 flex justify-between items-center sticky top-0 bg-white rounded-t-xl z-10">
+          <h3 className="font-bold text-lg text-slate-800">Withdrawal Strategy by Year</h3>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => onWithdrawalOverrideChange('__reset_all__')}
+              className="text-xs px-2 py-1 bg-red-50 text-red-600 rounded border border-red-200 hover:bg-red-100 transition-colors"
+            >
+              Reset All
+            </button>
+            <button onClick={onClose} className="text-slate-400 hover:text-slate-600 text-2xl leading-none">&times;</button>
+          </div>
+        </div>
+
+        {/* Range Applier */}
+        <div className="p-3 bg-slate-50 border-b border-slate-200">
+          <div className="flex flex-wrap items-end gap-2 text-xs">
+            <div>
+              <label className="text-[10px] text-slate-500 uppercase block">From Age</label>
+              <input type="number" value={rangeFrom} onChange={e => setRangeFrom(parseInt(e.target.value) || 0)} className="w-14 px-1.5 py-1 border rounded text-xs" />
+            </div>
+            <div>
+              <label className="text-[10px] text-slate-500 uppercase block">To Age</label>
+              <input type="number" value={rangeTo} onChange={e => setRangeTo(parseInt(e.target.value) || 0)} className="w-14 px-1.5 py-1 border rounded text-xs" />
+            </div>
+            <div>
+              <label className="text-[10px] text-slate-500 uppercase block">Trad %</label>
+              <input type="number" value={rangeTrad} onChange={e => setRangeTrad(parseInt(e.target.value) || 0)} min="0" max="100" className="w-14 px-1.5 py-1 border rounded text-xs" />
+            </div>
+            <div>
+              <label className="text-[10px] text-slate-500 uppercase block">Roth %</label>
+              <input type="number" value={rangeRoth} onChange={e => setRangeRoth(parseInt(e.target.value) || 0)} min="0" max="100" className="w-14 px-1.5 py-1 border rounded text-xs" />
+            </div>
+            <div>
+              <label className="text-[10px] text-slate-500 uppercase block">NQ %</label>
+              <input type="number" value={rangeNq} onChange={e => setRangeNq(parseInt(e.target.value) || 0)} min="0" max="100" className="w-14 px-1.5 py-1 border rounded text-xs" />
+            </div>
+            <button
+              onClick={applyRange}
+              disabled={rangeTrad + rangeRoth + rangeNq !== 100}
+              className={`px-3 py-1 rounded text-xs font-medium transition-colors ${
+                rangeTrad + rangeRoth + rangeNq === 100
+                  ? 'bg-emerald-600 text-white hover:bg-emerald-700'
+                  : 'bg-slate-200 text-slate-400 cursor-not-allowed'
+              }`}
+            >
+              Apply Range
+            </button>
+            <span className={`text-[10px] font-medium ${rangeTrad + rangeRoth + rangeNq === 100 ? 'text-emerald-600' : 'text-red-500'}`}>
+              Sum: {rangeTrad + rangeRoth + rangeNq}%
+            </span>
+          </div>
+        </div>
+
+        {/* Table */}
+        <div className="p-4 overflow-x-auto">
+          <table className="w-full text-xs text-right border-collapse">
+            <thead>
+              <tr className="bg-slate-100 text-slate-600 font-bold border-b border-slate-200">
+                <th className="p-2 text-left">Age</th>
+                <th className="p-2">Est. Income</th>
+                <th className="p-2">Eff. Rate</th>
+                <th className="p-2">Est. Tax</th>
+                <th className="p-2">Trad %</th>
+                <th className="p-2">Roth %</th>
+                <th className="p-2">NQ %</th>
+                <th className="p-2 w-10"></th>
+              </tr>
+            </thead>
+            <tbody>
+              {projectionData.map(row => {
+                const override = inputs.withdrawalOverrides?.[row.age];
+                const tradPct = override?.traditionalPercent ?? inputs.traditionalPercent;
+                const rothPct = override?.rothPercent ?? inputs.rothPercent;
+                const nqPct = override?.nqPercent ?? inputs.nqPercent;
+                const isOverridden = !!override;
+
+                return (
+                  <tr key={row.age} className={`border-b border-slate-50 transition-colors ${isOverridden ? 'bg-amber-50' : 'hover:bg-slate-50'}`}>
+                    <td className="p-2 text-left font-bold text-slate-700">{row.age}</td>
+                    <td className="p-2 text-blue-600">${row.ssIncome.toLocaleString()}</td>
+                    <td className="p-2 text-slate-600">{row.effectiveRate || '0.0'}%</td>
+                    <td className="p-2 text-red-600">${(row.totalTax || 0).toLocaleString()}</td>
+                    <td className="p-2">
+                      <input
+                        type="number" min="0" max="100" step="5"
+                        value={tradPct}
+                        onChange={e => handleOverrideEdit(row.age, 'traditionalPercent', parseFloat(e.target.value) || 0)}
+                        className="w-14 px-1 py-0.5 border rounded text-xs text-right"
+                      />
+                    </td>
+                    <td className="p-2">
+                      <input
+                        type="number" min="0" max="100" step="5"
+                        value={rothPct}
+                        onChange={e => handleOverrideEdit(row.age, 'rothPercent', parseFloat(e.target.value) || 0)}
+                        className="w-14 px-1 py-0.5 border rounded text-xs text-right"
+                      />
+                    </td>
+                    <td className="p-2">
+                      <input
+                        type="number" min="0" max="100" step="5"
+                        value={nqPct}
+                        onChange={e => handleOverrideEdit(row.age, 'nqPercent', parseFloat(e.target.value) || 0)}
+                        className="w-14 px-1 py-0.5 border rounded text-xs text-right"
+                      />
+                    </td>
+                    <td className="p-2">
+                      {isOverridden && (
+                        <button
+                          onClick={() => onWithdrawalOverrideChange(row.age, null)}
+                          className="text-slate-400 hover:text-red-500 transition-colors"
+                          title="Reset to default"
+                        >
+                          <RefreshCcw className="w-3 h-3" />
+                        </button>
+                      )}
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  );
+};
 
 const MonteCarloTab = ({ monteCarloData, rebalanceFreq, vaEnabled, vaInputs, onToggleVa, onVaInputChange, vaMonteCarloData, inputs, basePlan, vaAdjustedBasePlan }) => {
   // Calculate VA allocation amount for display

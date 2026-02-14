@@ -192,18 +192,20 @@ export const calculateAnnualTax = (incomeBreakdown, taxSettings, isSenior = true
     pensionIncome = 0,
     traditionalWithdrawal = 0,
     rothWithdrawal = 0,
-    qualifiedDividends = 0,
+    nqTaxableGain = 0,           // LTCG portion of NQ withdrawal
+    nqQualifiedDividends = 0,    // Qualified divs from NQ holdings (LTCG rates)
+    nqOrdinaryDividends = 0,     // Non-qualified divs (ordinary rates)
     otherIncome = 0
   } = incomeBreakdown;
 
   const { filingStatus = 'married', stateRate = 0 } = taxSettings;
 
-  // Calculate taxable SS
-  const ordinaryIncomeBeforeSS = pensionIncome + traditionalWithdrawal + otherIncome;
+  // Calculate taxable SS (NQ ordinary dividends count as ordinary income)
+  const ordinaryIncomeBeforeSS = pensionIncome + traditionalWithdrawal + nqOrdinaryDividends + otherIncome;
   const taxableSS = calculateTaxableSS(ssIncome, ordinaryIncomeBeforeSS, filingStatus);
 
-  // Total ordinary taxable income
-  const grossOrdinaryIncome = taxableSS + pensionIncome + traditionalWithdrawal + otherIncome;
+  // Total ordinary taxable income (includes NQ ordinary dividends)
+  const grossOrdinaryIncome = taxableSS + pensionIncome + traditionalWithdrawal + nqOrdinaryDividends + otherIncome;
 
   // Standard deduction (with senior bonus)
   let deduction = STANDARD_DEDUCTION[filingStatus] || STANDARD_DEDUCTION.married;
@@ -219,21 +221,24 @@ export const calculateAnnualTax = (incomeBreakdown, taxSettings, isSenior = true
   // Federal tax on ordinary income
   const federalOrdinaryTax = calculateFederalTax(taxableOrdinaryIncome, filingStatus);
 
-  // Tax on qualified dividends (at preferential rates)
-  const qdivTax = calculateQualifiedDividendTax(qualifiedDividends, taxableOrdinaryIncome, filingStatus);
+  // Preferential income: NQ capital gains + NQ qualified dividends (all taxed at LTCG rates)
+  const totalPreferentialIncome = nqTaxableGain + nqQualifiedDividends;
+
+  // Tax on preferential income (at LTCG/qualified dividend rates)
+  const qdivTax = calculateQualifiedDividendTax(totalPreferentialIncome, taxableOrdinaryIncome, filingStatus);
 
   // Total federal tax
   const federalTax = federalOrdinaryTax + qdivTax;
 
-  // State tax (simplified: flat rate on all taxable income including qualified)
-  const stateTaxableIncome = taxableOrdinaryIncome + qualifiedDividends;
+  // State tax (simplified: flat rate on all taxable income including preferential)
+  const stateTaxableIncome = taxableOrdinaryIncome + totalPreferentialIncome;
   const stateTax = stateTaxableIncome * (stateRate / 100);
 
   // Total tax
   const totalTax = federalTax + stateTax;
 
   // Effective rate (based on gross income excluding Roth)
-  const grossTaxableIncome = ssIncome + pensionIncome + traditionalWithdrawal + qualifiedDividends + otherIncome;
+  const grossTaxableIncome = ssIncome + pensionIncome + traditionalWithdrawal + nqTaxableGain + nqQualifiedDividends + nqOrdinaryDividends + otherIncome;
   const effectiveRate = grossTaxableIncome > 0 ? (totalTax / grossTaxableIncome) * 100 : 0;
 
   return {
@@ -244,6 +249,71 @@ export const calculateAnnualTax = (incomeBreakdown, taxSettings, isSenior = true
     totalTax: Math.round(totalTax),
     effectiveRate: effectiveRate.toFixed(1),
     deduction
+  };
+};
+
+// ============================================
+// TAX-IMPLIED SPENDING CALCULATOR
+// ============================================
+
+// 2024 Social Security wage base
+const SS_WAGE_BASE = 168600;
+const SS_TAX_RATE = 0.062;
+const MEDICARE_TAX_RATE = 0.0145;
+const MEDICARE_ADDITIONAL_RATE = 0.009;
+const MEDICARE_THRESHOLD_MARRIED = 250000;
+const MEDICARE_THRESHOLD_SINGLE = 200000;
+
+/**
+ * Calculate implied monthly spending from income, taxes, and savings
+ * Used to validate client-reported spending against income/tax reality
+ * @param {object} params - Calculation parameters
+ * @returns {object} Breakdown of implied spending and tax components
+ */
+export const calculateImpliedSpending = ({
+  annualIncome = 0,
+  partnerAnnualIncome = 0,
+  annualSavings = 0,
+  filingStatus = 'married',
+  stateRate = 0,
+  isMarried = false
+}) => {
+  const totalIncome = annualIncome + partnerAnnualIncome;
+  if (totalIncome <= 0) {
+    return { impliedMonthly: 0, federalTax: 0, stateTax: 0, ssTax: 0, medicareTax: 0, totalTax: 0 };
+  }
+
+  // Social Security tax (employee portion) - each earner taxed separately up to wage base
+  const clientSSTax = SS_TAX_RATE * Math.min(annualIncome, SS_WAGE_BASE);
+  const partnerSSTax = SS_TAX_RATE * Math.min(partnerAnnualIncome, SS_WAGE_BASE);
+  const ssTax = clientSSTax + partnerSSTax;
+
+  // Medicare tax - 1.45% on all income + 0.9% additional on income above threshold
+  const medicareThreshold = isMarried ? MEDICARE_THRESHOLD_MARRIED : MEDICARE_THRESHOLD_SINGLE;
+  const baseMedicare = MEDICARE_TAX_RATE * totalIncome;
+  const additionalMedicare = MEDICARE_ADDITIONAL_RATE * Math.max(0, totalIncome - medicareThreshold);
+  const medicareTax = baseMedicare + additionalMedicare;
+
+  // Standard deduction
+  const standardDeduction = STANDARD_DEDUCTION[filingStatus] || STANDARD_DEDUCTION.married;
+  const taxableIncome = Math.max(0, totalIncome - standardDeduction);
+
+  // Federal income tax (reuse existing bracket calculator)
+  const federalTax = calculateFederalTax(taxableIncome, filingStatus);
+
+  // State income tax (simplified flat rate)
+  const stateTax = taxableIncome * (stateRate / 100);
+
+  const totalTax = ssTax + medicareTax + federalTax + stateTax;
+  const impliedMonthly = (totalIncome - totalTax - annualSavings) / 12;
+
+  return {
+    impliedMonthly: Math.round(impliedMonthly),
+    federalTax: Math.round(federalTax),
+    stateTax: Math.round(stateTax),
+    ssTax: Math.round(ssTax),
+    medicareTax: Math.round(medicareTax),
+    totalTax: Math.round(totalTax)
   };
 };
 
@@ -260,8 +330,15 @@ export const calculateAccumulation = (clientInfo, inflationRate = 0, additionalI
   const data = [];
   let balance = currentPortfolio;
 
+  // Staggered retirement: calculate partner's income share for savings reduction
+  const annualIncome = clientInfo.annualIncome || 0;
+  const partnerAnnualIncome = clientInfo.partnerAnnualIncome || 0;
+  const totalIncome = annualIncome + partnerAnnualIncome;
+  const partnerRetirementAge = clientInfo.partnerRetirementAge || retirementAge;
+
   for (let i = 0; i <= years; i++) {
     const currentSimAge = currentAge + i;
+    const currentPartnerAge = (clientInfo.partnerAge || currentAge) + i;
 
     // Add one-time events that occur at this age BEFORE retirement
     // Events AT retirement age are handled in the distribution phase
@@ -277,7 +354,15 @@ export const calculateAccumulation = (clientInfo, inflationRate = 0, additionalI
 
     data.push({ age: currentSimAge, balance: Math.round(balance) });
     if (i < years) {
-      const inflationAdjustedSavings = annualSavings * Math.pow(1 + (inflationRate / 100), i);
+      let effectiveSavings = annualSavings;
+
+      // Staggered retirement: reduce savings when partner retires before client
+      if (totalIncome > 0 && partnerAnnualIncome > 0 && currentPartnerAge >= partnerRetirementAge && currentSimAge < retirementAge) {
+        const partnerIncomeShare = partnerAnnualIncome / totalIncome;
+        effectiveSavings = annualSavings * (1 - partnerIncomeShare);
+      }
+
+      const inflationAdjustedSavings = effectiveSavings * Math.pow(1 + (inflationRate / 100), i);
       balance += inflationAdjustedSavings;
       balance *= (1 + (expectedReturn / 100));
     }
@@ -312,7 +397,8 @@ export const calculateBasePlan = (inputs, assumptions, clientInfo, vaEnabled = f
     totalPortfolio, monthlySpending, ssPIA, partnerSSPIA,
     ssStartAge, partnerSSStartAge, monthlyPension, pensionStartAge, pensionCOLA,
     partnerMonthlyPension, partnerPensionStartAge, partnerPensionCOLA,
-    inflationRate, personalInflationRate, additionalIncomes
+    inflationRate, personalInflationRate, additionalIncomes,
+    cashFlowAdjustments
   } = inputs;
 
   // Calculate VA allocation and adjust portfolio for bucket calculations
@@ -394,8 +480,19 @@ export const calculateBasePlan = (inputs, assumptions, clientInfo, vaEnabled = f
       vaIncome = vaAnnualIncome;
     }
 
+    // Staggered retirement: partner's employment income during gap years
+    let employmentIncome = 0;
+    const partnerAnnualIncome = clientInfo.partnerAnnualIncome || 0;
+    const partnerRetAge = clientInfo.partnerRetirementAge || clientInfo.retirementAge;
+    if (clientInfo.isMarried && partnerAnnualIncome > 0 && currentPartnerAge < partnerRetAge) {
+      // Partner still working after client retires
+      let partnerEmployment = partnerAnnualIncome;
+      if (inflationRate > 0) partnerEmployment *= incomeInflationFactor;
+      employmentIncome += partnerEmployment;
+    }
+
     // Total income
-    const income = ssIncome + pensionIncome + otherIncome + vaIncome;
+    const income = ssIncome + pensionIncome + otherIncome + vaIncome + employmentIncome;
 
     // One-time contributions (added to portfolio, not income)
     let oneTimeContributions = 0;
@@ -409,14 +506,40 @@ export const calculateBasePlan = (inputs, assumptions, clientInfo, vaEnabled = f
       }
     });
 
-    const gap = Math.max(0, expenses - income);
+    // Apply cash flow adjustments to expenses
+    let adjustedExpenses = expenses;
+    if (cashFlowAdjustments && cashFlowAdjustments.length > 0) {
+      let netAdjustment = 0;
+      cashFlowAdjustments.forEach(adj => {
+        const ownerAge = adj.owner === 'partner' ? currentPartnerAge : simAge;
+        if (adj.type === 'one-time') {
+          if (Math.floor(ownerAge) === adj.startAge) {
+            let amount = adj.amount;
+            if (adj.inflationAdjusted) amount *= expenseInflationFactor;
+            netAdjustment += amount;
+          }
+        } else if (ownerAge >= adj.startAge && ownerAge <= (adj.endAge || 100)) {
+          let amount = adj.amount * 12; // monthly to annual
+          if (adj.inflationAdjusted) amount *= expenseInflationFactor;
+          if (adj.type === 'reduction') {
+            netAdjustment -= amount;
+          } else if (adj.type === 'increase') {
+            netAdjustment += amount;
+          }
+        }
+      });
+      adjustedExpenses = Math.max(0, expenses + netAdjustment);
+    }
+
+    const gap = Math.max(0, adjustedExpenses - income);
     return {
-      expenses,
+      expenses: adjustedExpenses,
       income,
       gap,
       simAge,
       currentPartnerAge,
       oneTimeContributions,
+      employmentIncome,
       // Income breakdown for tax calculations
       ssIncome,
       pensionIncome,
@@ -552,7 +675,7 @@ export const runSimulation = (basePlan, assumptions, inputs, rebalanceFreq, isMo
 
       const {
         expenses, income, gap, simAge, currentPartnerAge, oneTimeContributions,
-        ssIncome, pensionIncome, otherIncome, vaIncome
+        ssIncome, pensionIncome, otherIncome, vaIncome, employmentIncome
       } = getAnnualDetails(i - 1);
 
       balances.b1 *= (1 + rates.b1);
@@ -609,11 +732,75 @@ export const runSimulation = (basePlan, assumptions, inputs, rebalanceFreq, isMo
       // Adjust gap by VA guaranteed income - this is what the buckets need to cover
       const adjustedGap = vaInputs ? Math.max(0, gap - vaGuaranteedIncome) : gap;
 
-      let withdrawalAmount = adjustedGap;
-      const totalWithdrawal = adjustedGap;
+      // --- Tax-inclusive withdrawal calculation ---
+      let totalWithdrawal = adjustedGap;
+      let taxData = { federalTax: 0, stateTax: 0, totalTax: 0, effectiveRate: '0.0', qdivTax: 0, taxableSS: 0, deduction: 0 };
+      let nqTaxDetail = {};
 
-      if (benchmarkBalance >= gap) {
-        benchmarkBalance -= gap;
+      if (inputs.taxEnabled) {
+        // Resolve per-age override or use defaults
+        const override = inputs.withdrawalOverrides?.[simAge];
+        const traditionalPct = (override?.traditionalPercent ?? inputs.traditionalPercent ?? 60) / 100;
+        const rothPct = (override?.rothPercent ?? inputs.rothPercent ?? 25) / 100;
+        const nqPct = (override?.nqPercent ?? inputs.nqPercent ?? 15) / 100;
+
+        // NQ assumptions
+        const nqDividendYield = (inputs.nqDividendYield ?? 2.0) / 100;
+        const nqQualifiedDividendPct = (inputs.nqQualifiedDividendPercent ?? 80) / 100;
+        const nqCapitalGainRate = (inputs.nqCapitalGainRate ?? 50) / 100;
+
+        // Estimate NQ balance for dividend calculation
+        const nqBalance = startTotal * nqPct;
+        const nqTotalDividends = nqBalance * nqDividendYield;
+        const nqQualifiedDividends = nqTotalDividends * nqQualifiedDividendPct;
+        const nqOrdinaryDividends = nqTotalDividends - nqQualifiedDividends;
+
+        const isSenior = simAge >= 65;
+        const filingStatus = inputs.filingStatus || 'married';
+        const stateRate = inputs.stateRate || 0;
+
+        // Iterate to convergence (tax depends on withdrawal, withdrawal depends on tax)
+        let withdrawal = adjustedGap;
+        for (let iter = 0; iter < 5; iter++) {
+          const nqWithdrawal = withdrawal * nqPct;
+          const nqTaxableGain = nqWithdrawal * nqCapitalGainRate;
+
+          taxData = calculateAnnualTax({
+            ssIncome,
+            pensionIncome: pensionIncome + (vaIncome || 0),
+            traditionalWithdrawal: withdrawal * traditionalPct,
+            rothWithdrawal: withdrawal * rothPct,
+            nqTaxableGain,
+            nqQualifiedDividends,
+            nqOrdinaryDividends,
+            otherIncome
+          }, { filingStatus, stateRate }, isSenior);
+
+          const newWithdrawal = adjustedGap + taxData.totalTax;
+          if (Math.abs(newWithdrawal - withdrawal) < 1) break;
+          withdrawal = newWithdrawal;
+        }
+        totalWithdrawal = withdrawal;
+
+        // Store NQ detail for history
+        const finalNqWithdrawal = withdrawal * nqPct;
+        nqTaxDetail = {
+          nqWithdrawal: Math.round(finalNqWithdrawal),
+          nqCostBasis: Math.round(finalNqWithdrawal * (1 - nqCapitalGainRate)),
+          nqTaxableGain: Math.round(finalNqWithdrawal * nqCapitalGainRate),
+          nqQualifiedDividends: Math.round(nqQualifiedDividends),
+          nqOrdinaryDividends: Math.round(nqOrdinaryDividends),
+          traditionalPctUsed: Math.round(traditionalPct * 100),
+          rothPctUsed: Math.round(rothPct * 100),
+          nqPctUsed: Math.round(nqPct * 100)
+        };
+      }
+
+      let withdrawalAmount = totalWithdrawal;
+
+      const benchmarkWithdrawal = gap + taxData.totalTax;
+      if (benchmarkBalance >= benchmarkWithdrawal) {
+        benchmarkBalance -= benchmarkWithdrawal;
       } else {
         benchmarkBalance = 0;
       }
@@ -711,37 +898,6 @@ export const runSimulation = (basePlan, assumptions, inputs, rebalanceFreq, isMo
 
       const distRate = startTotal > 0 ? (totalWithdrawal / startTotal) * 100 : 0;
 
-      // Calculate tax if enabled
-      let taxData = { federalTax: 0, stateTax: 0, totalTax: 0, effectiveRate: '0.0' };
-      if (inputs.taxEnabled) {
-        // Split withdrawal between traditional (pre-tax) and Roth (tax-free)
-        const traditionalPercent = (inputs.traditionalPercent || 70) / 100;
-        const traditionalWithdrawal = totalWithdrawal * traditionalPercent;
-        const rothWithdrawal = totalWithdrawal * (1 - traditionalPercent);
-
-        // Estimate qualified dividends from portfolio growth
-        // Use a portion of growth as qualified (applies to brokerage accounts, which are a subset)
-        const qualifiedDividendPercent = (inputs.qualifiedDividendPercent || 30) / 100;
-        const estimatedQualifiedDividends = Math.max(0, annualGrowth * qualifiedDividendPercent * 0.3); // ~30% of growth may be distributed as dividends
-
-        // Build income breakdown for tax calculation
-        const incomeBreakdown = {
-          ssIncome: ssIncome,
-          pensionIncome: pensionIncome + (vaIncome || 0), // VA income taxed as ordinary income like pension
-          traditionalWithdrawal: traditionalWithdrawal,
-          rothWithdrawal: rothWithdrawal,
-          qualifiedDividends: estimatedQualifiedDividends,
-          otherIncome: otherIncome
-        };
-
-        // Calculate tax (assumes retiree is 65+ for senior deduction)
-        const isSenior = simAge >= 65;
-        taxData = calculateAnnualTax(incomeBreakdown, {
-          filingStatus: inputs.filingStatus || 'married',
-          stateRate: inputs.stateRate || 0
-        }, isSenior);
-      }
-
       history.push({
         year: i,
         age: simAge,
@@ -750,7 +906,7 @@ export const runSimulation = (basePlan, assumptions, inputs, rebalanceFreq, isMo
         growth: Math.round(annualGrowth),
         ssIncome: Math.round(income + vaGuaranteedIncome), // Include VA income in reported income
         contribution: Math.round(oneTimeContributions),
-        expenses: Math.round(expenses),
+        expenses: Math.round(expenses + taxData.totalTax),
         distribution: Math.round(totalWithdrawal),
         total: Math.max(0, total),
         benchmark: Math.max(0, benchmarkBalance),
@@ -776,11 +932,14 @@ export const runSimulation = (basePlan, assumptions, inputs, rebalanceFreq, isMo
         stateTax: taxData.stateTax,
         totalTax: taxData.totalTax,
         effectiveRate: taxData.effectiveRate,
+        // NQ tax detail
+        ...nqTaxDetail,
         // Income breakdown (for detailed views)
         ssIncomeDetail: Math.round(ssIncome),
         pensionIncomeDetail: Math.round(pensionIncome),
         otherIncomeDetail: Math.round(otherIncome),
-        vaIncomeDetail: Math.round(vaIncome || 0)
+        vaIncomeDetail: Math.round(vaIncome || 0),
+        employmentIncomeDetail: Math.round(employmentIncome || 0)
       });
     }
 
@@ -913,7 +1072,7 @@ export const runOptimizedSimulation = (allocation, assumptions, inputs, clientIn
   const { monthlySpending, ssPIA, partnerSSPIA, ssStartAge, partnerSSStartAge,
     monthlyPension, pensionStartAge, pensionCOLA,
     partnerMonthlyPension, partnerPensionStartAge, partnerPensionCOLA,
-    inflationRate, personalInflationRate, additionalIncomes } = inputs;
+    inflationRate, personalInflationRate, additionalIncomes, cashFlowAdjustments } = inputs;
 
   const simulationStartAge = Math.max(clientInfo.currentAge, clientInfo.retirementAge);
   const years = 30;
@@ -978,6 +1137,15 @@ export const runOptimizedSimulation = (allocation, assumptions, inputs, clientIn
       }
     });
 
+    // Staggered retirement: partner's employment income during gap years
+    const partnerAnnualIncome = clientInfo.partnerAnnualIncome || 0;
+    const partnerRetAge = clientInfo.partnerRetirementAge || clientInfo.retirementAge;
+    if (clientInfo.isMarried && partnerAnnualIncome > 0 && currentPartnerAge < partnerRetAge) {
+      let partnerEmployment = partnerAnnualIncome;
+      if (inflationRate > 0) partnerEmployment *= incomeInflationFactor;
+      income += partnerEmployment;
+    }
+
     // One-time contributions
     let oneTimeContributions = 0;
     (additionalIncomes || []).forEach(stream => {
@@ -990,8 +1158,33 @@ export const runOptimizedSimulation = (allocation, assumptions, inputs, clientIn
       }
     });
 
-    const gap = Math.max(0, expenses - income);
-    return { expenses, income, gap, simAge, currentPartnerAge, oneTimeContributions };
+    // Apply cash flow adjustments to expenses
+    let adjustedExpenses = expenses;
+    if (cashFlowAdjustments && cashFlowAdjustments.length > 0) {
+      let netAdjustment = 0;
+      cashFlowAdjustments.forEach(adj => {
+        const ownerAge = adj.owner === 'partner' ? currentPartnerAge : simAge;
+        if (adj.type === 'one-time') {
+          if (Math.floor(ownerAge) === adj.startAge) {
+            let amount = adj.amount;
+            if (adj.inflationAdjusted) amount *= expenseInflationFactor;
+            netAdjustment += amount;
+          }
+        } else if (ownerAge >= adj.startAge && ownerAge <= (adj.endAge || 100)) {
+          let amount = adj.amount * 12;
+          if (adj.inflationAdjusted) amount *= expenseInflationFactor;
+          if (adj.type === 'reduction') {
+            netAdjustment -= amount;
+          } else if (adj.type === 'increase') {
+            netAdjustment += amount;
+          }
+        }
+      });
+      adjustedExpenses = Math.max(0, expenses + netAdjustment);
+    }
+
+    const gap = Math.max(0, adjustedExpenses - income);
+    return { expenses: adjustedExpenses, income, gap, simAge, currentPartnerAge, oneTimeContributions };
   };
 
   let failureCount = 0;
