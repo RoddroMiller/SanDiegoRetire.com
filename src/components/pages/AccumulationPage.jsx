@@ -1,9 +1,9 @@
-import React from 'react';
+import React, { useMemo, useState } from 'react';
 import { ResponsiveContainer, AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip } from 'recharts';
-import { User, DollarSign, ArrowRight, FolderOpen, Loader, Trash2, LogOut, Info, Settings, Users } from 'lucide-react';
+import { User, DollarSign, ArrowRight, FolderOpen, Loader, Trash2, LogOut, Info, Settings, Users, AlertTriangle, ChevronDown, ChevronUp, Clock } from 'lucide-react';
 
 import { COLORS, LOGO_URL } from '../../constants';
-import { formatPhoneNumber } from '../../utils';
+import { formatPhoneNumber, calculateImpliedSpending } from '../../utils';
 import { FormattedNumberInput, Disclaimer } from '../ui';
 
 /**
@@ -22,6 +22,9 @@ export const AccumulationPage = ({
   // Client Data
   clientInfo,
   onClientChange,
+  // Inputs (for tax-implied spending)
+  inputs,
+  onInputChange,
   // Chart Data
   accumulationData,
   // Navigation
@@ -32,6 +35,27 @@ export const AccumulationPage = ({
   onPlanFilterChange,
   hasTeams = false
 }) => {
+  const [showTaxBreakdown, setShowTaxBreakdown] = useState(false);
+
+  const impliedSpending = useMemo(() => {
+    if (!clientInfo.annualIncome || clientInfo.annualIncome <= 0) return null;
+    return calculateImpliedSpending({
+      annualIncome: clientInfo.annualIncome,
+      partnerAnnualIncome: clientInfo.partnerAnnualIncome || 0,
+      annualSavings: clientInfo.annualSavings,
+      filingStatus: inputs?.filingStatus || 'married',
+      stateRate: inputs?.stateRate || 0,
+      isMarried: clientInfo.isMarried
+    });
+  }, [clientInfo.annualIncome, clientInfo.partnerAnnualIncome, clientInfo.annualSavings, clientInfo.isMarried, inputs?.filingStatus, inputs?.stateRate]);
+
+  const spendingDifference = impliedSpending
+    ? impliedSpending.impliedMonthly - clientInfo.currentSpending
+    : 0;
+
+  const hasStaggeredRetirement = clientInfo.isMarried &&
+    clientInfo.retirementAge !== clientInfo.partnerRetirementAge;
+
   return (
     <div className="min-h-screen bg-slate-50 font-sans text-slate-800 p-3 sm:p-6 flex flex-col items-center">
       <div className="max-w-4xl w-full bg-white rounded-2xl shadow-xl overflow-hidden">
@@ -300,6 +324,68 @@ export const AccumulationPage = ({
                   />
                 </div>
               </div>
+              {/* Income Fields for Tax-Implied Spending */}
+              <div className="grid grid-cols-2 gap-4">
+                <div className="relative group">
+                  <label className="block text-xs font-bold text-slate-500 uppercase mb-1 flex items-center gap-1">
+                    Annual Income <Info className="w-3 h-3 text-slate-400" />
+                  </label>
+                  <div className="absolute left-0 bottom-full mb-2 hidden group-hover:block w-64 bg-slate-800 text-white text-xs p-2 rounded shadow-lg z-10">
+                    Total gross annual employment income (salary, wages, self-employment).
+                  </div>
+                  <FormattedNumberInput
+                    name="annualIncome"
+                    value={clientInfo.annualIncome}
+                    onChange={onClientChange}
+                    className="p-3 border rounded-lg w-full"
+                  />
+                </div>
+                {clientInfo.isMarried && (
+                  <div className="relative group">
+                    <label className="block text-xs font-bold text-slate-500 uppercase mb-1 flex items-center gap-1">
+                      Partner Income <Info className="w-3 h-3 text-slate-400" />
+                    </label>
+                    <div className="absolute left-0 bottom-full mb-2 hidden group-hover:block w-64 bg-slate-800 text-white text-xs p-2 rounded shadow-lg z-10">
+                      Partner's gross annual employment income.
+                    </div>
+                    <FormattedNumberInput
+                      name="partnerAnnualIncome"
+                      value={clientInfo.partnerAnnualIncome || 0}
+                      onChange={onClientChange}
+                      className="p-3 border rounded-lg w-full"
+                    />
+                  </div>
+                )}
+              </div>
+              {/* Filing Status and State Tax Rate */}
+              {clientInfo.annualIncome > 0 && inputs && onInputChange && (
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Filing Status</label>
+                    <select
+                      name="filingStatus"
+                      value={inputs.filingStatus || 'married'}
+                      onChange={onInputChange}
+                      className="p-3 border rounded-lg w-full text-sm"
+                    >
+                      <option value="married">Married Filing Jointly</option>
+                      <option value="single">Single</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-xs font-bold text-slate-500 uppercase mb-1">State Tax Rate (%)</label>
+                    <input
+                      type="number"
+                      step="0.1"
+                      name="stateRate"
+                      value={inputs.stateRate || 0}
+                      onChange={onInputChange}
+                      className="p-3 border rounded-lg w-full text-sm"
+                    />
+                  </div>
+                </div>
+              )}
+
               <div className="relative group">
                 <label className="block text-xs font-bold text-slate-500 uppercase mb-1 flex items-center gap-1">
                   Projected Annual Portfolio Returns (%) <Info className="w-3 h-3 text-slate-400" />
@@ -317,6 +403,70 @@ export const AccumulationPage = ({
                 />
               </div>
             </div>
+
+            {/* Tax-Implied Spending Comparison */}
+            {impliedSpending && impliedSpending.impliedMonthly > 0 && (
+              <div className={`p-4 rounded-xl border ${Math.abs(spendingDifference) > 500 ? 'bg-amber-50 border-amber-200' : 'bg-emerald-50 border-emerald-200'}`}>
+                <h4 className="text-sm font-bold text-slate-700 mb-3">Tax-Implied Spending Analysis</h4>
+                <div className="grid grid-cols-2 gap-4 mb-3">
+                  <div className="text-center">
+                    <p className="text-xs text-slate-500 uppercase mb-1">Client-Reported</p>
+                    <p className="text-xl font-bold text-slate-800">${clientInfo.currentSpending.toLocaleString()}/mo</p>
+                  </div>
+                  <div className="text-center">
+                    <p className="text-xs text-slate-500 uppercase mb-1">Income-Implied</p>
+                    <p className="text-xl font-bold text-slate-800">${impliedSpending.impliedMonthly.toLocaleString()}/mo</p>
+                  </div>
+                </div>
+                {Math.abs(spendingDifference) > 500 && (
+                  <div className="flex items-start gap-2 p-2 bg-amber-100 rounded-lg mb-3">
+                    <AlertTriangle className="w-4 h-4 text-amber-600 mt-0.5 flex-shrink-0" />
+                    <p className="text-xs text-amber-800">
+                      Difference of <strong>${Math.abs(spendingDifference).toLocaleString()}/mo</strong>.
+                      {spendingDifference > 0
+                        ? ' Client may be underreporting spending or has additional income not captured.'
+                        : ' Client may be overreporting spending, has debt payments, or additional savings not captured.'}
+                    </p>
+                  </div>
+                )}
+                <button
+                  onClick={() => setShowTaxBreakdown(!showTaxBreakdown)}
+                  className="flex items-center gap-1 text-xs text-slate-500 hover:text-slate-700"
+                >
+                  {showTaxBreakdown ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />}
+                  Tax Breakdown
+                </button>
+                {showTaxBreakdown && (
+                  <div className="mt-2 grid grid-cols-2 gap-2 text-xs text-slate-600">
+                    <div className="flex justify-between"><span>Federal Tax:</span><span className="font-medium">${impliedSpending.federalTax.toLocaleString()}</span></div>
+                    <div className="flex justify-between"><span>State Tax:</span><span className="font-medium">${impliedSpending.stateTax.toLocaleString()}</span></div>
+                    <div className="flex justify-between"><span>SS Tax (FICA):</span><span className="font-medium">${impliedSpending.ssTax.toLocaleString()}</span></div>
+                    <div className="flex justify-between"><span>Medicare Tax:</span><span className="font-medium">${impliedSpending.medicareTax.toLocaleString()}</span></div>
+                    <div className="col-span-2 flex justify-between border-t border-slate-200 pt-1 font-bold">
+                      <span>Total Tax:</span><span>${impliedSpending.totalTax.toLocaleString()}</span>
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* Staggered Retirement Indicator */}
+            {hasStaggeredRetirement && (
+              <div className="p-3 bg-blue-50 rounded-xl border border-blue-200">
+                <div className="flex items-start gap-2">
+                  <Clock className="w-4 h-4 text-blue-600 mt-0.5 flex-shrink-0" />
+                  <div>
+                    <h4 className="text-sm font-bold text-blue-800">Staggered Retirement Timeline</h4>
+                    <p className="text-xs text-blue-700 mt-1">
+                      {clientInfo.retirementAge < clientInfo.partnerRetirementAge
+                        ? `You retire at ${clientInfo.retirementAge}, partner continues working until ${clientInfo.partnerRetirementAge} (${clientInfo.partnerRetirementAge - clientInfo.retirementAge} year gap). Partner's employment income will supplement retirement cash flow during gap years.`
+                        : `Partner retires at ${clientInfo.partnerRetirementAge}, you continue working until ${clientInfo.retirementAge} (${clientInfo.retirementAge - clientInfo.partnerRetirementAge} year gap). Your continued employment income will supplement savings.`
+                      }
+                    </p>
+                  </div>
+                </div>
+              </div>
+            )}
           </div>
 
           {/* Right Column - Chart */}

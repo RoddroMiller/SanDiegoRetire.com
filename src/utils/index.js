@@ -10,7 +10,8 @@ export {
   runOptimizedSimulation,
   calculateAnnualTax,
   calculateTaxableSS,
-  calculateFederalTax
+  calculateFederalTax,
+  calculateImpliedSpending
 } from './calculations';
 export {
   calculateSSAnalysis,
