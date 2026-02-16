@@ -72,16 +72,14 @@ export const useScenarios = ({ currentUser, userRole, planFilter = 'mine', teamM
         // Backfill computed fields for plans saved before they existed
         scenarios.forEach(s => {
           if (s.inputs && s.assumptions && s.clientInfo) {
-            // Backfill legacyBalance by running the projection
-            if (s.legacyBalance == null) {
-              try {
-                const basePlan = calculateBasePlan(s.inputs, s.assumptions, s.clientInfo);
-                const projection = runSimulation(basePlan, s.assumptions, s.inputs, s.rebalanceFreq || 3);
-                const legacyYear = Math.min(95 - (s.clientInfo.retirementAge || 65), projection.length) - 1;
-                s.legacyBalance = projection[Math.max(0, legacyYear)]?.total || 0;
-              } catch (e) {
-                // Leave as null if computation fails
-              }
+            // Always compute legacyBalance at age 95 from saved inputs
+            try {
+              const basePlan = calculateBasePlan(s.inputs, s.assumptions, s.clientInfo);
+              const projection = runSimulation(basePlan, s.assumptions, s.inputs, s.rebalanceFreq || 3);
+              const legacyYear = Math.min(95 - (s.clientInfo.retirementAge || 65), projection.length) - 1;
+              s.legacyBalance = projection[Math.max(0, legacyYear)]?.total || 0;
+            } catch (e) {
+              // Leave existing value if computation fails
             }
             // Backfill monthlySpending from currentSpending adjusted for inflation
             if (!s.inputs.monthlySpending && s.clientInfo.currentSpending) {
