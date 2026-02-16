@@ -73,10 +73,9 @@ export const useCommandCenter = ({ currentUser }) => {
     fetchClients();
   }, [currentUser]);
 
-  // Fetch teams the user belongs to from Command Center
-  // Requires direct Firestore auth — may fail if cross-project MFA prevents sign-in
+  // Fetch teams via Cloud Function (bypasses cross-project MFA auth)
   useEffect(() => {
-    if (!commandCenterAdvisorId || !commandCenterDb || !commandCenterUser) {
+    if (!currentUser || !currentUser.email || !commandCenterFunctions) {
       setUserTeams([]);
       setTeamMemberEmails([]);
       return;
@@ -85,41 +84,16 @@ export const useCommandCenter = ({ currentUser }) => {
     const fetchTeams = async () => {
       setIsLoadingTeams(true);
       try {
-        // Query teams where the user is a member
-        const teamsRef = collection(commandCenterDb, 'teams');
-        const teamsQuery = query(teamsRef, where('members', 'array-contains', commandCenterAdvisorId));
-        const teamsSnapshot = await getDocs(teamsQuery);
+        const getAdvisorTeams = httpsCallable(commandCenterFunctions, 'getAdvisorTeams');
+        const result = await getAdvisorTeams({ advisorEmail: currentUser.email });
+        const { success, teams, teamMemberEmails: emails } = result.data;
 
-        const teams = [];
-        const allMemberUids = new Set();
-
-        teamsSnapshot.forEach((doc) => {
-          const teamData = { id: doc.id, ...doc.data() };
-          teams.push(teamData);
-          // Collect all team member UIDs
-          (teamData.members || []).forEach((uid) => allMemberUids.add(uid));
-        });
-
-        setUserTeams(teams);
-
-        // Now fetch email addresses for all team members
-        if (allMemberUids.size > 0) {
-          const advisorProfilesRef = collection(commandCenterDb, 'advisorProfiles');
-          const advisorSnapshot = await getDocs(advisorProfilesRef);
-
-          const memberEmails = [];
-          advisorSnapshot.forEach((doc) => {
-            if (allMemberUids.has(doc.id)) {
-              const data = doc.data();
-              if (data.email) {
-                memberEmails.push(data.email.toLowerCase());
-              }
-            }
-          });
-
-          setTeamMemberEmails(memberEmails);
-          console.log('Found', teams.length, 'teams with', memberEmails.length, 'team member emails');
+        if (success) {
+          setUserTeams(teams || []);
+          setTeamMemberEmails(emails || []);
+          console.log('Found', teams?.length || 0, 'teams with', emails?.length || 0, 'team member emails via Cloud Function');
         } else {
+          setUserTeams([]);
           setTeamMemberEmails([]);
         }
       } catch (error) {
@@ -132,7 +106,7 @@ export const useCommandCenter = ({ currentUser }) => {
     };
 
     fetchTeams();
-  }, [commandCenterAdvisorId]);
+  }, [currentUser]);
 
   /**
    * Save portfolio architect data to the Client Command Center
