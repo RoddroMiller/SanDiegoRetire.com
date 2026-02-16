@@ -103,6 +103,12 @@ export const ArchitectPage = ({
   onAccountSplitChange,
   onWithdrawalOverrideChange
 }) => {
+  // Compute legacy balance at age 95 (or last available year)
+  const legacyAt95 = useMemo(() => {
+    const entry = projectionData.find(p => p.age >= 95) || projectionData[projectionData.length - 1];
+    return entry?.total || 0;
+  }, [projectionData]);
+
   // Command Center client selector state
   const [showClientSelector, setShowClientSelector] = useState(false);
   const [selectedCommandCenterClient, setSelectedCommandCenterClient] = useState(null);
@@ -206,7 +212,7 @@ export const ArchitectPage = ({
         portfolio: inputs.totalPortfolio,
         monthlyNeed: inputs.monthlySpending,
         successRate: monteCarloData?.successRate || 0,
-        legacyBalance: projectionData[projectionData.length - 1]?.total || 0
+        legacyBalance: legacyAt95
       };
     }
 
@@ -259,7 +265,7 @@ export const ArchitectPage = ({
       adjustedSuccessRate = Math.max(5, 20 - (distributionRate - 10) * 5);
     }
 
-    const baseLegacy = projectionData[projectionData.length - 1]?.total || 0;
+    const baseLegacy = legacyAt95;
     const portfolioRatio = adjustedPortfolio / (inputs.totalPortfolio || 1);
     const spendingRatio = adjustedMonthlyNeed / (inputs.monthlySpending || 1);
     const legacyMultiplier = portfolioRatio * (2 - spendingRatio);
@@ -1154,15 +1160,11 @@ export const ArchitectPage = ({
               label="Total Monthly Spend"
               value={adjustedProjections.hasChanges && selectedImprovements.spending
                 ? `$${adjustedProjections.monthlyNeed.toLocaleString()}`
-                : `$${inputs.monthlySpending.toLocaleString()}`}
+                : `$${(inputs.monthlySpending || clientInfo.currentSpending || 0).toLocaleString()}`}
               subtext={(() => {
-                const monthlySpend = adjustedProjections.hasChanges && selectedImprovements.spending
-                  ? adjustedProjections.monthlyNeed
-                  : inputs.monthlySpending;
-                const clientSS = getAdjustedSS(inputs.ssPIA, inputs.ssStartAge);
-                const partnerSS = clientInfo.isMarried ? getAdjustedSS(inputs.partnerSSPIA, inputs.partnerSSStartAge) : 0;
-                const portfolioWithdrawal = Math.max(0, monthlySpend - clientSS - partnerSS);
-                return `$${Math.round(portfolioWithdrawal).toLocaleString()}/mo from portfolio`;
+                // Use year-1 portfolio withdrawal from simulation (accounts for all income sources & timing)
+                const annualWithdrawal = projectionData[0]?.distribution || 0;
+                return `$${Math.round(annualWithdrawal / 12).toLocaleString()}/mo from portfolio`;
               })()}
               icon={AlertCircle}
               colorClass={`bg-yellow-500 text-white ${adjustedProjections.hasChanges && selectedImprovements.spending ? 'ring-2 ring-emerald-400' : ''}`}
@@ -1174,18 +1176,18 @@ export const ArchitectPage = ({
                 : `${(monteCarloData?.successRate || 0).toFixed(1)}%`}
               subtext={adjustedProjections.hasChanges
                 ? <><span className="line-through opacity-60">{(monteCarloData?.successRate || 0).toFixed(1)}%</span> → +{(adjustedProjections.successRate - (monteCarloData?.successRate || 0)).toFixed(1)}%</>
-                : "Positive balance at 30yrs"}
+                : "Positive balance at age 95"}
               icon={Activity}
               colorClass={`${(adjustedProjections.hasChanges ? adjustedProjections.successRate : monteCarloData?.successRate) > 80 ? "bg-emerald-600" : "bg-orange-500"} text-white ${adjustedProjections.hasChanges ? 'ring-2 ring-yellow-300' : ''}`}
             />
             <StatBox
-              label="Legacy Balance (30yr)"
+              label="Legacy Balance (Age 95)"
               value={adjustedProjections.hasChanges
                 ? `$${(adjustedProjections.legacyBalance / 1000000).toFixed(2)}M`
-                : `$${((projectionData[projectionData.length - 1]?.total || 0) / 1000000).toFixed(2)}M`}
+                : `$${((legacyAt95) / 1000000).toFixed(2)}M`}
               subtext={adjustedProjections.hasChanges
-                ? <><span className="line-through opacity-60">${((projectionData[projectionData.length - 1]?.total || 0) / 1000000).toFixed(2)}M</span> → +${((adjustedProjections.legacyBalance - (projectionData[projectionData.length - 1]?.total || 0)) / 1000).toFixed(0)}k</>
-                : "Projected Ending Value"}
+                ? <><span className="line-through opacity-60">${((legacyAt95) / 1000000).toFixed(2)}M</span> → +${((adjustedProjections.legacyBalance - (legacyAt95)) / 1000).toFixed(0)}k</>
+                : "Projected value at age 95"}
               icon={Shield}
               colorClass={`bg-emerald-800 text-white ${adjustedProjections.hasChanges ? 'ring-2 ring-yellow-300' : ''}`}
             />
@@ -1730,9 +1732,9 @@ export const ArchitectPage = ({
 
           {/* Projected Legacy */}
           <div className="border-2 border-slate-200 rounded-xl p-3 text-center">
-            <p className="text-[12px] text-slate-500 uppercase tracking-wide mb-1">Projected Legacy (Year 30)</p>
+            <p className="text-[12px] text-slate-500 uppercase tracking-wide mb-1">Projected Legacy (Age 95)</p>
             <div className="text-3xl font-bold text-indigo-600">
-              {fmtMoney(projectionData[projectionData.length - 1]?.total || 0)}
+              {fmtMoney(legacyAt95)}
             </div>
             <p className="text-[12px] text-slate-500 mt-1">
               Median projected portfolio value
@@ -1740,9 +1742,9 @@ export const ArchitectPage = ({
             <div className="flex justify-center gap-3 mt-1 text-[12px]">
               <span className="text-slate-500">Start: {fmtMoney(inputs.totalPortfolio)}</span>
               <span className="text-slate-400">→</span>
-              <span className={`font-semibold ${(projectionData[projectionData.length - 1]?.total || 0) >= inputs.totalPortfolio ? 'text-emerald-600' : 'text-red-600'}`}>
-                {(projectionData[projectionData.length - 1]?.total || 0) >= inputs.totalPortfolio ? '+' : '-'}
-                {fmtMoney(Math.abs((projectionData[projectionData.length - 1]?.total || 0) - inputs.totalPortfolio))}
+              <span className={`font-semibold ${(legacyAt95) >= inputs.totalPortfolio ? 'text-emerald-600' : 'text-red-600'}`}>
+                {(legacyAt95) >= inputs.totalPortfolio ? '+' : '-'}
+                {fmtMoney(Math.abs((legacyAt95) - inputs.totalPortfolio))}
               </span>
             </div>
           </div>
@@ -1891,7 +1893,7 @@ export const ArchitectPage = ({
 
         {(() => {
           const successRate = monteCarloData?.successRate || 0;
-          const legacyBalance = projectionData[projectionData.length - 1]?.total || 0;
+          const legacyBalance = legacyAt95;
           const annualSpending = inputs.monthlySpending * 12;
           const legacyToSpendingRatio = annualSpending > 0 ? legacyBalance / annualSpending : 0;
           const isLowSuccess = successRate < 80;
@@ -2002,7 +2004,7 @@ export const ArchitectPage = ({
                 <th className="p-2 text-center">B4</th>
                 <th className="p-2 text-center">B5</th>
                 <th className="p-2 text-center">Success Rate</th>
-                <th className="p-2 text-center">Legacy (30yr)</th>
+                <th className="p-2 text-center">Legacy (Age 95)</th>
               </tr>
             </thead>
             <tbody>
@@ -2018,7 +2020,7 @@ export const ArchitectPage = ({
                 <td className="p-2 text-center">{((basePlan.b4Val / inputs.totalPortfolio) * 100).toFixed(0)}%</td>
                 <td className="p-2 text-center">{((Math.max(0, basePlan.b5Val) / inputs.totalPortfolio) * 100).toFixed(0)}%</td>
                 <td className="p-2 text-center font-bold text-emerald-700">{(monteCarloData?.successRate || 0).toFixed(1)}%</td>
-                <td className="p-2 text-center">{fmtLegacy(projectionData[projectionData.length - 1]?.total || 0)}</td>
+                <td className="p-2 text-center">{fmtLegacy(legacyAt95)}</td>
               </tr>
               <tr className="border-b">
                 <td className="p-2 font-medium">4% Model</td>
@@ -2656,7 +2658,7 @@ const AllocationTab = ({
                 <Tooltip
                   formatter={(val, name) => {
                     if (name === 'Distribution Rate') return `${val.toFixed(2)}%`;
-                    return `$${val.toLocaleString()}`;
+                    return `$${Math.round(val).toLocaleString()}`;
                   }}
                   labelFormatter={(l) => `Year ${l}`}
                 />
@@ -3554,7 +3556,8 @@ const SSOptimizationTab = ({ clientInfo, inputs, ssAnalysis, ssPartnerAnalysis, 
 // Improve Outcome Tab - Advisory Only
 const ImproveOutcomeTab = ({ clientInfo, inputs, monteCarloData, projectionData, onInputChange }) => {
   const successRate = monteCarloData?.successRate || 0;
-  const legacyBalance = projectionData[projectionData.length - 1]?.total || 0;
+  const legacyEntry = projectionData.find(p => p.age >= 95) || projectionData[projectionData.length - 1];
+  const legacyBalance = legacyEntry?.total || 0;
   const annualSpending = inputs.monthlySpending * 12;
   const legacyToSpendingRatio = annualSpending > 0 ? legacyBalance / annualSpending : 0;
   const isLowSuccess = successRate < 80;
@@ -3984,7 +3987,7 @@ const OptimizerTab = ({ optimizerData, inputs, basePlan, monteCarloData, project
 
         {/* Projected Legacy */}
         <div className="mb-4 p-3 bg-slate-100 rounded-lg">
-          <p className="text-xs text-slate-500">Projected Legacy (Year 30)</p>
+          <p className="text-xs text-slate-500">Projected Legacy (Age 95)</p>
           <p className="font-bold text-lg text-slate-800">${Math.round(legacy).toLocaleString()}</p>
         </div>
 
