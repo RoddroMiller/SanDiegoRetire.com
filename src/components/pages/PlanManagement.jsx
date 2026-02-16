@@ -775,7 +775,7 @@ Your Financial Advisor`;
                           ${((scenario.inputs?.totalPortfolio || 0) / 1000000).toFixed(2)}M
                         </div>
                         <div className="text-xs text-slate-500">
-                          ${(scenario.inputs?.monthlySpending || 0).toLocaleString()}/mo
+                          ${(scenario.inputs?.monthlySpending || scenario.clientInfo?.currentSpending || 0).toLocaleString()}/mo
                         </div>
                       </td>
                       <td className="p-3">
