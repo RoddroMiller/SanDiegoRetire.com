@@ -709,7 +709,7 @@ Your Financial Advisor`;
                     </th>
                     <th className="p-3 text-left">
                       <button onClick={() => handleSort('legacy')} className="flex items-center gap-1 font-bold text-slate-600 hover:text-slate-800">
-                        Legacy (Yr 30) {sortField === 'legacy' && (sortDirection === 'asc' ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />)}
+                        Legacy {sortField === 'legacy' && (sortDirection === 'asc' ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />)}
                       </button>
                     </th>
                     {userRole === 'master' && (
@@ -782,6 +782,9 @@ Your Financial Advisor`;
                         <div className={`font-bold ${scenario.legacyBalance > 0 ? 'text-blue-700' : 'text-slate-400'}`}>
                           {scenario.legacyBalance != null ? `$${(scenario.legacyBalance / 1000000).toFixed(2)}M` : '\u2014'}
                         </div>
+                        {scenario.legacyBalance != null && (
+                          <div className="text-xs text-slate-500">age 95</div>
+                        )}
                       </td>
                       {userRole === 'master' && (
                         <td className="p-3" onClick={(e) => e.stopPropagation()}>
