@@ -37,7 +37,8 @@ export const useCommandCenter = ({ currentUser }) => {
   // Fetch clients from Command Center when user changes or Command Center auth changes
   // We need to find the advisor profile by email since UIDs differ between Firebase projects
   useEffect(() => {
-    if (!currentUser || !commandCenterDb || !currentUser.email) {
+    if (!currentUser || !commandCenterDb || !currentUser.email || !commandCenterUser) {
+      if (!commandCenterUser) return; // Wait for Command Center auth before clearing
       setCommandCenterClients([]);
       setCommandCenterAdvisorId(null);
       return;
