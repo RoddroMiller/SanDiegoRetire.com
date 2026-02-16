@@ -205,8 +205,8 @@ export default function BucketPortfolioBuilder() {
 
   // --- Scenario Action Wrappers ---
   const handleSaveScenario = () => {
-    const legacyYear = Math.min(95 - (clientInfo.retirementAge || 65), projectionData.length) - 1;
-    const legacyBalance = projectionData[Math.max(0, legacyYear)]?.total || 0;
+    const legacyIdx = Math.min(95 - (clientInfo.retirementAge || 65), projectionData.length - 1);
+    const legacyBalance = projectionData[Math.max(0, legacyIdx)]?.total || 0;
     saveScenario({ clientInfo, inputs, assumptions, targetMaxPortfolioAge, rebalanceFreq, vaEnabled, vaInputs, legacyBalance });
   };
 
@@ -225,8 +225,8 @@ export default function BucketPortfolioBuilder() {
   };
 
   const handleClientSubmit = () => {
-    const legacyYear = Math.min(95 - (clientInfo.retirementAge || 65), projectionData.length) - 1;
-    const legacyBalance = projectionData[Math.max(0, legacyYear)]?.total || 0;
+    const legacyIdx = Math.min(95 - (clientInfo.retirementAge || 65), projectionData.length - 1);
+    const legacyBalance = projectionData[Math.max(0, legacyIdx)]?.total || 0;
     submitClientScenario({ clientInfo, inputs, assumptions, targetMaxPortfolioAge, rebalanceFreq, vaEnabled, vaInputs, legacyBalance });
   };
 
@@ -638,8 +638,8 @@ export default function BucketPortfolioBuilder() {
     const updatedInputs = { ...inputs, totalPortfolio: finalAccumulation, monthlySpending: Math.round(futureSpending) };
 
     // Save progress silently
-    const legacyYear = Math.min(95 - (clientInfo.retirementAge || 65), projectionData.length) - 1;
-    const legacyBalance = projectionData[Math.max(0, legacyYear)]?.total || 0;
+    const legacyIdx = Math.min(95 - (clientInfo.retirementAge || 65), projectionData.length - 1);
+    const legacyBalance = projectionData[Math.max(0, legacyIdx)]?.total || 0;
     saveProgress({ clientInfo, inputs: updatedInputs, assumptions, targetMaxPortfolioAge, rebalanceFreq, vaEnabled, vaInputs, legacyBalance }, userRole);
 
     setInputs(updatedInputs);
@@ -662,8 +662,8 @@ export default function BucketPortfolioBuilder() {
     };
 
     setInputs(updatedInputs);
-    const legacyYear = Math.min(95 - (clientInfo.retirementAge || 65), projectionData.length) - 1;
-    const legacyBalance = projectionData[Math.max(0, legacyYear)]?.total || 0;
+    const legacyIdx = Math.min(95 - (clientInfo.retirementAge || 65), projectionData.length - 1);
+    const legacyBalance = projectionData[Math.max(0, legacyIdx)]?.total || 0;
     saveProgress({ clientInfo, inputs: updatedInputs, assumptions, targetMaxPortfolioAge, rebalanceFreq, vaEnabled, vaInputs, legacyBalance }, userRole);
   };
 

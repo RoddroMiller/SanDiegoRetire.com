@@ -76,8 +76,8 @@ export const useScenarios = ({ currentUser, userRole, planFilter = 'mine', teamM
             try {
               const basePlan = calculateBasePlan(s.inputs, s.assumptions, s.clientInfo);
               const projection = runSimulation(basePlan, s.assumptions, s.inputs, s.rebalanceFreq || 3);
-              const legacyYear = Math.min(95 - (s.clientInfo.retirementAge || 65), projection.length) - 1;
-              s.legacyBalance = projection[Math.max(0, legacyYear)]?.total || 0;
+              const legacyIdx = Math.min(95 - (s.clientInfo.retirementAge || 65), projection.length - 1);
+              s.legacyBalance = projection[Math.max(0, legacyIdx)]?.total || 0;
             } catch (e) {
               // Leave existing value if computation fails
             }
