@@ -1,7 +1,8 @@
 import { useState, useCallback, useEffect } from 'react';
 import { doc, setDoc, getDoc, collection, getDocs, query, where } from 'firebase/firestore';
+import { httpsCallable } from 'firebase/functions';
 import { onAuthStateChanged } from 'firebase/auth';
-import { commandCenterDb, commandCenterAuth } from '../constants';
+import { commandCenterDb, commandCenterAuth, commandCenterFunctions } from '../constants';
 
 /**
  * Custom hook for saving Portfolio Architect data to The One Process Client Command Center
@@ -34,11 +35,9 @@ export const useCommandCenter = ({ currentUser }) => {
     return () => unsubscribe();
   }, []);
 
-  // Fetch clients from Command Center when user changes or Command Center auth changes
-  // We need to find the advisor profile by email since UIDs differ between Firebase projects
+  // Fetch clients from Command Center via Cloud Function (bypasses cross-project MFA auth)
   useEffect(() => {
-    if (!currentUser || !commandCenterDb || !currentUser.email || !commandCenterUser) {
-      if (!commandCenterUser) return; // Wait for Command Center auth before clearing
+    if (!currentUser || !currentUser.email || !commandCenterFunctions) {
       setCommandCenterClients([]);
       setCommandCenterAdvisorId(null);
       return;
@@ -47,63 +46,23 @@ export const useCommandCenter = ({ currentUser }) => {
     const fetchClients = async () => {
       setIsLoadingClients(true);
       try {
-        // First, find the advisor profile by email
-        // We'll fetch all advisor profiles and filter by email (case-insensitive)
-        const advisorProfilesRef = collection(commandCenterDb, 'advisorProfiles');
-        const advisorSnapshot = await getDocs(advisorProfilesRef);
+        const getAdvisorClients = httpsCallable(commandCenterFunctions, 'getAdvisorClients');
+        const result = await getAdvisorClients({ advisorEmail: currentUser.email });
+        const { success, advisorId, clients } = result.data;
 
-        let advisorDoc = null;
-        const userEmailLower = currentUser.email.toLowerCase();
-
-        advisorSnapshot.forEach((doc) => {
-          const data = doc.data();
-          // Check both email field and the document ID (which might be the user's UID)
-          if (data.email && data.email.toLowerCase() === userEmailLower) {
-            advisorDoc = doc;
-          }
-        });
-
-        if (!advisorDoc) {
-          console.log('No advisor profile found for email:', currentUser.email);
-          console.log('Available profiles:', advisorSnapshot.docs.map(d => ({ id: d.id, email: d.data().email })));
+        if (!success || !advisorId) {
+          console.log('No advisor profile found in Command Center for:', currentUser.email);
           setCommandCenterClients([]);
           setCommandCenterAdvisorId(null);
           setIsLoadingClients(false);
           return;
         }
 
-        const advisorId = advisorDoc.id;
         setCommandCenterAdvisorId(advisorId);
-        console.log('Found Command Center advisor ID:', advisorId);
-
-        // Now fetch clients for this advisor
-        const clientsRef = collection(commandCenterDb, 'advisorProfiles', advisorId, 'clients');
-        const clientsSnapshot = await getDocs(clientsRef);
-        const clients = [];
-        clientsSnapshot.forEach((doc) => {
-          const data = doc.data();
-          // Handle different client data structures from Command Center
-          const primaryContact = data.primaryContact || {};
-          const displayName = data.displayName ||
-            data.name ||
-            (primaryContact.firstName && primaryContact.lastName
-              ? `${primaryContact.firstName} ${primaryContact.lastName}`
-              : primaryContact.firstName || 'Unknown Client');
-
-          clients.push({
-            id: doc.id,
-            displayName: displayName,
-            email: data.email || primaryContact.email || '',
-            ...data
-          });
-        });
-        // Sort by displayName
-        clients.sort((a, b) => (a.displayName || '').localeCompare(b.displayName || ''));
-        setCommandCenterClients(clients);
-        console.log('Found', clients.length, 'clients');
+        setCommandCenterClients(clients || []);
+        console.log('Found', clients?.length || 0, 'clients via Cloud Function');
       } catch (error) {
         console.error('Error fetching Command Center clients:', error);
-        console.error('Error details:', error.code, error.message);
         setCommandCenterClients([]);
         setCommandCenterAdvisorId(null);
       } finally {
@@ -112,11 +71,12 @@ export const useCommandCenter = ({ currentUser }) => {
     };
 
     fetchClients();
-  }, [currentUser, commandCenterUser]);
+  }, [currentUser]);
 
   // Fetch teams the user belongs to from Command Center
+  // Requires direct Firestore auth — may fail if cross-project MFA prevents sign-in
   useEffect(() => {
-    if (!commandCenterAdvisorId || !commandCenterDb) {
+    if (!commandCenterAdvisorId || !commandCenterDb || !commandCenterUser) {
       setUserTeams([]);
       setTeamMemberEmails([]);
       return;
@@ -187,8 +147,8 @@ export const useCommandCenter = ({ currentUser }) => {
       return { success: false, message: 'You must be logged in to save to the Client Command Center.' };
     }
 
-    if (!commandCenterDb) {
-      return { success: false, message: 'Client Command Center database not connected.' };
+    if (!commandCenterFunctions) {
+      return { success: false, message: 'Client Command Center not connected.' };
     }
 
     if (!commandCenterAdvisorId) {
@@ -302,46 +262,31 @@ export const useCommandCenter = ({ currentUser }) => {
     };
 
     try {
-      const docRef = doc(
-        commandCenterDb,
-        'advisorProfiles',
-        commandCenterAdvisorId,
-        'clients',
-        resolvedClientId,
-        'portfolioArchitect',
-        'current'
-      );
+      const saveData = httpsCallable(commandCenterFunctions, 'savePortfolioArchitectData');
+      const result = await saveData({
+        advisorEmail: currentUser.email,
+        advisorId: commandCenterAdvisorId,
+        clientId: resolvedClientId,
+        data: portfolioArchitectData
+      });
 
-      // Check if document exists to preserve createdAt
-      const existingDoc = await getDoc(docRef);
-      if (existingDoc.exists()) {
-        portfolioArchitectData.createdAt = existingDoc.data().createdAt;
+      if (result.data.success) {
+        setCommandCenterStatus('success');
+        setLastSavedClient(resolvedClientId);
+        setTimeout(() => setCommandCenterStatus('idle'), 2000);
+
+        return {
+          success: true,
+          message: result.data.message || `Saved to Client Command Center for ${clientInfo.name || resolvedClientId}`,
+          clientId: resolvedClientId
+        };
       } else {
-        portfolioArchitectData.createdAt = Date.now();
+        throw new Error(result.data.message || 'Save failed');
       }
-
-      await setDoc(docRef, portfolioArchitectData);
-
-      setCommandCenterStatus('success');
-      setLastSavedClient(resolvedClientId);
-      setTimeout(() => setCommandCenterStatus('idle'), 2000);
-
-      return {
-        success: true,
-        message: `Saved to Client Command Center for ${clientInfo.name || resolvedClientId}`,
-        clientId: resolvedClientId
-      };
     } catch (error) {
       console.error('Error saving to Command Center:', error);
       setCommandCenterStatus('error');
       setTimeout(() => setCommandCenterStatus('idle'), 3000);
-
-      if (error.code === 'permission-denied') {
-        return {
-          success: false,
-          message: 'Permission denied. Check Firestore rules for The One Process project.'
-        };
-      }
       return { success: false, message: error.message };
     }
   }, [currentUser, commandCenterAdvisorId]);
@@ -376,7 +321,7 @@ export const useCommandCenter = ({ currentUser }) => {
     // State
     commandCenterStatus,
     lastSavedClient,
-    isCommandCenterConnected: !!commandCenterDb,
+    isCommandCenterConnected: !!commandCenterFunctions,
     commandCenterClients,
     isLoadingClients,
     userTeams,

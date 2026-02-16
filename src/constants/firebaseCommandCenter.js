@@ -1,6 +1,7 @@
 import { initializeApp } from 'firebase/app';
 import { getFirestore } from 'firebase/firestore';
 import { getAuth, signInWithEmailAndPassword, getMultiFactorResolver, TotpMultiFactorGenerator } from 'firebase/auth';
+import { getFunctions } from 'firebase/functions';
 
 // Firebase Configuration for The One Process (Client Command Center)
 // This is a SECOND Firebase project, separate from Portfolio Architect's database
@@ -17,11 +18,13 @@ const COMMAND_CENTER_CONFIG = {
 let commandCenterDb = null;
 let commandCenterAuth = null;
 let commandCenterApp = null;
+let commandCenterFunctions = null;
 
 try {
   commandCenterApp = initializeApp(COMMAND_CENTER_CONFIG, 'commandCenter');
   commandCenterDb = getFirestore(commandCenterApp);
   commandCenterAuth = getAuth(commandCenterApp);
+  commandCenterFunctions = getFunctions(commandCenterApp);
 } catch (e) {
   console.error("Command Center Firebase Initialization Error:", e);
 }
@@ -70,4 +73,4 @@ export const signInToCommandCenter = async (email, password, mfaCode) => {
   }
 };
 
-export { commandCenterDb, commandCenterAuth };
+export { commandCenterDb, commandCenterAuth, commandCenterFunctions };
