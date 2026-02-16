@@ -205,7 +205,8 @@ export default function BucketPortfolioBuilder() {
 
   // --- Scenario Action Wrappers ---
   const handleSaveScenario = () => {
-    saveScenario({ clientInfo, inputs, assumptions, targetMaxPortfolioAge, rebalanceFreq, vaEnabled, vaInputs });
+    const legacyBalance = projectionData[projectionData.length - 1]?.total || 0;
+    saveScenario({ clientInfo, inputs, assumptions, targetMaxPortfolioAge, rebalanceFreq, vaEnabled, vaInputs, legacyBalance });
   };
 
   const handleSaveToCommandCenter = async (selectedClientId) => {
@@ -223,7 +224,8 @@ export default function BucketPortfolioBuilder() {
   };
 
   const handleClientSubmit = () => {
-    submitClientScenario({ clientInfo, inputs, assumptions, targetMaxPortfolioAge, rebalanceFreq, vaEnabled, vaInputs });
+    const legacyBalance = projectionData[projectionData.length - 1]?.total || 0;
+    submitClientScenario({ clientInfo, inputs, assumptions, targetMaxPortfolioAge, rebalanceFreq, vaEnabled, vaInputs, legacyBalance });
   };
 
   const handleLoadScenario = (scenario) => {
@@ -634,7 +636,8 @@ export default function BucketPortfolioBuilder() {
     const updatedInputs = { ...inputs, totalPortfolio: finalAccumulation, monthlySpending: Math.round(futureSpending) };
 
     // Save progress silently
-    saveProgress({ clientInfo, inputs: updatedInputs, assumptions, targetMaxPortfolioAge, rebalanceFreq, vaEnabled, vaInputs }, userRole);
+    const legacyBalance = projectionData[projectionData.length - 1]?.total || 0;
+    saveProgress({ clientInfo, inputs: updatedInputs, assumptions, targetMaxPortfolioAge, rebalanceFreq, vaEnabled, vaInputs, legacyBalance }, userRole);
 
     setInputs(updatedInputs);
     setStep(2);
@@ -656,7 +659,8 @@ export default function BucketPortfolioBuilder() {
     };
 
     setInputs(updatedInputs);
-    saveProgress({ clientInfo, inputs: updatedInputs, assumptions, targetMaxPortfolioAge, rebalanceFreq, vaEnabled, vaInputs }, userRole);
+    const legacyBalance = projectionData[projectionData.length - 1]?.total || 0;
+    saveProgress({ clientInfo, inputs: updatedInputs, assumptions, targetMaxPortfolioAge, rebalanceFreq, vaEnabled, vaInputs, legacyBalance }, userRole);
   };
 
   const generateReport = () => {

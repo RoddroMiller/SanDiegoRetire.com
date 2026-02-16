@@ -103,6 +103,10 @@ export const PlanManagement = ({
           aVal = a.inputs?.totalPortfolio || 0;
           bVal = b.inputs?.totalPortfolio || 0;
           break;
+        case 'legacy':
+          aVal = a.legacyBalance || 0;
+          bVal = b.legacyBalance || 0;
+          break;
         default:
           aVal = a.updatedAt || 0;
           bVal = b.updatedAt || 0;
@@ -703,6 +707,11 @@ Your Financial Advisor`;
                         Portfolio {sortField === 'portfolio' && (sortDirection === 'asc' ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />)}
                       </button>
                     </th>
+                    <th className="p-3 text-left">
+                      <button onClick={() => handleSort('legacy')} className="flex items-center gap-1 font-bold text-slate-600 hover:text-slate-800">
+                        Legacy (Yr 30) {sortField === 'legacy' && (sortDirection === 'asc' ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />)}
+                      </button>
+                    </th>
                     {userRole === 'master' && (
                       <th className="p-3 text-left">
                         <button onClick={() => handleSort('advisor')} className="flex items-center gap-1 font-bold text-slate-600 hover:text-slate-800">
@@ -767,6 +776,11 @@ Your Financial Advisor`;
                         </div>
                         <div className="text-xs text-slate-500">
                           ${(scenario.inputs?.monthlySpending || 0).toLocaleString()}/mo
+                        </div>
+                      </td>
+                      <td className="p-3">
+                        <div className={`font-bold ${scenario.legacyBalance > 0 ? 'text-blue-700' : 'text-slate-400'}`}>
+                          {scenario.legacyBalance != null ? `$${(scenario.legacyBalance / 1000000).toFixed(2)}M` : '\u2014'}
                         </div>
                       </td>
                       {userRole === 'master' && (
