@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { collection, doc, setDoc, getDocs, deleteDoc, updateDoc } from 'firebase/firestore';
 import { db, appId } from '../constants';
+import { calculateBasePlan, runSimulation } from '../utils';
 
 /**
  * Custom hook for managing scenario CRUD operations
@@ -67,6 +68,28 @@ export const useScenarios = ({ currentUser, userRole, planFilter = 'mine', teamM
             );
           }
         }
+
+        // Backfill computed fields for plans saved before they existed
+        scenarios.forEach(s => {
+          if (s.inputs && s.assumptions && s.clientInfo) {
+            // Backfill legacyBalance by running the projection
+            if (s.legacyBalance == null) {
+              try {
+                const basePlan = calculateBasePlan(s.inputs, s.assumptions, s.clientInfo);
+                const projection = runSimulation(basePlan, s.assumptions, s.inputs, s.rebalanceFreq || 3);
+                s.legacyBalance = projection[projection.length - 1]?.total || 0;
+              } catch (e) {
+                // Leave as null if computation fails
+              }
+            }
+            // Backfill monthlySpending from currentSpending adjusted for inflation
+            if (!s.inputs.monthlySpending && s.clientInfo.currentSpending) {
+              const yearsToRetire = Math.max(0, (s.clientInfo.retirementAge || 65) - (s.clientInfo.currentAge || 55));
+              const inflationRate = (s.inputs.personalInflationRate || 2.5) / 100;
+              s.inputs.monthlySpending = Math.round(s.clientInfo.currentSpending * Math.pow(1 + inflationRate, yearsToRetire));
+            }
+          }
+        });
 
         scenarios.sort((a, b) => b.updatedAt - a.updatedAt);
         setSavedScenarios(scenarios);

@@ -383,11 +383,12 @@ export const useAuth = () => {
       totpSecretRef.current = null;
       setMfaEnrollRequired(false);
 
-      // Complete sign-in to Command Center if we have pending credentials
+      // Complete sign-in to Command Center if we have pending credentials (pass MFA code)
       if (pendingCredentialsRef.current) {
         await signInToCommandCenter(
           pendingCredentialsRef.current.email,
-          pendingCredentialsRef.current.password
+          pendingCredentialsRef.current.password,
+          verificationCode
         );
         pendingCredentialsRef.current = null;
       }
@@ -432,11 +433,12 @@ export const useAuth = () => {
       mfaResolverRef.current = null;
       setMfaRequired(false);
 
-      // Complete sign-in to Command Center
+      // Complete sign-in to Command Center (pass MFA code for cross-project MFA)
       if (pendingCredentialsRef.current) {
         await signInToCommandCenter(
           pendingCredentialsRef.current.email,
-          pendingCredentialsRef.current.password
+          pendingCredentialsRef.current.password,
+          verificationCode
         );
         pendingCredentialsRef.current = null;
       }

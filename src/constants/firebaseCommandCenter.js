@@ -1,6 +1,6 @@
 import { initializeApp } from 'firebase/app';
 import { getFirestore } from 'firebase/firestore';
-import { getAuth, signInWithEmailAndPassword } from 'firebase/auth';
+import { getAuth, signInWithEmailAndPassword, getMultiFactorResolver, TotpMultiFactorGenerator } from 'firebase/auth';
 
 // Firebase Configuration for The One Process (Client Command Center)
 // This is a SECOND Firebase project, separate from Portfolio Architect's database
@@ -31,9 +31,10 @@ try {
  * This enables cross-project Firestore queries
  * @param {string} email - User email
  * @param {string} password - User password
+ * @param {string} [mfaCode] - Optional TOTP code to resolve MFA challenge
  * @returns {Promise<object|null>} User credential or null on error
  */
-export const signInToCommandCenter = async (email, password) => {
+export const signInToCommandCenter = async (email, password, mfaCode) => {
   if (!commandCenterAuth) {
     console.error('Command Center Auth not initialized');
     return null;
@@ -43,6 +44,26 @@ export const signInToCommandCenter = async (email, password) => {
     console.log('Signed in to Command Center successfully');
     return credential;
   } catch (e) {
+    if (e.code === 'auth/multi-factor-auth-required' && mfaCode) {
+      try {
+        const resolver = getMultiFactorResolver(commandCenterAuth, e);
+        const totpFactor = resolver.hints.find(
+          hint => hint.factorId === TotpMultiFactorGenerator.FACTOR_ID
+        );
+        if (totpFactor) {
+          const assertion = TotpMultiFactorGenerator.assertionForSignIn(
+            totpFactor.uid,
+            mfaCode
+          );
+          const result = await resolver.resolveSignIn(assertion);
+          console.log('Signed in to Command Center with MFA successfully');
+          return result;
+        }
+      } catch (mfaError) {
+        console.log('Command Center MFA resolution failed:', mfaError.code);
+        return null;
+      }
+    }
     // User might not exist in Command Center yet - that's okay
     console.log('Command Center sign-in failed (user may not exist there yet):', e.code);
     return null;
