@@ -89,6 +89,17 @@ export default function BucketPortfolioBuilder() {
     refreshAdvisors
   } = useAdvisors();
 
+  // Auto-register current user as advisor on login
+  useEffect(() => {
+    if (currentUser?.email && (userRole === 'advisor' || userRole === 'master')) {
+      const email = currentUser.email.toLowerCase();
+      const alreadyExists = advisors.some(a => a.email?.toLowerCase() === email);
+      if (!alreadyExists && advisors.length >= 0 && !isLoadingAdvisors) {
+        addAdvisor(currentUser.displayName || email.split('@')[0], email);
+      }
+    }
+  }, [currentUser, userRole, advisors, isLoadingAdvisors]);
+
   // --- Session Timeout for BOSP compliance (15 min inactivity) ---
   const [showSessionWarning, setShowSessionWarning] = useState(false);
 
