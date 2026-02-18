@@ -241,6 +241,16 @@ export default function BucketPortfolioBuilder() {
     submitClientScenario({ clientInfo, inputs, assumptions, targetMaxPortfolioAge, rebalanceFreq, vaEnabled, vaInputs, legacyBalance });
   };
 
+  const handleClientFinish = async () => {
+    const legacyEntry = projectionData.find(p => p.age >= 95) || projectionData[projectionData.length - 1];
+    const legacyBalance = legacyEntry?.total || 0;
+    await submitClientScenario(
+      { clientInfo, inputs, assumptions, targetMaxPortfolioAge, rebalanceFreq, vaEnabled, vaInputs, legacyBalance },
+      { openScheduling: false }
+    );
+    window.location.reload();
+  };
+
   const handleLoadScenario = (scenario) => {
     loadScenario(scenario, (s) => {
       setClientInfo({ ...s.clientInfo, partnerAnnualIncome: s.clientInfo.partnerAnnualIncome || 0 });
@@ -792,6 +802,7 @@ export default function BucketPortfolioBuilder() {
         ssPartnerAnalysis={ssPartnerAnalysis}
         onSaveProgress={handleClientSaveProgress}
         onClientSubmit={handleClientSubmit}
+        onClientFinish={handleClientFinish}
         saveStatus={saveStatus}
         targetMaxPortfolioAge={targetMaxPortfolioAge}
         onSetTargetMaxPortfolioAge={setTargetMaxPortfolioAge}
@@ -828,6 +839,7 @@ export default function BucketPortfolioBuilder() {
         ssPartnerAnalysis={ssPartnerAnalysis}
         onSaveProgress={handleClientSaveProgress}
         onClientSubmit={handleClientSubmit}
+        onClientFinish={handleClientFinish}
         saveStatus={saveStatus}
         targetMaxPortfolioAge={targetMaxPortfolioAge}
         onSetTargetMaxPortfolioAge={setTargetMaxPortfolioAge}

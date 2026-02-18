@@ -29,6 +29,7 @@ export const ClientWizard = ({
   // Actions
   onSaveProgress,
   onClientSubmit,
+  onClientFinish,
   saveStatus,
   // SS Optimizer
   targetMaxPortfolioAge,
@@ -1863,10 +1864,11 @@ export const ClientWizard = ({
 
             {wizardStep === 2 && (
               <button
-                onClick={onLogout || (() => window.location.reload())}
+                onClick={onClientFinish || onLogout || (() => window.location.reload())}
+                disabled={saveStatus === 'saving'}
                 className="flex items-center gap-1 sm:gap-2 px-3 sm:px-6 py-2 sm:py-3 text-slate-600 hover:bg-slate-100 rounded-lg transition-all text-sm sm:text-base"
               >
-                I Am Finished <LogOut className="w-4 h-4 sm:w-5 sm:h-5" />
+                {saveStatus === 'saving' ? 'Saving...' : 'I Am Finished'} <LogOut className="w-4 h-4 sm:w-5 sm:h-5" />
               </button>
             )}
           </div>

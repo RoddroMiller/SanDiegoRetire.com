@@ -243,7 +243,7 @@ export const useScenarios = ({ currentUser, userRole, planFilter = 'mine', teamM
    * @param {object} scenarioState - Current scenario state to submit
    * @returns {Promise<boolean>} Success status
    */
-  const submitClientScenario = useCallback(async (scenarioState) => {
+  const submitClientScenario = useCallback(async (scenarioState, { openScheduling = true } = {}) => {
     const { clientInfo, inputs, assumptions, targetMaxPortfolioAge, rebalanceFreq, vaEnabled, vaInputs, legacyBalance } = scenarioState;
 
     if (!currentUser || !db) {
@@ -252,7 +252,9 @@ export const useScenarios = ({ currentUser, userRole, planFilter = 'mine', teamM
     }
 
     // Open scheduling link immediately to bypass popup blockers
-    window.open("https://oncehub.com/RoddMiller-30", "_blank");
+    if (openScheduling) {
+      window.open("https://oncehub.com/RoddMiller-30", "_blank");
+    }
 
     setSaveStatus('saving');
 
