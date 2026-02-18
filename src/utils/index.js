@@ -11,7 +11,8 @@ export {
   calculateAnnualTax,
   calculateTaxableSS,
   calculateFederalTax,
-  calculateImpliedSpending
+  calculateImpliedSpending,
+  estimatePIAFromIncome
 } from './calculations';
 export {
   calculateSSAnalysis,

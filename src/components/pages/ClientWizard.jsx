@@ -3,7 +3,7 @@ import { ResponsiveContainer, AreaChart, Area, XAxis, YAxis, CartesianGrid, Tool
 import { User, DollarSign, ArrowRight, ArrowLeft, Shield, Info, Activity, Briefcase, Send, TrendingUp, Clock, PiggyBank, BarChart2, Table as TableIcon, Plus, Trash2, AlertCircle, LogOut, ExternalLink } from 'lucide-react';
 
 import { COLORS, LOGO_URL } from '../../constants';
-import { formatPhoneNumber, getAdjustedSS } from '../../utils';
+import { formatPhoneNumber, getAdjustedSS, estimatePIAFromIncome } from '../../utils';
 import { containsSSN } from '../../utils/piiValidation';
 import { Card, StatBox, FormattedNumberInput, Disclaimer, ImportantDisclosures } from '../ui';
 
@@ -51,6 +51,10 @@ export const ClientWizard = ({
   const [showCashFlowTable, setShowCashFlowTable] = useState(false);
   const [validationError, setValidationError] = useState('');
   const [fieldErrors, setFieldErrors] = useState({});
+  const [showSSEstimator, setShowSSEstimator] = useState(false);
+  const [ssEstimateIncome, setSSEstimateIncome] = useState('');
+  const [showPartnerSSEstimator, setShowPartnerSSEstimator] = useState(false);
+  const [partnerSSEstimateIncome, setPartnerSSEstimateIncome] = useState('');
 
   // Cap projection data at age 95 to avoid projecting legacy balances at unrealistic ages
   const cappedProjectionData = useMemo(() => {
@@ -680,6 +684,26 @@ export const ClientWizard = ({
                 onChange={onInputChange}
                 className="p-3 border rounded-lg w-full"
               />
+              <button type="button" onClick={() => setShowSSEstimator(!showSSEstimator)} className="text-xs text-blue-500 hover:text-blue-700 mt-1">
+                {showSSEstimator ? 'Hide estimator' : "Don't know? Estimate from income"}
+              </button>
+              {showSSEstimator && (
+                <div className="mt-2 p-2 bg-blue-50 rounded-lg border border-blue-200 flex items-center gap-2">
+                  <input
+                    type="number"
+                    placeholder="Annual income"
+                    value={ssEstimateIncome}
+                    onChange={e => setSSEstimateIncome(e.target.value)}
+                    className="p-2 border rounded w-full text-sm"
+                  />
+                  <button type="button" onClick={() => {
+                    const pia = estimatePIAFromIncome(Number(ssEstimateIncome));
+                    if (pia > 0) onInputChange({ target: { name: 'ssPIA', value: pia } });
+                  }} className="px-3 py-2 bg-blue-600 text-white text-xs rounded hover:bg-blue-700 whitespace-nowrap">
+                    Use Estimate
+                  </button>
+                </div>
+              )}
             </div>
           ) : (
             // Under FRA - ask for PIA and start age
@@ -697,6 +721,26 @@ export const ClientWizard = ({
                   onChange={onInputChange}
                   className="p-3 border rounded-lg w-full"
                 />
+                <button type="button" onClick={() => setShowSSEstimator(!showSSEstimator)} className="text-xs text-blue-500 hover:text-blue-700 mt-1">
+                  {showSSEstimator ? 'Hide estimator' : "Don't know? Estimate from income"}
+                </button>
+                {showSSEstimator && (
+                  <div className="mt-2 p-2 bg-blue-50 rounded-lg border border-blue-200 flex items-center gap-2">
+                    <input
+                      type="number"
+                      placeholder="Annual income"
+                      value={ssEstimateIncome}
+                      onChange={e => setSSEstimateIncome(e.target.value)}
+                      className="p-2 border rounded w-full text-sm"
+                    />
+                    <button type="button" onClick={() => {
+                      const pia = estimatePIAFromIncome(Number(ssEstimateIncome));
+                      if (pia > 0) onInputChange({ target: { name: 'ssPIA', value: pia } });
+                    }} className="px-3 py-2 bg-blue-600 text-white text-xs rounded hover:bg-blue-700 whitespace-nowrap">
+                      Use Estimate
+                    </button>
+                  </div>
+                )}
               </div>
               <div className="relative group">
                 <label className="block text-xs font-bold text-slate-500 uppercase mb-1 flex items-center gap-1">
@@ -737,6 +781,26 @@ export const ClientWizard = ({
                     onChange={onInputChange}
                     className="p-3 border rounded-lg w-full"
                   />
+                  <button type="button" onClick={() => setShowPartnerSSEstimator(!showPartnerSSEstimator)} className="text-xs text-blue-500 hover:text-blue-700 mt-1">
+                    {showPartnerSSEstimator ? 'Hide estimator' : "Estimate from income"}
+                  </button>
+                  {showPartnerSSEstimator && (
+                    <div className="mt-2 p-2 bg-blue-50 rounded-lg border border-blue-200 flex items-center gap-2">
+                      <input
+                        type="number"
+                        placeholder="Annual income"
+                        value={partnerSSEstimateIncome}
+                        onChange={e => setPartnerSSEstimateIncome(e.target.value)}
+                        className="p-2 border rounded w-full text-sm"
+                      />
+                      <button type="button" onClick={() => {
+                        const pia = estimatePIAFromIncome(Number(partnerSSEstimateIncome));
+                        if (pia > 0) onInputChange({ target: { name: 'partnerSSPIA', value: pia } });
+                      }} className="px-3 py-2 bg-blue-600 text-white text-xs rounded hover:bg-blue-700 whitespace-nowrap">
+                        Use Estimate
+                      </button>
+                    </div>
+                  )}
                 </div>
               ) : (
                 // Partner under FRA - ask for PIA and start age
@@ -754,6 +818,26 @@ export const ClientWizard = ({
                       onChange={onInputChange}
                       className="p-3 border rounded-lg w-full"
                     />
+                    <button type="button" onClick={() => setShowPartnerSSEstimator(!showPartnerSSEstimator)} className="text-xs text-blue-500 hover:text-blue-700 mt-1">
+                      {showPartnerSSEstimator ? 'Hide estimator' : "Estimate from income"}
+                    </button>
+                    {showPartnerSSEstimator && (
+                      <div className="mt-2 p-2 bg-blue-50 rounded-lg border border-blue-200 flex items-center gap-2">
+                        <input
+                          type="number"
+                          placeholder="Annual income"
+                          value={partnerSSEstimateIncome}
+                          onChange={e => setPartnerSSEstimateIncome(e.target.value)}
+                          className="p-2 border rounded w-full text-sm"
+                        />
+                        <button type="button" onClick={() => {
+                          const pia = estimatePIAFromIncome(Number(partnerSSEstimateIncome));
+                          if (pia > 0) onInputChange({ target: { name: 'partnerSSPIA', value: pia } });
+                        }} className="px-3 py-2 bg-blue-600 text-white text-xs rounded hover:bg-blue-700 whitespace-nowrap">
+                          Use Estimate
+                        </button>
+                      </div>
+                    )}
                   </div>
                   <div className="relative group">
                     <label className="block text-xs font-bold text-slate-500 uppercase mb-1 flex items-center gap-1">

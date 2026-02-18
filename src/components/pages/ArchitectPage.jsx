@@ -12,7 +12,7 @@ import {
 } from 'lucide-react';
 
 import { COLORS, LOGO_URL } from '../../constants';
-import { getAdjustedSS, generateAndDownloadIPS, calculateAnnualTax, calculateTaxableSS, calculateFederalTax } from '../../utils';
+import { getAdjustedSS, generateAndDownloadIPS, calculateAnnualTax, calculateTaxableSS, calculateFederalTax, estimatePIAFromIncome } from '../../utils';
 import { Card, StatBox, AllocationRow, FormattedNumberInput, Disclaimer } from '../ui';
 
 /**
@@ -115,6 +115,10 @@ export const ArchitectPage = ({
 
   // Withdrawal Override modal state
   const [showWithdrawalOverrides, setShowWithdrawalOverrides] = useState(false);
+  const [showSSEstimator, setShowSSEstimator] = useState(false);
+  const [ssEstimateIncome, setSSEstimateIncome] = useState('');
+  const [showPartnerSSEstimator, setShowPartnerSSEstimator] = useState(false);
+  const [partnerSSEstimateIncome, setPartnerSSEstimateIncome] = useState('');
 
   // Improvement solution selections
   const [selectedImprovements, setSelectedImprovements] = useState({
@@ -715,6 +719,9 @@ export const ArchitectPage = ({
                         Your Social Security benefit at Full Retirement Age (67) from your SSA statement.
                       </div>
                       <FormattedNumberInput name="ssPIA" value={inputs.ssPIA} onChange={onInputChange} className="w-full px-2 py-1 border rounded-md text-sm" />
+                      <button type="button" onClick={() => setShowSSEstimator(!showSSEstimator)} className="text-[10px] text-blue-500 hover:text-blue-700 mt-0.5">
+                        {showSSEstimator ? 'Hide' : 'Estimate from income'}
+                      </button>
                     </div>
                     <div className="relative group">
                       <label className="text-[12px] text-slate-500 uppercase flex items-center gap-1">
@@ -726,7 +733,19 @@ export const ArchitectPage = ({
                       <input type="number" name="ssStartAge" value={inputs.ssStartAge} onChange={onInputChange} min={62} max={70} className="w-full px-2 py-1 border rounded-md text-sm" />
                     </div>
                   </div>
+                  {showSSEstimator && (
+                    <div className="flex items-center gap-1 mt-1">
+                      <input type="number" placeholder="Annual income" value={ssEstimateIncome} onChange={e => setSSEstimateIncome(e.target.value)} className="w-full px-2 py-1 border rounded-md text-sm" />
+                      <button type="button" onClick={() => {
+                        const pia = estimatePIAFromIncome(Number(ssEstimateIncome));
+                        if (pia > 0) onInputChange({ target: { name: 'ssPIA', value: pia } });
+                      }} className="px-2 py-1 bg-blue-600 text-white text-[10px] rounded hover:bg-blue-700 whitespace-nowrap">
+                        Use
+                      </button>
+                    </div>
+                  )}
                   {clientInfo.isMarried && (
+                    <>
                     <div className="grid grid-cols-2 gap-2">
                       <div className="relative group">
                         <label className="text-[12px] text-slate-500 uppercase flex items-center gap-1">
@@ -736,6 +755,9 @@ export const ArchitectPage = ({
                           Your partner's Social Security benefit at Full Retirement Age.
                         </div>
                         <FormattedNumberInput name="partnerSSPIA" value={inputs.partnerSSPIA} onChange={onInputChange} className="w-full px-2 py-1 border rounded-md text-sm" />
+                        <button type="button" onClick={() => setShowPartnerSSEstimator(!showPartnerSSEstimator)} className="text-[10px] text-blue-500 hover:text-blue-700 mt-0.5">
+                          {showPartnerSSEstimator ? 'Hide' : 'Estimate from income'}
+                        </button>
                       </div>
                       <div className="relative group">
                         <label className="text-[12px] text-slate-500 uppercase flex items-center gap-1">
@@ -747,6 +769,18 @@ export const ArchitectPage = ({
                         <input type="number" name="partnerSSStartAge" value={inputs.partnerSSStartAge} onChange={onInputChange} min={62} max={70} className="w-full px-2 py-1 border rounded-md text-sm" />
                       </div>
                     </div>
+                    {showPartnerSSEstimator && (
+                      <div className="flex items-center gap-1 mt-1">
+                        <input type="number" placeholder="Partner annual income" value={partnerSSEstimateIncome} onChange={e => setPartnerSSEstimateIncome(e.target.value)} className="w-full px-2 py-1 border rounded-md text-sm" />
+                        <button type="button" onClick={() => {
+                          const pia = estimatePIAFromIncome(Number(partnerSSEstimateIncome));
+                          if (pia > 0) onInputChange({ target: { name: 'partnerSSPIA', value: pia } });
+                        }} className="px-2 py-1 bg-blue-600 text-white text-[10px] rounded hover:bg-blue-700 whitespace-nowrap">
+                          Use
+                        </button>
+                      </div>
+                    )}
+                    </>
                   )}
                 </div>
               </div>

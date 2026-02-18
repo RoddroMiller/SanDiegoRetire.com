@@ -38,6 +38,30 @@ export const getAdjustedSS = (pia, startAge) => {
   return pia;
 };
 
+/**
+ * Estimate PIA (Primary Insurance Amount) from current annual income
+ * Uses 2025 SSA bend-point formula. Assumes ~35 years of similar earnings.
+ * @param {number} annualIncome - Current annual income
+ * @returns {number} Estimated monthly PIA at Full Retirement Age
+ */
+export const estimatePIAFromIncome = (annualIncome) => {
+  if (!annualIncome || annualIncome <= 0) return 0;
+  // Cap at 2025 SS wage base
+  const capped = Math.min(annualIncome, 176100);
+  // Convert to AIME (Average Indexed Monthly Earnings)
+  const aime = Math.floor(capped / 12);
+  // 2025 bend points
+  let pia = 0;
+  if (aime <= 1226) {
+    pia = aime * 0.90;
+  } else if (aime <= 7391) {
+    pia = 1226 * 0.90 + (aime - 1226) * 0.32;
+  } else {
+    pia = 1226 * 0.90 + (7391 - 1226) * 0.32 + (aime - 7391) * 0.15;
+  }
+  return Math.round(pia);
+};
+
 // ============================================
 // TAX CALCULATION UTILITIES
 // ============================================
