@@ -318,9 +318,9 @@ export const calculateImpliedSpending = ({
   const additionalMedicare = MEDICARE_ADDITIONAL_RATE * Math.max(0, totalIncome - medicareThreshold);
   const medicareTax = baseMedicare + additionalMedicare;
 
-  // Standard deduction
+  // Standard deduction (annual savings treated as pre-tax, e.g. 401k)
   const standardDeduction = STANDARD_DEDUCTION[filingStatus] || STANDARD_DEDUCTION.married;
-  const taxableIncome = Math.max(0, totalIncome - standardDeduction);
+  const taxableIncome = Math.max(0, totalIncome - annualSavings - standardDeduction);
 
   // Federal income tax (reuse existing bracket calculator)
   const federalTax = calculateFederalTax(taxableIncome, filingStatus);
