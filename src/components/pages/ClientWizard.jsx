@@ -607,7 +607,7 @@ export const ClientWizard = ({
                   tick={{ fill: '#64748b', fontSize: 12 }}
                 />
                 <Tooltip
-                  formatter={(val) => `$${val.toLocaleString()}`}
+                  formatter={(val) => `$${Math.round(val).toLocaleString()}`}
                   labelFormatter={(label) => `Age ${label}`}
                 />
                 <Area
@@ -1399,7 +1399,7 @@ export const ClientWizard = ({
                   <Tooltip
                     formatter={(val, name) => {
                       if (name === 'Distribution Rate') return `${val.toFixed(2)}%`;
-                      return `$${val.toLocaleString()}`;
+                      return `$${Math.round(val).toLocaleString()}`;
                     }}
                     labelFormatter={(l) => `Age ${l}`}
                   />
