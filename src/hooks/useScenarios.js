@@ -117,8 +117,13 @@ export const useScenarios = ({ currentUser, userRole, planFilter = 'mine', teamM
 
     setSaveStatus('saving');
 
-    const docId = clientInfo.email || clientInfo.name || `scenario_${Date.now()}`;
-    const safeDocId = docId.replace(/[^a-zA-Z0-9_-]/g, '_');
+    const baseDocId = clientInfo.email || clientInfo.name || `scenario_${Date.now()}`;
+    const safeBaseDocId = baseDocId.replace(/[^a-zA-Z0-9_-]/g, '_');
+
+    // Check if this docId is already used by a different client
+    const existing = savedScenarios.find(s => s.id === safeBaseDocId);
+    const isDuplicate = existing && existing.clientInfo?.name !== clientInfo.name;
+    const safeDocId = isDuplicate ? `${safeBaseDocId}_${Date.now()}` : safeBaseDocId;
 
     const scenarioData = {
       advisorId: currentUser.uid,
@@ -133,6 +138,11 @@ export const useScenarios = ({ currentUser, userRole, planFilter = 'mine', teamM
       legacyBalance: legacyBalance || 0,
       updatedAt: Date.now()
     };
+
+    // Flag if this is a new client reusing an existing email
+    if (isDuplicate) {
+      scenarioData.duplicateEmail = clientInfo.email || null;
+    }
 
     try {
       await setDoc(
@@ -154,7 +164,7 @@ export const useScenarios = ({ currentUser, userRole, planFilter = 'mine', teamM
       setSaveStatus('error');
       return false;
     }
-  }, [currentUser]);
+  }, [currentUser, savedScenarios]);
 
   /**
    * Save progress silently (for both clients and advisors)
@@ -171,10 +181,21 @@ export const useScenarios = ({ currentUser, userRole, planFilter = 'mine', teamM
     }
 
     const isClient = role === 'client';
-    const docId = isClient
+    const baseDocId = isClient
       ? `progress_${clientInfo.name || clientInfo.email || 'client'}`
       : (clientInfo.email || clientInfo.name || `scenario_${Date.now()}`);
-    const safeDocId = docId.replace(/[^a-zA-Z0-9_-]/g, '_');
+    const safeBaseDocId = baseDocId.replace(/[^a-zA-Z0-9_-]/g, '_');
+
+    // For advisor path, check if this docId is already used by a different client
+    let safeDocId = safeBaseDocId;
+    let isDuplicate = false;
+    if (!isClient) {
+      const existing = savedScenarios.find(s => s.id === safeBaseDocId);
+      isDuplicate = existing && existing.clientInfo?.name !== clientInfo.name;
+      if (isDuplicate) {
+        safeDocId = `${safeBaseDocId}_${Date.now()}`;
+      }
+    }
 
     const scenarioData = {
       advisorId: isClient ? 'CLIENT_PROGRESS' : currentUser.uid,
@@ -190,6 +211,11 @@ export const useScenarios = ({ currentUser, userRole, planFilter = 'mine', teamM
       legacyBalance: legacyBalance || 0,
       updatedAt: Date.now()
     };
+
+    // Flag if this is a new client reusing an existing email
+    if (isDuplicate) {
+      scenarioData.duplicateEmail = clientInfo.email || null;
+    }
 
     try {
       await setDoc(
@@ -210,7 +236,7 @@ export const useScenarios = ({ currentUser, userRole, planFilter = 'mine', teamM
       console.error("Error saving progress:", error);
       return false;
     }
-  }, [currentUser]);
+  }, [currentUser, savedScenarios]);
 
   /**
    * Submit a scenario (for clients)

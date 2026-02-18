@@ -144,6 +144,11 @@ export const AccumulationPage = ({
                                 New Submission
                               </span>
                             )}
+                            {s.duplicateEmail && (
+                              <span className="bg-amber-100 text-amber-700 text-[12px] px-1.5 py-0.5 rounded-full font-bold uppercase tracking-wider">
+                                Duplicate Email
+                              </span>
+                            )}
                           </div>
                           <div className="flex items-center gap-2 text-[12px] text-slate-400">
                             <span>{new Date(s.updatedAt).toLocaleDateString()}</span>
