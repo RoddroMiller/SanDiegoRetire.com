@@ -37,6 +37,22 @@ export const AccumulationPage = ({
 }) => {
   const [showTaxBreakdown, setShowTaxBreakdown] = useState(false);
 
+  // Find emails shared by multiple plans with different client names
+  const duplicateEmails = useMemo(() => {
+    const emailMap = {};
+    savedScenarios.forEach(s => {
+      const email = s.clientInfo?.email?.toLowerCase();
+      if (!email) return;
+      if (!emailMap[email]) emailMap[email] = new Set();
+      emailMap[email].add(s.clientInfo?.name || '');
+    });
+    const dupes = new Set();
+    Object.entries(emailMap).forEach(([email, names]) => {
+      if (names.size > 1) dupes.add(email);
+    });
+    return dupes;
+  }, [savedScenarios]);
+
   const impliedSpending = useMemo(() => {
     if (!clientInfo.annualIncome || clientInfo.annualIncome <= 0) return null;
     return calculateImpliedSpending({
@@ -144,7 +160,7 @@ export const AccumulationPage = ({
                                 New Submission
                               </span>
                             )}
-                            {s.duplicateEmail && (
+                            {duplicateEmails.has(s.clientInfo?.email?.toLowerCase()) && (
                               <span className="bg-amber-100 text-amber-700 text-[12px] px-1.5 py-0.5 rounded-full font-bold uppercase tracking-wider">
                                 Duplicate Email
                               </span>
