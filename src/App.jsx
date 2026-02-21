@@ -208,11 +208,11 @@ export default function BucketPortfolioBuilder() {
 
   // Return Assumptions
   const [assumptions, setAssumptions] = useState({
-    b1: { return: 2.0, stdDev: 2.0, name: "Short Term", historical: 2.8 },
-    b2: { return: 4.0, stdDev: 5.0, name: "Mid Term", historical: 5.2 },
-    b3: { return: 5.5, stdDev: 8.0, name: "Balanced 60/40", historical: 7.5 },
-    b4: { return: 6.0, stdDev: 12.0, name: "Inc & Growth", historical: 9.1 },
-    b5: { return: 8.0, stdDev: 18.0, name: "Long Term", historical: 10.2 },
+    b1: { return: 2.0, stdDev: 2.0, name: "B1 - Short Term", historical: 2.8 },
+    b2: { return: 4.0, stdDev: 5.0, name: "B2 - Mid Term", historical: 5.2 },
+    b3: { return: 5.5, stdDev: 8.0, name: "B3 - Balanced 60/40", historical: 7.5 },
+    b4: { return: 6.0, stdDev: 12.0, name: "B4 - Inc & Growth", historical: 9.1 },
+    b5: { return: 8.0, stdDev: 18.0, name: "B5 - Long Term", historical: 10.2 },
   });
 
   // --- Scenario Action Wrappers ---
