@@ -457,8 +457,8 @@ export const ArchitectPage = ({
           </div>
 
           {/* Quick Adjustments - Retirement Age & Savings */}
-          {!clientInfo.isRetired && (
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div className={`grid grid-cols-1 ${!clientInfo.isRetired ? 'md:grid-cols-3' : 'md:grid-cols-1 max-w-md'} gap-4`}>
+            {!clientInfo.isRetired && (
               <div className="p-4 bg-blue-50 rounded-lg border border-blue-200">
                 <div className="flex items-center gap-3">
                   <Clock className="w-5 h-5 text-blue-600" />
@@ -473,6 +473,8 @@ export const ArchitectPage = ({
                   />
                 </div>
               </div>
+            )}
+            {!clientInfo.isRetired && (
               <div className="p-4 bg-emerald-50 rounded-lg border border-emerald-200">
                 <div className="flex items-center gap-3">
                   <PiggyBank className="w-5 h-5 text-emerald-600" />
@@ -487,8 +489,22 @@ export const ArchitectPage = ({
                   />
                 </div>
               </div>
+            )}
+            <div className="p-4 bg-orange-50 rounded-lg border border-orange-200">
+              <div className="flex items-center gap-3">
+                <DollarSign className="w-5 h-5 text-orange-600" />
+                <div className="flex-1">
+                  <h4 className="font-bold text-orange-800 text-sm">Monthly Spending</h4>
+                </div>
+                <FormattedNumberInput
+                  name="monthlySpending"
+                  value={inputs.monthlySpending}
+                  onChange={onInputChange}
+                  className="p-2 border border-orange-300 rounded-lg w-28 text-center font-bold text-orange-800 bg-white"
+                />
+              </div>
             </div>
-          )}
+          </div>
 
           {/* Tab Navigation */}
           <div className="border-b border-slate-200 print:hidden -mx-4 sm:mx-0">
