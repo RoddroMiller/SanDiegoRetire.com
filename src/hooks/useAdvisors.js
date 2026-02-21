@@ -9,11 +9,14 @@ import { db, appId } from '../constants';
  */
 export const useAdvisors = () => {
   const [advisors, setAdvisors] = useState([]);
-  const [isLoadingAdvisors, setIsLoadingAdvisors] = useState(false);
+  const [isLoadingAdvisors, setIsLoadingAdvisors] = useState(true);
 
   // Fetch advisors and auto-seed from existing scenario data
   useEffect(() => {
-    if (!db) return;
+    if (!db) {
+      setIsLoadingAdvisors(false);
+      return;
+    }
 
     const fetchAdvisors = async () => {
       setIsLoadingAdvisors(true);

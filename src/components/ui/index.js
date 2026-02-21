@@ -5,3 +5,4 @@ export { FormattedNumberInput } from './FormattedNumberInput';
 export { Disclaimer } from './Disclaimer';
 export { PrivacyTermsModal } from './PrivacyTermsModal';
 export { ImportantDisclosures } from './ImportantDisclosures';
+export { AdvisorNavBar } from './AdvisorNavBar';

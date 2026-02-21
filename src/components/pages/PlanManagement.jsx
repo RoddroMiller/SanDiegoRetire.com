@@ -2,11 +2,11 @@ import React, { useState, useMemo } from 'react';
 import {
   Search, Trash2, UserCheck, Users, FileText, Calendar, Mail, Phone,
   ChevronDown, ChevronUp, Filter, RefreshCw, AlertCircle, Loader,
-  DollarSign, TrendingUp, LogOut, UserPlus, X, Check, ArrowLeft,
+  DollarSign, TrendingUp, UserPlus, X, Check,
   Link2, UserX, Send, Copy, CheckCircle
 } from 'lucide-react';
 
-import { COLORS, LOGO_URL } from '../../constants';
+import { COLORS } from '../../constants';
 import { Card, Disclaimer } from '../ui';
 
 /**
@@ -21,8 +21,6 @@ export const PlanManagement = ({
   onDeleteScenario,
   onReassignScenario,
   onRefreshScenarios,
-  onLogout,
-  onBackToPlanning,
   // Advisors management
   advisors = [],
   isLoadingAdvisors,
@@ -313,52 +311,23 @@ Your Financial Advisor`;
 
   return (
     <div className="min-h-screen bg-slate-50 font-sans text-slate-800 p-3 sm:p-4 md:p-6 lg:p-8">
-      {/* Header */}
+      {/* Page Actions */}
       <div className="max-w-7xl mx-auto mb-4 sm:mb-6 md:mb-8">
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 sm:gap-4">
-          <div className="flex items-center gap-2 sm:gap-3">
-            <img src={LOGO_URL} alt="Logo" className="h-10 sm:h-12 md:h-[72px] w-auto object-contain" />
-            <div>
-              <h1 className="text-xl sm:text-2xl md:text-3xl font-bold text-slate-900">
-                {userRole === 'registeredClient' ? 'Your Plans' : 'Plan Management'}
-              </h1>
-              <p className="text-slate-500 text-xs sm:text-sm">
-                {userRole === 'master' ? 'All Plans (Master View)' :
-                 userRole === 'registeredClient' ? 'Plans assigned to you by your advisor' :
-                 'Your Client Plans'}
-              </p>
-            </div>
-          </div>
-          <div className="flex flex-wrap items-center gap-1.5 sm:gap-2">
-            {userRole === 'master' && (
-              <button
-                onClick={() => setShowManageAdvisors(!showManageAdvisors)}
-                className="flex items-center gap-1 sm:gap-2 px-2 sm:px-4 py-1.5 sm:py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-all text-xs sm:text-sm"
-              >
-                <Users className="w-3 h-3 sm:w-4 sm:h-4" /> <span className="hidden sm:inline">{showManageAdvisors ? 'Hide' : 'Manage'}</span> Advisors
-              </button>
-            )}
-            {userRole !== 'registeredClient' && (
-              <button
-                onClick={onBackToPlanning}
-                className="flex items-center gap-1 sm:gap-2 px-2 sm:px-4 py-1.5 sm:py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg transition-all text-xs sm:text-sm"
-              >
-                <ArrowLeft className="w-3 h-3 sm:w-4 sm:h-4" /> <span className="hidden sm:inline">Back to</span> Planning
-              </button>
-            )}
+        <div className="flex flex-wrap items-center justify-end gap-1.5 sm:gap-2">
+          {userRole === 'master' && (
             <button
-              onClick={() => { onRefreshScenarios(); onRefreshAdvisors && onRefreshAdvisors(); }}
-              className="flex items-center gap-1 sm:gap-2 px-2 sm:px-4 py-1.5 sm:py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg transition-all text-xs sm:text-sm"
+              onClick={() => setShowManageAdvisors(!showManageAdvisors)}
+              className="flex items-center gap-1 sm:gap-2 px-2 sm:px-4 py-1.5 sm:py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-all text-xs sm:text-sm"
             >
-              <RefreshCw className="w-3 h-3 sm:w-4 sm:h-4" /> <span className="hidden xs:inline">Refresh</span>
+              <Users className="w-3 h-3 sm:w-4 sm:h-4" /> <span className="hidden sm:inline">{showManageAdvisors ? 'Hide' : 'Manage'}</span> Advisors
             </button>
-            <button
-              onClick={onLogout}
-              className="flex items-center gap-1 sm:gap-2 px-2 sm:px-4 py-1.5 sm:py-2 bg-slate-700 hover:bg-slate-800 text-white rounded-lg transition-all text-xs sm:text-sm"
-            >
-              <LogOut className="w-3 h-3 sm:w-4 sm:h-4" /> <span className="hidden xs:inline">Logout</span>
-            </button>
-          </div>
+          )}
+          <button
+            onClick={() => { onRefreshScenarios(); onRefreshAdvisors && onRefreshAdvisors(); }}
+            className="flex items-center gap-1 sm:gap-2 px-2 sm:px-4 py-1.5 sm:py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg transition-all text-xs sm:text-sm"
+          >
+            <RefreshCw className="w-3 h-3 sm:w-4 sm:h-4" /> <span className="hidden xs:inline">Refresh</span>
+          </button>
         </div>
       </div>
 

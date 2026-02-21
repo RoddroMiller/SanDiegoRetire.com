@@ -308,7 +308,22 @@ describe('Advisors collection', () => {
       await assertSucceeds(deleteDoc(doc(db, ADVISOR_DIR_PATH, 'a1')));
     });
 
-    it('denies non-master from creating advisor', async () => {
+    it('allows advisor to create their own entry', async () => {
+      const db = asAdvisor();
+      await assertSucceeds(
+        setDoc(doc(db, ADVISOR_DIR_PATH, 'self'), { name: 'Self Register', email: ADVISOR_EMAIL })
+      );
+    });
+
+    it('allows advisor to update their own entry', async () => {
+      await seedAdvisor('a1', advisorData);
+      const db = asAdvisor();
+      await assertSucceeds(
+        setDoc(doc(db, ADVISOR_DIR_PATH, 'a1'), { name: 'Updated Name', email: ADVISOR_EMAIL })
+      );
+    });
+
+    it('denies advisor from creating entry for someone else', async () => {
       const db = asAdvisor();
       await assertFails(
         setDoc(doc(db, ADVISOR_DIR_PATH, 'a3'), { name: 'Unauthorized', email: 'bad@test.com' })

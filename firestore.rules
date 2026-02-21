@@ -78,8 +78,14 @@ service cloud.firestore {
       // Any authenticated (non-anonymous) user can read the advisor directory
       allow read: if isAuthenticated();
 
-      // Only master can write (create/update/delete)
-      allow write: if isMaster();
+      // Master can create/update/delete any advisor entry
+      // Authenticated users can create or update their own entry (email must match)
+      allow create, update: if isMaster()
+        || (isAuthenticated()
+            && request.resource.data.email.lower() == request.auth.token.email.lower());
+
+      // Only master can delete advisor entries
+      allow delete: if isMaster();
     }
 
     // ─── Security Records ───────────────────────────────────────────

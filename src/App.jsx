@@ -2,9 +2,10 @@ import React, { useState, useMemo, useEffect, useCallback } from 'react';
 
 // --- Local Imports ---
 import { formatPhoneNumber, calculateAccumulation, calculateBasePlan, runSimulation, calculateSSAnalysis, calculateSSPartnerAnalysis, getAdjustedSS, calculateAlternativeAllocations, runOptimizedSimulation } from './utils';
-import { GateScreen, LoginScreen, ClientLoginScreen, AccumulationPage, ArchitectPage, ClientWizard, PlanManagement } from './components';
+import { GateScreen, LoginScreen, ClientLoginScreen, AccumulationPage, ArchitectPage, ClientWizard, PlanManagement, InputsPage } from './components';
 import { MfaVerifyModal, MfaEnrollModal } from './components/auth/MfaModals';
 import { PasswordExpiryModal } from './components/auth/PasswordExpiryModal';
+import { AdvisorNavBar } from './components/ui';
 import { useAuth, useScenarios, useAdvisors, useCommandCenter } from './hooks';
 import { useSessionTimeout } from './hooks/useSessionTimeout';
 
@@ -94,7 +95,7 @@ export default function BucketPortfolioBuilder() {
     if (currentUser?.email && (userRole === 'advisor' || userRole === 'master')) {
       const email = currentUser.email.toLowerCase();
       const alreadyExists = advisors.some(a => a.email?.toLowerCase() === email);
-      if (!alreadyExists && advisors.length >= 0 && !isLoadingAdvisors) {
+      if (!alreadyExists && !isLoadingAdvisors) {
         addAdvisor(currentUser.displayName || email.split('@')[0], email);
       }
     }
@@ -281,6 +282,22 @@ export default function BucketPortfolioBuilder() {
 
   const onLogout = () => {
     handleLogout(clearScenarios);
+  };
+
+  // --- Advisor Nav Bar ---
+  const activeView = advisorView === 'management' ? 'management'
+    : advisorView === 'inputs' ? 'inputs'
+    : step === 1 ? 'accumulation' : 'architect';
+
+  const handleNavigation = (view) => {
+    if (view === 'management') {
+      setAdvisorView('management');
+    } else if (view === 'inputs') {
+      setAdvisorView('inputs');
+    } else {
+      setAdvisorView('planning');
+      setStep(view === 'accumulation' ? 1 : 2);
+    }
   };
 
   // --- Manual Allocation Handlers ---
@@ -862,6 +879,7 @@ export default function BucketPortfolioBuilder() {
     return (
       <>
       {showSessionWarning && <SessionWarningModal />}
+      <AdvisorNavBar activeView={activeView} onNavigate={handleNavigation} userRole={userRole} onLogout={onLogout} />
       <PlanManagement
         userRole={userRole}
         currentUser={currentUser}
@@ -874,8 +892,6 @@ export default function BucketPortfolioBuilder() {
         onDeleteScenario={handleDeleteScenario}
         onReassignScenario={reassignScenario}
         onRefreshScenarios={refreshScenarios}
-        onLogout={onLogout}
-        onBackToPlanning={() => setAdvisorView('planning')}
         advisors={advisors}
         isLoadingAdvisors={isLoadingAdvisors}
         onAddAdvisor={addAdvisor}
@@ -891,28 +907,60 @@ export default function BucketPortfolioBuilder() {
     );
   }
 
+  // Advisor Flow - Inputs View
+  if (advisorView === 'inputs') {
+    return (
+      <>
+      {showSessionWarning && <SessionWarningModal />}
+      <AdvisorNavBar activeView={activeView} onNavigate={handleNavigation} userRole={userRole} onLogout={onLogout} />
+      <InputsPage
+        clientInfo={clientInfo}
+        onClientChange={handleClientChange}
+        inputs={inputs}
+        onInputChange={handleInputChange}
+        assumptions={assumptions}
+        onAssumptionChange={handleAssumptionChange}
+        onApplyHistoricalAverages={applyHistoricalAverages}
+        onApplyFourPercentRule={applyFourPercentRule}
+        showSettings={showSettings}
+        onToggleSettings={() => setShowSettings(!showSettings)}
+        targetMaxPortfolioAge={targetMaxPortfolioAge}
+        onSetTargetMaxPortfolioAge={setTargetMaxPortfolioAge}
+        onUpdateSSStartAge={updateSSStartAge}
+        onUpdatePartnerSSStartAge={updatePartnerSSStartAge}
+        onAddAdditionalIncome={addAdditionalIncome}
+        onUpdateAdditionalIncome={updateAdditionalIncome}
+        onRemoveAdditionalIncome={removeAdditionalIncome}
+        onAddCashFlowAdjustment={addCashFlowAdjustment}
+        onUpdateCashFlowAdjustment={updateCashFlowAdjustment}
+        onRemoveCashFlowAdjustment={removeCashFlowAdjustment}
+        onAccountSplitChange={handleAccountSplitChange}
+        onWithdrawalOverrideChange={handleWithdrawalOverrideChange}
+        onSetActiveTab={(tab) => {
+          setActiveTab(tab);
+          setAdvisorView('planning');
+          setStep(2);
+        }}
+        projectionData={projectionData}
+      />
+      </>
+    );
+  }
+
   // Advisor Flow - Step 1: Accumulation Phase
   if (step === 1) {
     return (
       <>
       {showSessionWarning && <SessionWarningModal />}
+      <AdvisorNavBar activeView={activeView} onNavigate={handleNavigation} userRole={userRole} onLogout={onLogout} />
       <AccumulationPage
         userRole={userRole}
-        onLogout={onLogout}
-        savedScenarios={savedScenarios}
-        isLoadingScenarios={isLoadingScenarios}
-        onLoadScenario={handleLoadScenario}
-        onDeleteScenario={handleDeleteScenario}
         clientInfo={clientInfo}
         onClientChange={handleClientChange}
         inputs={inputs}
         onInputChange={handleInputChange}
         accumulationData={accumulationData}
         onProceed={proceedToArchitect}
-        onViewManagement={() => setAdvisorView('management')}
-        planFilter={planFilter}
-        onPlanFilterChange={setPlanFilter}
-        hasTeams={hasTeams}
       />
       </>
     );
@@ -922,9 +970,9 @@ export default function BucketPortfolioBuilder() {
   return (
     <>
     {showSessionWarning && <SessionWarningModal />}
+    <AdvisorNavBar activeView={activeView} onNavigate={handleNavigation} userRole={userRole} onLogout={onLogout} />
     <ArchitectPage
       userRole={userRole}
-      onBackToInputs={() => setStep(1)}
       saveStatus={saveStatus}
       onSaveScenario={handleSaveScenario}
       onClientSubmit={handleClientSubmit}
@@ -935,11 +983,6 @@ export default function BucketPortfolioBuilder() {
       inputs={inputs}
       onInputChange={handleInputChange}
       assumptions={assumptions}
-      onAssumptionChange={handleAssumptionChange}
-      onApplyHistoricalAverages={applyHistoricalAverages}
-      onApplyFourPercentRule={applyFourPercentRule}
-      showSettings={showSettings}
-      onToggleSettings={() => setShowSettings(!showSettings)}
       activeTab={activeTab}
       onSetActiveTab={setActiveTab}
       rebalanceFreq={rebalanceFreq}
@@ -959,13 +1002,6 @@ export default function BucketPortfolioBuilder() {
       onSetTargetMaxPortfolioAge={setTargetMaxPortfolioAge}
       onUpdateSSStartAge={updateSSStartAge}
       onUpdatePartnerSSStartAge={updatePartnerSSStartAge}
-      onAddAdditionalIncome={addAdditionalIncome}
-      onUpdateAdditionalIncome={updateAdditionalIncome}
-      onRemoveAdditionalIncome={removeAdditionalIncome}
-      onAddCashFlowAdjustment={addCashFlowAdjustment}
-      onUpdateCashFlowAdjustment={updateCashFlowAdjustment}
-      onRemoveCashFlowAdjustment={removeCashFlowAdjustment}
-      onViewManagement={() => setAdvisorView('management')}
       // Command Center (The One Process) integration
       commandCenterStatus={commandCenterStatus}
       onSaveToCommandCenter={handleSaveToCommandCenter}

@@ -5,4 +5,4 @@ export { Card, StatBox, AllocationRow, FormattedNumberInput } from './ui';
 export { GateScreen, LoginScreen, ClientLoginScreen } from './auth';
 
 // Page Components
-export { AccumulationPage, ArchitectPage, ClientWizard, PlanManagement } from './pages';
+export { AccumulationPage, ArchitectPage, InputsPage, ClientWizard, PlanManagement } from './pages';

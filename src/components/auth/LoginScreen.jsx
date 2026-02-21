@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { ArrowRight, AlertCircle, CheckCircle, Mail } from 'lucide-react';
 import { Disclaimer } from '../ui';
+import { LOGO_URL } from '../../constants';
 import { validatePassword, getPasswordRequirements } from '../../utils/passwordValidation';
 
 export const LoginScreen = ({ onBack, onLogin, onPasswordReset, authError, resetStatus }) => {
@@ -45,6 +46,7 @@ export const LoginScreen = ({ onBack, onLogin, onPasswordReset, authError, reset
       <div className="min-h-screen bg-slate-100 flex items-center justify-center p-4 sm:p-6">
         <div className="bg-white p-6 sm:p-8 rounded-xl shadow-lg w-full max-w-sm">
           <div className="text-center">
+            <img src={LOGO_URL} alt="Logo" className="h-16 sm:h-20 mx-auto mb-4" />
             <div className="mx-auto w-12 h-12 bg-emerald-100 rounded-full flex items-center justify-center mb-4">
               <CheckCircle className="w-6 h-6 text-emerald-600" />
             </div>
@@ -86,6 +88,7 @@ export const LoginScreen = ({ onBack, onLogin, onPasswordReset, authError, reset
     return (
       <div className="min-h-screen bg-slate-100 flex items-center justify-center p-4 sm:p-6">
         <div className="bg-white p-6 sm:p-8 rounded-xl shadow-lg w-full max-w-sm">
+          <img src={LOGO_URL} alt="Logo" className="h-16 sm:h-20 mx-auto mb-4" />
           <button
             onClick={() => {
               setIsResetMode(false);
@@ -153,6 +156,7 @@ export const LoginScreen = ({ onBack, onLogin, onPasswordReset, authError, reset
   return (
     <div className="min-h-screen bg-slate-100 flex items-center justify-center p-4 sm:p-6">
       <div className="bg-white p-6 sm:p-8 rounded-xl shadow-lg w-full max-w-sm">
+        <img src={LOGO_URL} alt="Logo" className="h-16 sm:h-20 mx-auto mb-4" />
         <button
           onClick={onBack}
           className="mb-4 sm:mb-6 text-sm text-slate-400 hover:text-slate-600 flex items-center gap-1"

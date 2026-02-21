@@ -586,10 +586,10 @@ export const calculateBasePlan = (inputs, assumptions, clientInfo, vaEnabled = f
 
   const b1Val = Math.round(calculateBucketNeed(1, 3, assumptions.b1.return) / 1000) * 1000;
   const b2Val = Math.round(calculateBucketNeed(4, 6, assumptions.b2.return) / 1000) * 1000;
-  // B3 covers years 7-15 with minimum 20% and maximum 35% allocation
+  // B3 covers years 7-15 with minimum 20% and maximum 25% allocation
   const b3Calculated = Math.round(calculateBucketNeed(7, 15, assumptions.b3.return) / 1000) * 1000;
   const b3Min = Math.round((bucketPortfolio * 0.20) / 1000) * 1000;
-  const b3Max = Math.round((bucketPortfolio * 0.35) / 1000) * 1000;
+  const b3Max = Math.round((bucketPortfolio * 0.25) / 1000) * 1000;
   const b3Val = Math.min(Math.max(b3Calculated, b3Min), b3Max);
 
   // B4 is 10% but may be reduced to ensure B5 >= 2x B4
@@ -1099,7 +1099,7 @@ export const runOptimizedSimulation = (allocation, assumptions, inputs, clientIn
     inflationRate, personalInflationRate, additionalIncomes, cashFlowAdjustments } = inputs;
 
   const simulationStartAge = Math.max(clientInfo.currentAge, clientInfo.retirementAge);
-  const years = 30;
+  const years = Math.max(1, 95 - simulationStartAge);
   const iterations = 500;
 
   // Calculate VA allocation if enabled
@@ -1261,9 +1261,15 @@ export const runOptimizedSimulation = (allocation, assumptions, inputs, clientIn
       balances.b4 *= (1 + rates.b4);
       balances.b5 *= (1 + rates.b5);
 
-      // Add one-time contributions
+      // Add one-time contributions proportionally to target allocation
       const details = getAnnualDetails(i);
-      balances.b5 += details.oneTimeContributions;
+      if (details.oneTimeContributions > 0) {
+        balances.b1 += details.oneTimeContributions * targetPcts.b1;
+        balances.b2 += details.oneTimeContributions * targetPcts.b2;
+        balances.b3 += details.oneTimeContributions * targetPcts.b3;
+        balances.b4 += details.oneTimeContributions * targetPcts.b4;
+        balances.b5 += details.oneTimeContributions * targetPcts.b5;
+      }
 
       // VA GIB: Calculate guaranteed income and update VA account
       let vaGuaranteedIncome = 0;

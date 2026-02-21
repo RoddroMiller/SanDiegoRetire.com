@@ -1,8 +1,8 @@
 import React, { useMemo, useState } from 'react';
 import { ResponsiveContainer, AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip } from 'recharts';
-import { User, DollarSign, ArrowRight, FolderOpen, Loader, Trash2, LogOut, Info, Settings, Users, AlertTriangle, ChevronDown, ChevronUp, Clock } from 'lucide-react';
+import { User, DollarSign, ArrowRight, Info, AlertTriangle, ChevronDown, ChevronUp, Clock } from 'lucide-react';
 
-import { COLORS, LOGO_URL } from '../../constants';
+import { COLORS } from '../../constants';
 import { formatPhoneNumber, calculateImpliedSpending } from '../../utils';
 import { FormattedNumberInput, Disclaimer } from '../ui';
 
@@ -13,12 +13,6 @@ import { FormattedNumberInput, Disclaimer } from '../ui';
 export const AccumulationPage = ({
   // Auth
   userRole,
-  onLogout,
-  // Scenarios
-  savedScenarios,
-  isLoadingScenarios,
-  onLoadScenario,
-  onDeleteScenario,
   // Client Data
   clientInfo,
   onClientChange,
@@ -29,29 +23,8 @@ export const AccumulationPage = ({
   accumulationData,
   // Navigation
   onProceed,
-  onViewManagement,
-  // Plan Filter
-  planFilter = 'mine',
-  onPlanFilterChange,
-  hasTeams = false
 }) => {
   const [showTaxBreakdown, setShowTaxBreakdown] = useState(false);
-
-  // Find emails shared by multiple plans with different client names
-  const duplicateEmails = useMemo(() => {
-    const emailMap = {};
-    savedScenarios.forEach(s => {
-      const email = s.clientInfo?.email?.toLowerCase();
-      if (!email) return;
-      if (!emailMap[email]) emailMap[email] = new Set();
-      emailMap[email].add(s.clientInfo?.name || '');
-    });
-    const dupes = new Set();
-    Object.entries(emailMap).forEach(([email, names]) => {
-      if (names.size > 1) dupes.add(email);
-    });
-    return dupes;
-  }, [savedScenarios]);
 
   const impliedSpending = useMemo(() => {
     if (!clientInfo.annualIncome || clientInfo.annualIncome <= 0) return null;
@@ -75,119 +48,9 @@ export const AccumulationPage = ({
   return (
     <div className="min-h-screen bg-slate-50 font-sans text-slate-800 p-3 sm:p-6 flex flex-col items-center">
       <div className="max-w-4xl w-full bg-white rounded-2xl shadow-xl overflow-hidden">
-        {/* Header */}
-        <div className="bg-black p-4 sm:p-8 text-white">
-          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-            <div className="flex items-center gap-3 sm:gap-4">
-              <img src={LOGO_URL} alt="Logo" className="h-12 sm:h-16 w-auto bg-white p-1 sm:p-2 rounded-lg flex-shrink-0" />
-              <div>
-                <h1 className="text-lg sm:text-2xl md:text-3xl font-bold text-white">Retirement Growth Engine</h1>
-                <p className="text-yellow-500 text-xs sm:text-sm mt-1">Map your accumulation phase before structuring your income.</p>
-              </div>
-            </div>
-            {userRole !== 'client' && (
-              <div className="flex items-center justify-between sm:justify-end gap-2 sm:gap-4 border-t sm:border-t-0 border-slate-700 pt-3 sm:pt-0">
-                <button
-                  onClick={onViewManagement}
-                  className="px-2 sm:px-3 py-1.5 sm:py-2 bg-slate-700 hover:bg-slate-600 text-white text-xs sm:text-sm font-medium rounded-lg transition-all flex items-center gap-1 sm:gap-2"
-                >
-                  <Settings className="w-3 h-3 sm:w-4 sm:h-4" /> <span className="hidden xs:inline">Manage</span> Plans
-                </button>
-                <div className="text-right">
-                  <p className="text-[12px] sm:text-xs text-gray-400 uppercase">Logged in as</p>
-                  <p className="text-xs sm:text-sm font-bold text-emerald-400">
-                    {userRole === 'master' ? 'Master Advisor' : 'Advisor'}
-                  </p>
-                  <button
-                    onClick={onLogout}
-                    className="text-[12px] text-white hover:text-red-400 flex items-center gap-1 justify-end mt-1"
-                  >
-                    <LogOut className="w-3 h-3" /> Logout
-                  </button>
-                </div>
-              </div>
-            )}
-          </div>
-        </div>
-
         <div className="p-4 sm:p-6 md:p-8 grid grid-cols-1 md:grid-cols-2 gap-4 sm:gap-6 md:gap-8">
           {/* Left Column - Inputs */}
           <div className="space-y-4 sm:space-y-6">
-            {/* Saved Scenarios (Advisor Only) */}
-            {userRole !== 'client' && (
-              <div className="mb-6 pb-6 border-b border-slate-100">
-                <div className="flex items-center justify-between mb-3">
-                  <h3 className="text-sm font-bold text-slate-500 uppercase flex items-center gap-2">
-                    <FolderOpen className="w-4 h-4" /> Load Saved Client
-                  </h3>
-                  {/* Plan Filter Dropdown */}
-                  {(hasTeams || userRole === 'master') && (
-                    <select
-                      value={planFilter}
-                      onChange={(e) => onPlanFilterChange && onPlanFilterChange(e.target.value)}
-                      className="text-xs border border-slate-200 rounded-lg px-2 py-1 bg-white focus:ring-emerald-500 focus:border-emerald-500"
-                    >
-                      <option value="mine">My Plans</option>
-                      {hasTeams && <option value="team">Team Plans</option>}
-                      {userRole === 'master' && <option value="all">All Plans</option>}
-                    </select>
-                  )}
-                </div>
-                {planFilter === 'team' && (
-                  <div className="flex items-center gap-1 text-xs text-emerald-600 mb-2">
-                    <Users className="w-3 h-3" /> Viewing team members' plans
-                  </div>
-                )}
-                {isLoadingScenarios ? (
-                  <div className="flex items-center gap-2 text-xs text-slate-400">
-                    <Loader className="w-3 h-3 animate-spin" /> Loading...
-                  </div>
-                ) : savedScenarios.length > 0 ? (
-                  <div className="space-y-2 max-h-32 overflow-y-auto pr-2">
-                    {savedScenarios.map(s => (
-                      <div
-                        key={s.id}
-                        onClick={() => onLoadScenario(s)}
-                        className="flex items-center justify-between p-2 rounded bg-slate-50 hover:bg-emerald-50 cursor-pointer border border-slate-200 transition-colors group"
-                      >
-                        <div>
-                          <div className="flex items-center gap-2">
-                            <p className="text-sm font-bold text-slate-700">
-                              {s.clientInfo.name || s.clientInfo.email || 'Unnamed'}
-                            </p>
-                            {s.isClientSubmission && (
-                              <span className="bg-emerald-100 text-emerald-700 text-[12px] px-1.5 py-0.5 rounded-full font-bold uppercase tracking-wider">
-                                New Submission
-                              </span>
-                            )}
-                            {duplicateEmails.has(s.clientInfo?.email?.toLowerCase()) && (
-                              <span className="bg-amber-100 text-amber-700 text-[12px] px-1.5 py-0.5 rounded-full font-bold uppercase tracking-wider">
-                                Duplicate Email
-                              </span>
-                            )}
-                          </div>
-                          <div className="flex items-center gap-2 text-[12px] text-slate-400">
-                            <span>{new Date(s.updatedAt).toLocaleDateString()}</span>
-                            {userRole === 'master' && (
-                              <span className="bg-slate-200 px-1 rounded text-slate-600">{s.advisorEmail}</span>
-                            )}
-                          </div>
-                        </div>
-                        <button
-                          onClick={(e) => onDeleteScenario(e, s.id)}
-                          className="text-slate-300 hover:text-red-500 p-1 opacity-0 group-hover:opacity-100"
-                        >
-                          <Trash2 className="w-3 h-3" />
-                        </button>
-                      </div>
-                    ))}
-                  </div>
-                ) : (
-                  <p className="text-xs text-slate-400 italic">No saved clients found.</p>
-                )}
-              </div>
-            )}
-
             {/* Personal Details */}
             <h3 className="text-lg font-bold text-slate-800 border-b pb-2 flex items-center gap-2">
               <User className="w-5 h-5 text-emerald-600" /> Personal Details
