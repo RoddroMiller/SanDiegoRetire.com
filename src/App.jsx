@@ -423,6 +423,27 @@ export default function BucketPortfolioBuilder() {
   const projectionData = useMemo(() => runSimulation(basePlan, assumptions, inputs, rebalanceFreq, false, null, rebalanceTargets), [basePlan, assumptions, inputs, rebalanceFreq, rebalanceTargets]);
   const monteCarloData = useMemo(() => runSimulation(basePlan, assumptions, inputs, rebalanceFreq, true, null, rebalanceTargets), [basePlan, assumptions, inputs, rebalanceFreq, rebalanceTargets]);
 
+  // Tax-forced inputs for client view: assume 100% traditional IRA/401k, 5% state tax
+  const clientTaxInputs = useMemo(() => ({
+    ...inputs,
+    taxEnabled: true,
+    traditionalPercent: 100,
+    rothPercent: 0,
+    nqPercent: 0,
+    stateRate: 5,
+    filingStatus: inputs.filingStatus || 'married',
+    withdrawalOverrides: {},
+  }), [inputs]);
+
+  const clientProjectionData = useMemo(() =>
+    runSimulation(basePlan, assumptions, clientTaxInputs, rebalanceFreq, false, null, rebalanceTargets),
+    [basePlan, assumptions, clientTaxInputs, rebalanceFreq, rebalanceTargets]
+  );
+  const clientMonteCarloData = useMemo(() =>
+    runSimulation(basePlan, assumptions, clientTaxInputs, rebalanceFreq, true, null, rebalanceTargets),
+    [basePlan, assumptions, clientTaxInputs, rebalanceFreq, rebalanceTargets]
+  );
+
   // VA GIB Monte Carlo - uses VA-adjusted bucket allocations
   const vaMonteCarloData = useMemo(() => {
     if (!vaEnabled || !vaAdjustedBasePlan) return null;
@@ -813,8 +834,8 @@ export default function BucketPortfolioBuilder() {
         inputs={inputs}
         onInputChange={handleInputChange}
         accumulationData={accumulationData}
-        projectionData={projectionData}
-        monteCarloData={monteCarloData}
+        projectionData={clientProjectionData}
+        monteCarloData={clientMonteCarloData}
         ssAnalysis={ssAnalysis}
         ssPartnerAnalysis={ssPartnerAnalysis}
         onSaveProgress={handleClientSaveProgress}
@@ -850,8 +871,8 @@ export default function BucketPortfolioBuilder() {
         inputs={inputs}
         onInputChange={handleInputChange}
         accumulationData={accumulationData}
-        projectionData={projectionData}
-        monteCarloData={monteCarloData}
+        projectionData={clientProjectionData}
+        monteCarloData={clientMonteCarloData}
         ssAnalysis={ssAnalysis}
         ssPartnerAnalysis={ssPartnerAnalysis}
         onSaveProgress={handleClientSaveProgress}

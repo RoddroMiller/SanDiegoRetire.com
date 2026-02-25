@@ -73,9 +73,24 @@ export const ImportantDisclosures = ({ className = '' }) => {
           <div>
             <p className="font-bold text-slate-600 text-[12px] mb-1">Tax Considerations</p>
             <p>
-              This analysis does not consider the impact of taxes on your investment returns or withdrawals.
-              Tax laws are subject to change. Please consult a qualified tax professional regarding your
-              specific situation.
+              This analysis estimates the impact of income taxes on retirement withdrawals by assuming all
+              portfolio assets are held in pre-tax retirement accounts (IRA/401k) and applying a 5% state
+              income tax rate. Actual tax liability will depend on your specific account types, withdrawal
+              strategy, and applicable tax laws, which are subject to change. Please consult a qualified
+              tax professional regarding your specific situation.
+            </p>
+          </div>
+
+          <div>
+            <p className="font-bold text-slate-600 text-[12px] mb-1">Asset Location, Distribution Strategy & Tax Management</p>
+            <p>
+              The tax assumptions used in this illustration represent a simplified, conservative scenario.
+              In practice, asset location (the placement of investments across taxable, tax-deferred, and
+              tax-free accounts), distribution strategy (the order and timing of withdrawals from different
+              account types), and proactive tax management (such as Roth conversions, tax-loss harvesting,
+              and bracket management) could all have a meaningful impact on the after-tax outcome of your
+              portfolio. A well-coordinated strategy across these areas may significantly improve your
+              retirement sustainability beyond what is illustrated here.
             </p>
           </div>
 

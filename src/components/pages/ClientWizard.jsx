@@ -1417,7 +1417,7 @@ export const ClientWizard = ({
             const clientSS = getAdjustedSS(inputs.ssPIA, inputs.ssStartAge);
             const partnerSS = clientInfo.isMarried ? getAdjustedSS(inputs.partnerSSPIA, inputs.partnerSSStartAge) : 0;
             const portfolioWithdrawal = Math.max(0, monthlySpend - clientSS - partnerSS);
-            return `$${Math.round(portfolioWithdrawal).toLocaleString()}/mo from portfolio`;
+            return `$${Math.round(portfolioWithdrawal).toLocaleString()}/mo from portfolio (before taxes)`;
           })()}
           icon={DollarSign}
           colorClass={`bg-yellow-500 text-white ${adjustedProjections.hasChanges && selectedImprovements.spending ? 'ring-2 ring-emerald-400' : ''}`}
@@ -1507,6 +1507,7 @@ export const ClientWizard = ({
                   <th className="p-2 text-purple-600">Contribution</th>
                   <th className="p-2 text-blue-600">Income</th>
                   <th className="p-2 text-orange-600">Withdrawal</th>
+                  <th className="p-2 text-red-600">Est. Taxes</th>
                   <th className="p-2 text-slate-900">End Balance</th>
                 </tr>
               </thead>
@@ -1519,6 +1520,7 @@ export const ClientWizard = ({
                     <td className="p-2 text-purple-600">{row.contribution > 0 ? `+$${row.contribution.toLocaleString()}` : '-'}</td>
                     <td className="p-2 text-blue-600">+${row.ssIncome.toLocaleString()}</td>
                     <td className="p-2 text-orange-600">-${row.distribution.toLocaleString()}</td>
+                    <td className="p-2 text-red-500">-${row.totalTax?.toLocaleString() || '0'}</td>
                     <td className={`p-2 font-bold ${row.total > 0 ? 'text-slate-900' : 'text-red-500'}`}>${Math.round(row.total).toLocaleString()}</td>
                   </tr>
                 ))}
@@ -1526,6 +1528,9 @@ export const ClientWizard = ({
             </table>
           </div>
         )}
+        <p className="mt-3 text-xs text-slate-500 italic">
+          Projections assume all savings are held in pre-tax retirement accounts (IRA/401k) with a 5% state income tax rate.
+        </p>
       </Card>
 
       {/* Adjust Your Plan - Always visible */}
@@ -1722,7 +1727,11 @@ export const ClientWizard = ({
         <div className="grid grid-cols-2 md:grid-cols-3 gap-2 text-xs text-slate-700">
           <div className="flex items-center gap-2 p-2 bg-white rounded border border-amber-300 col-span-2 md:col-span-3">
             <span className="text-amber-600 font-bold">•</span>
-            <span className="font-semibold text-amber-800">Taxes are not reflected in this illustration and can have a substantial impact on take-home pay</span>
+            <span className="font-semibold text-amber-800">Taxes are estimated using a conservative assumption (100% pre-tax accounts, 5% state rate) — proactive tax planning could meaningfully improve your outcome</span>
+          </div>
+          <div className="flex items-center gap-2 p-2 bg-white rounded border border-amber-300 col-span-2 md:col-span-3">
+            <span className="text-amber-600 font-bold">•</span>
+            <span className="font-semibold text-amber-800">Asset Location, Distribution Strategy & Tax Management strategies can improve outcomes beyond the illustration</span>
           </div>
           <div className="flex items-center gap-2 p-2 bg-white rounded border border-amber-200">
             <span className="text-amber-500">•</span> Unexpected healthcare needs
