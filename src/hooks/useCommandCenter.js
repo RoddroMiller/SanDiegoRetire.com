@@ -23,6 +23,8 @@ export const useCommandCenter = ({ currentUser }) => {
   const [userTeams, setUserTeams] = useState([]);
   const [teamMemberEmails, setTeamMemberEmails] = useState([]);
   const [isLoadingTeams, setIsLoadingTeams] = useState(false);
+  const [teamClients, setTeamClients] = useState([]);
+  const [isLoadingTeamClients, setIsLoadingTeamClients] = useState(false);
 
   // Listen for Command Center auth state changes
   useEffect(() => {
@@ -108,13 +110,44 @@ export const useCommandCenter = ({ currentUser }) => {
     fetchTeams();
   }, [currentUser]);
 
+  // Fetch team clients via Cloud Function
+  useEffect(() => {
+    if (!currentUser || !currentUser.email || !commandCenterFunctions) {
+      setTeamClients([]);
+      return;
+    }
+
+    const fetchTeamClients = async () => {
+      setIsLoadingTeamClients(true);
+      try {
+        const getTeamClients = httpsCallable(commandCenterFunctions, 'getTeamClients');
+        const result = await getTeamClients({ advisorEmail: currentUser.email });
+        const { success, teamClients: clients } = result.data;
+
+        if (success) {
+          setTeamClients(clients || []);
+          console.log('Found team clients for', clients?.length || 0, 'team members via Cloud Function');
+        } else {
+          setTeamClients([]);
+        }
+      } catch (error) {
+        console.error('Error fetching team clients:', error);
+        setTeamClients([]);
+      } finally {
+        setIsLoadingTeamClients(false);
+      }
+    };
+
+    fetchTeamClients();
+  }, [currentUser]);
+
   /**
    * Save portfolio architect data to the Client Command Center
    * @param {object} scenarioState - Current scenario state to save
    * @param {string} clientId - The client ID in the command center (must be provided or derived from clientInfo)
    * @returns {Promise<{success: boolean, message: string}>} Result
    */
-  const saveToCommandCenter = useCallback(async (scenarioState, clientId = null) => {
+  const saveToCommandCenter = useCallback(async (scenarioState, clientId = null, ownerAdvisorId = null) => {
     const { clientInfo, inputs, assumptions, targetMaxPortfolioAge, rebalanceFreq, monteCarloData, basePlan } = scenarioState;
 
     if (!currentUser) {
@@ -237,12 +270,16 @@ export const useCommandCenter = ({ currentUser }) => {
 
     try {
       const saveData = httpsCallable(commandCenterFunctions, 'savePortfolioArchitectData');
-      const result = await saveData({
+      const payload = {
         advisorEmail: currentUser.email,
         advisorId: commandCenterAdvisorId,
         clientId: resolvedClientId,
         data: portfolioArchitectData
-      });
+      };
+      if (ownerAdvisorId && ownerAdvisorId !== commandCenterAdvisorId) {
+        payload.ownerAdvisorId = ownerAdvisorId;
+      }
+      const result = await saveData(payload);
 
       if (result.data.success) {
         setCommandCenterStatus('success');
@@ -302,6 +339,8 @@ export const useCommandCenter = ({ currentUser }) => {
     teamMemberEmails,
     isLoadingTeams,
     hasTeams: userTeams.length > 0,
+    teamClients,
+    isLoadingTeamClients,
 
     // Actions
     saveToCommandCenter,

@@ -63,6 +63,8 @@ export const ArchitectPage = ({
   isCommandCenterConnected,
   commandCenterClients,
   isLoadingClients,
+  teamClients,
+  isLoadingTeamClients,
   // Manual Allocation Override
   useManualAllocation,
   manualAllocationMode,
@@ -96,6 +98,7 @@ export const ArchitectPage = ({
   // Command Center client selector state
   const [showClientSelector, setShowClientSelector] = useState(false);
   const [selectedCommandCenterClient, setSelectedCommandCenterClient] = useState(null);
+  const [selectedOwnerAdvisorId, setSelectedOwnerAdvisorId] = useState(null);
 
   // Withdrawal Override modal state
   const [showWithdrawalOverrides, setShowWithdrawalOverrides] = useState(false);
@@ -1337,35 +1340,79 @@ export const ArchitectPage = ({
             </div>
             <div className="p-4">
               <p className="text-sm text-slate-600 mb-4">Select a client to save this portfolio plan:</p>
-              {isLoadingClients ? (
+              {(isLoadingClients || isLoadingTeamClients) ? (
                 <div className="flex items-center justify-center py-8">
                   <Loader className="w-6 h-6 animate-spin text-blue-600" />
                   <span className="ml-2 text-slate-600">Loading clients...</span>
                 </div>
-              ) : commandCenterClients.length === 0 ? (
+              ) : commandCenterClients.length === 0 && (!teamClients || teamClients.length === 0) ? (
                 <div className="text-center py-8">
                   <Users className="w-12 h-12 text-slate-300 mx-auto mb-3" />
                   <p className="text-slate-500">No clients found in Command Center.</p>
                   <p className="text-sm text-slate-400 mt-1">Create a client in the Command Center first.</p>
                 </div>
               ) : (
-                <div className="space-y-2 max-h-60 overflow-y-auto">
-                  {commandCenterClients.map((client) => (
-                    <button
-                      key={client.id}
-                      onClick={() => setSelectedCommandCenterClient(client)}
-                      className={`w-full text-left p-3 rounded-lg border transition-all ${
-                        selectedCommandCenterClient?.id === client.id
-                          ? 'border-blue-500 bg-blue-50'
-                          : 'border-slate-200 hover:border-slate-300 hover:bg-slate-50'
-                      }`}
-                    >
-                      <div className="font-medium text-slate-800">{client.displayName}</div>
-                      {client.email && (
-                        <div className="text-sm text-slate-500">{client.email}</div>
-                      )}
-                    </button>
-                  ))}
+                <div className="space-y-2 max-h-[400px] overflow-y-auto">
+                  {/* Your Clients */}
+                  {commandCenterClients.length > 0 && (
+                    <>
+                      <div className="text-xs font-semibold text-slate-500 uppercase tracking-wider px-1 pt-1">Your Clients</div>
+                      {commandCenterClients.map((client) => (
+                        <button
+                          key={client.id}
+                          onClick={() => {
+                            setSelectedCommandCenterClient(client);
+                            setSelectedOwnerAdvisorId(null);
+                          }}
+                          className={`w-full text-left p-3 rounded-lg border transition-all ${
+                            selectedCommandCenterClient?.id === client.id && !selectedOwnerAdvisorId
+                              ? 'border-blue-500 bg-blue-50'
+                              : 'border-slate-200 hover:border-slate-300 hover:bg-slate-50'
+                          }`}
+                        >
+                          <div className="font-medium text-slate-800">{client.displayName}</div>
+                          {client.email && (
+                            <div className="text-sm text-slate-500">{client.email}</div>
+                          )}
+                        </button>
+                      ))}
+                    </>
+                  )}
+
+                  {/* Team Clients */}
+                  {teamClients && teamClients.length > 0 && (
+                    <>
+                      <div className="border-t border-slate-200 mt-3 pt-3">
+                        <div className="text-xs font-semibold text-slate-500 uppercase tracking-wider px-1 mb-2">Team Clients</div>
+                      </div>
+                      {teamClients.map((advisor) => (
+                        <div key={advisor.advisorId}>
+                          <div className="text-xs font-medium text-slate-400 px-1 py-1">
+                            {advisor.advisorName}'s Clients
+                          </div>
+                          {advisor.clients.map((client) => (
+                            <button
+                              key={`${advisor.advisorId}-${client.id}`}
+                              onClick={() => {
+                                setSelectedCommandCenterClient(client);
+                                setSelectedOwnerAdvisorId(advisor.advisorId);
+                              }}
+                              className={`w-full text-left p-3 rounded-lg border transition-all ${
+                                selectedCommandCenterClient?.id === client.id && selectedOwnerAdvisorId === advisor.advisorId
+                                  ? 'border-blue-500 bg-blue-50'
+                                  : 'border-slate-200 hover:border-slate-300 hover:bg-slate-50'
+                              }`}
+                            >
+                              <div className="font-medium text-slate-800">{client.displayName}</div>
+                              {client.email && (
+                                <div className="text-sm text-slate-500">{client.email}</div>
+                              )}
+                            </button>
+                          ))}
+                        </div>
+                      ))}
+                    </>
+                  )}
                 </div>
               )}
             </div>
@@ -1382,11 +1429,12 @@ export const ArchitectPage = ({
                     alert('Please select a client first.');
                     return;
                   }
-                  const result = await onSaveToCommandCenter(selectedCommandCenterClient.id);
+                  const result = await onSaveToCommandCenter(selectedCommandCenterClient.id, selectedOwnerAdvisorId);
                   if (result.success) {
                     alert(result.message);
                     setShowClientSelector(false);
                     setSelectedCommandCenterClient(null);
+                    setSelectedOwnerAdvisorId(null);
                   } else {
                     alert(`Error: ${result.message}`);
                   }

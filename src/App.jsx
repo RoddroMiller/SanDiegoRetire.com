@@ -61,7 +61,9 @@ export default function BucketPortfolioBuilder() {
     isLoadingClients,
     userTeams,
     teamMemberEmails,
-    hasTeams
+    hasTeams,
+    teamClients,
+    isLoadingTeamClients
   } = useCommandCenter({ currentUser });
 
   // --- Scenarios Hook ---
@@ -222,7 +224,7 @@ export default function BucketPortfolioBuilder() {
     saveScenario({ clientInfo, inputs, assumptions, targetMaxPortfolioAge, rebalanceFreq, vaEnabled, vaInputs, legacyBalance });
   };
 
-  const handleSaveToCommandCenter = async (selectedClientId) => {
+  const handleSaveToCommandCenter = async (selectedClientId, ownerAdvisorId = null) => {
     const result = await saveToCommandCenter({
       clientInfo,
       inputs,
@@ -232,7 +234,7 @@ export default function BucketPortfolioBuilder() {
       // Include computed data for Command Center display
       monteCarloData,
       basePlan
-    }, selectedClientId);
+    }, selectedClientId, ownerAdvisorId);
     return result;
   };
 
@@ -1029,6 +1031,8 @@ export default function BucketPortfolioBuilder() {
       isCommandCenterConnected={isCommandCenterConnected}
       commandCenterClients={commandCenterClients}
       isLoadingClients={isLoadingClients}
+      teamClients={teamClients}
+      isLoadingTeamClients={isLoadingTeamClients}
       // Manual Allocation Override
       useManualAllocation={useManualAllocation}
       manualAllocationMode={manualAllocationMode}
