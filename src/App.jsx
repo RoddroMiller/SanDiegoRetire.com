@@ -728,6 +728,31 @@ export default function BucketPortfolioBuilder() {
     saveProgress({ clientInfo, inputs: updatedInputs, assumptions, targetMaxPortfolioAge, rebalanceFreq, vaEnabled, vaInputs, legacyBalance }, userRole);
   };
 
+  // Auto-save for prospective clients: debounced save whenever clientInfo or inputs change
+  const autoSaveTimerRef = React.useRef(null);
+  useEffect(() => {
+    if (userRole !== 'anonymous' && userRole !== 'registeredClient') return;
+    // Don't save if client has no name yet (initial state)
+    if (!clientInfo.name) return;
+
+    if (autoSaveTimerRef.current) clearTimeout(autoSaveTimerRef.current);
+    autoSaveTimerRef.current = setTimeout(() => {
+      const finalAccumulation = accumulationData[accumulationData.length - 1]?.balance || 0;
+      const yearsToRetire = Math.max(0, clientInfo.retirementAge - clientInfo.currentAge);
+      const futureSpending = clientInfo.currentSpending * Math.pow(1 + (inputs.personalInflationRate / 100), yearsToRetire);
+      const updatedInputs = {
+        ...inputs,
+        totalPortfolio: finalAccumulation,
+        monthlySpending: inputs.monthlySpending === 0 ? Math.round(futureSpending) : inputs.monthlySpending
+      };
+      const legacyEntry = projectionData.find(p => p.age >= 95) || projectionData[projectionData.length - 1];
+      const legacyBalance = legacyEntry?.total || 0;
+      saveProgress({ clientInfo, inputs: updatedInputs, assumptions, targetMaxPortfolioAge, rebalanceFreq, vaEnabled, vaInputs, legacyBalance }, userRole);
+    }, 2000);
+
+    return () => { if (autoSaveTimerRef.current) clearTimeout(autoSaveTimerRef.current); };
+  }, [clientInfo, inputs, assumptions, targetMaxPortfolioAge, rebalanceFreq, vaEnabled, vaInputs, userRole, accumulationData, projectionData, saveProgress]);
+
   const generateReport = () => {
     setIsGeneratingReport(true);
     setTimeout(() => {
