@@ -52,7 +52,7 @@ service cloud.firestore {
           (request.resource.data.advisorId in ['CLIENT_SUBMISSION', 'CLIENT_PROGRESS'])
         );
 
-      // Update: owner, assigned client (limited), or master
+      // Update: owner, assigned client (limited), master, or anonymous updating own progress
       allow update: if isSignedIn()
         && (
           // Owner can update their own scenarios
@@ -65,6 +65,10 @@ service cloud.firestore {
           (isAssignedClient(resource)
             && (!request.resource.data.diff(resource.data).affectedKeys()
                 .hasAny(['advisorId', 'advisorEmail'])))
+          ||
+          // Anonymous/client users can update their own CLIENT_PROGRESS docs
+          (resource.data.advisorId == 'CLIENT_PROGRESS'
+            && request.resource.data.advisorId == 'CLIENT_PROGRESS')
         );
 
       // Delete: owner or master only

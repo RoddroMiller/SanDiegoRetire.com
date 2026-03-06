@@ -180,7 +180,7 @@ export const useScenarios = ({ currentUser, userRole, planFilter = 'mine', teamM
       return false;
     }
 
-    const isClient = role === 'client';
+    const isClient = role === 'client' || role === 'anonymous' || role === 'registeredClient';
     const baseDocId = isClient
       ? `progress_${clientInfo.name || clientInfo.email || 'client'}`
       : (clientInfo.email || clientInfo.name || `scenario_${Date.now()}`);
