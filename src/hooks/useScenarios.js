@@ -40,31 +40,41 @@ export const useScenarios = ({ currentUser, userRole, planFilter = 'mine', teamM
         }
         // Master can see all or filter by team
         else if (userRole === 'master') {
+          const isProspective = (s) =>
+            s.advisorId === 'CLIENT_PROGRESS' || s.advisorId === 'CLIENT_SUBMISSION';
+
           if (planFilter === 'mine') {
             scenarios = scenarios.filter(s =>
               s.advisorId === currentUser.uid ||
-              s.advisorEmail?.toLowerCase() === currentUser.email?.toLowerCase()
+              s.advisorEmail?.toLowerCase() === currentUser.email?.toLowerCase() ||
+              isProspective(s)
             );
           } else if (planFilter === 'team' && teamMemberEmails.length > 0) {
             scenarios = scenarios.filter(s =>
-              teamMemberEmails.includes(s.advisorEmail?.toLowerCase())
+              teamMemberEmails.includes(s.advisorEmail?.toLowerCase()) ||
+              isProspective(s)
             );
           }
           // planFilter === 'all' shows everything for master
         }
-        // Regular advisors: filter by mine or team
+        // Regular advisors: filter by mine or team, always include prospective clients
         else {
+          const isProspective = (s) =>
+            s.advisorId === 'CLIENT_PROGRESS' || s.advisorId === 'CLIENT_SUBMISSION';
+
           if (planFilter === 'team' && teamMemberEmails.length > 0) {
-            // Show all team members' plans (including own)
+            // Show all team members' plans (including own) + prospective clients
             scenarios = scenarios.filter(s =>
-              teamMemberEmails.includes(s.advisorEmail?.toLowerCase())
+              teamMemberEmails.includes(s.advisorEmail?.toLowerCase()) ||
+              isProspective(s)
             );
           } else {
-            // Default to 'mine' - show only own plans
+            // Default to 'mine' - show own plans + prospective clients
             scenarios = scenarios.filter(s =>
               s.advisorId === currentUser.uid ||
               s.advisorEmail?.toLowerCase() === currentUser.email?.toLowerCase() ||
-              s.advisorId?.toLowerCase() === currentUser.email?.toLowerCase()
+              s.advisorId?.toLowerCase() === currentUser.email?.toLowerCase() ||
+              isProspective(s)
             );
           }
         }
