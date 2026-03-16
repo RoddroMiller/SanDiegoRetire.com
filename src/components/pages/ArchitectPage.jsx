@@ -2253,6 +2253,11 @@ const WithdrawalOverrideModal = ({ projectionData, inputs, onWithdrawalOverrideC
 };
 
 const MonteCarloTab = ({ monteCarloData, rebalanceFreq, vaEnabled, vaInputs, onToggleVa, onVaInputChange, vaMonteCarloData, inputs, basePlan, vaAdjustedBasePlan }) => {
+  // Derive final projection age from simulation data
+  const simYears = monteCarloData?.data?.length || 30;
+  const startAge = basePlan?.simulationStartAge || 65;
+  const finalProjectionAge = startAge + simYears;
+
   // Calculate VA allocation amount for display
   const vaAllocationAmount = vaInputs && vaEnabled
     ? (vaInputs.allocationType === 'percentage'
