@@ -80,7 +80,8 @@ export default function BucketPortfolioBuilder() {
     reassignScenario,
     refreshScenarios,
     assignPlanToClient,
-    removeClientAssignment
+    removeClientAssignment,
+    updateClientStatus
   } = useScenarios({ currentUser, userRole, planFilter, teamMemberEmails });
 
   // --- Advisors Hook ---
@@ -958,6 +959,7 @@ export default function BucketPortfolioBuilder() {
         onRefreshAdvisors={refreshAdvisors}
         onAssignPlanToClient={assignPlanToClient}
         onRemoveClientAssignment={removeClientAssignment}
+        onUpdateClientStatus={updateClientStatus}
         planFilter={planFilter}
         onPlanFilterChange={setPlanFilter}
         hasTeams={hasTeams}

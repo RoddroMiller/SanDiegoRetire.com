@@ -30,6 +30,8 @@ export const PlanManagement = ({
   // Client assignment
   onAssignPlanToClient,
   onRemoveClientAssignment,
+  // Client status
+  onUpdateClientStatus,
   // Plan filter
   planFilter = 'mine',
   onPlanFilterChange,
@@ -38,7 +40,7 @@ export const PlanManagement = ({
   const [searchTerm, setSearchTerm] = useState('');
   const [sortField, setSortField] = useState('updatedAt');
   const [sortDirection, setSortDirection] = useState('desc');
-  const [filterType, setFilterType] = useState('all'); // all, submissions, advisor, progress
+  const [filterType, setFilterType] = useState('all'); // all, client, prospect, in_progress
   const [selectedPlans, setSelectedPlans] = useState([]);
   const [reassignAdvisor, setReassignAdvisor] = useState('');
   const [assigningPlanId, setAssigningPlanId] = useState(null);
@@ -57,17 +59,26 @@ export const PlanManagement = ({
   const [clientAssignMessage, setClientAssignMessage] = useState({ type: '', text: '', email: '' });
   const [copiedInvite, setCopiedInvite] = useState(false);
 
+  // Derive effective status for a scenario (supports legacy data without clientStatus field)
+  const getEffectiveStatus = (scenario) => {
+    if (scenario.clientStatus) return scenario.clientStatus;
+    // Legacy fallback
+    if (scenario.isClientSubmission) return 'prospect';
+    if (scenario.advisorId === 'CLIENT_PROGRESS') return 'in_progress';
+    return 'client';
+  };
+
   // Filter and sort scenarios
   const filteredScenarios = useMemo(() => {
     let filtered = [...savedScenarios];
 
     // Apply type filter
-    if (filterType === 'submissions') {
-      filtered = filtered.filter(s => s.isClientSubmission);
-    } else if (filterType === 'progress') {
-      filtered = filtered.filter(s => s.advisorId === 'CLIENT_PROGRESS');
-    } else if (filterType === 'advisor') {
-      filtered = filtered.filter(s => s.advisorId !== 'CLIENT_SUBMISSION' && s.advisorId !== 'CLIENT_PROGRESS');
+    if (filterType === 'client') {
+      filtered = filtered.filter(s => getEffectiveStatus(s) === 'client');
+    } else if (filterType === 'prospect') {
+      filtered = filtered.filter(s => getEffectiveStatus(s) === 'prospect');
+    } else if (filterType === 'in_progress') {
+      filtered = filtered.filter(s => getEffectiveStatus(s) === 'in_progress');
     }
 
     // Apply search
@@ -290,22 +301,26 @@ Your Financial Advisor`;
     });
   };
 
-  // Get status badge
-  const getStatusBadge = (scenario) => {
-    if (scenario.isClientSubmission) {
-      return <span className="px-2 py-1 text-xs font-bold bg-emerald-100 text-emerald-700 rounded-full">New Lead</span>;
+  // Status dropdown styles
+  const statusStyles = {
+    client: 'bg-emerald-100 text-emerald-700 border-emerald-200',
+    prospect: 'bg-blue-100 text-blue-700 border-blue-200',
+    in_progress: 'bg-yellow-100 text-yellow-700 border-yellow-200'
+  };
+
+  // Handle status change
+  const handleStatusChange = async (scenarioId, newStatus) => {
+    if (onUpdateClientStatus) {
+      await onUpdateClientStatus(scenarioId, newStatus);
     }
-    if (scenario.advisorId === 'CLIENT_PROGRESS') {
-      return <span className="px-2 py-1 text-xs font-bold bg-yellow-100 text-yellow-700 rounded-full">In Progress</span>;
-    }
-    return <span className="px-2 py-1 text-xs font-bold bg-slate-100 text-slate-600 rounded-full">Saved</span>;
   };
 
   // Stats
   const stats = useMemo(() => ({
     total: savedScenarios.length,
-    submissions: savedScenarios.filter(s => s.isClientSubmission).length,
-    inProgress: savedScenarios.filter(s => s.advisorId === 'CLIENT_PROGRESS').length,
+    clients: savedScenarios.filter(s => getEffectiveStatus(s) === 'client').length,
+    prospects: savedScenarios.filter(s => getEffectiveStatus(s) === 'prospect').length,
+    inProgress: savedScenarios.filter(s => getEffectiveStatus(s) === 'in_progress').length,
     totalPortfolio: savedScenarios.reduce((sum, s) => sum + (s.inputs?.totalPortfolio || 0), 0)
   }), [savedScenarios]);
 
@@ -334,7 +349,7 @@ Your Financial Advisor`;
       <div className="max-w-7xl mx-auto">
         {/* Stats Cards - hidden for registered clients */}
         {userRole !== 'registeredClient' && (
-          <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+          <div className="grid grid-cols-2 lg:grid-cols-5 gap-4 mb-6">
             <Card className="p-4">
               <div className="flex items-center gap-3">
                 <div className="p-2 bg-slate-100 rounded-lg">
@@ -352,8 +367,19 @@ Your Financial Advisor`;
                   <UserCheck className="w-5 h-5 text-emerald-600" />
                 </div>
                 <div>
-                  <p className="text-2xl font-bold text-emerald-700">{stats.submissions}</p>
-                  <p className="text-xs text-slate-500">New Leads</p>
+                  <p className="text-2xl font-bold text-emerald-700">{stats.clients}</p>
+                  <p className="text-xs text-slate-500">Clients</p>
+                </div>
+              </div>
+            </Card>
+            <Card className="p-4">
+              <div className="flex items-center gap-3">
+                <div className="p-2 bg-blue-100 rounded-lg">
+                  <UserPlus className="w-5 h-5 text-blue-600" />
+                </div>
+                <div>
+                  <p className="text-2xl font-bold text-blue-700">{stats.prospects}</p>
+                  <p className="text-xs text-slate-500">Prospects</p>
                 </div>
               </div>
             </Card>
@@ -511,22 +537,22 @@ Your Financial Advisor`;
                   All ({savedScenarios.length})
                 </button>
                 <button
-                  onClick={() => setFilterType('submissions')}
-                  className={`px-3 py-1.5 text-sm font-medium rounded-lg transition-all ${filterType === 'submissions' ? 'bg-emerald-600 text-white' : 'bg-emerald-50 text-emerald-700 hover:bg-emerald-100'}`}
+                  onClick={() => setFilterType('client')}
+                  className={`px-3 py-1.5 text-sm font-medium rounded-lg transition-all ${filterType === 'client' ? 'bg-emerald-600 text-white' : 'bg-emerald-50 text-emerald-700 hover:bg-emerald-100'}`}
                 >
-                  New Leads ({stats.submissions})
+                  Client ({stats.clients})
                 </button>
                 <button
-                  onClick={() => setFilterType('progress')}
-                  className={`px-3 py-1.5 text-sm font-medium rounded-lg transition-all ${filterType === 'progress' ? 'bg-yellow-500 text-white' : 'bg-yellow-50 text-yellow-700 hover:bg-yellow-100'}`}
+                  onClick={() => setFilterType('prospect')}
+                  className={`px-3 py-1.5 text-sm font-medium rounded-lg transition-all ${filterType === 'prospect' ? 'bg-blue-600 text-white' : 'bg-blue-50 text-blue-700 hover:bg-blue-100'}`}
+                >
+                  Prospect ({stats.prospects})
+                </button>
+                <button
+                  onClick={() => setFilterType('in_progress')}
+                  className={`px-3 py-1.5 text-sm font-medium rounded-lg transition-all ${filterType === 'in_progress' ? 'bg-yellow-500 text-white' : 'bg-yellow-50 text-yellow-700 hover:bg-yellow-100'}`}
                 >
                   In Progress ({stats.inProgress})
-                </button>
-                <button
-                  onClick={() => setFilterType('advisor')}
-                  className={`px-3 py-1.5 text-sm font-medium rounded-lg transition-all ${filterType === 'advisor' ? 'bg-blue-600 text-white' : 'bg-blue-50 text-blue-700 hover:bg-blue-100'}`}
-                >
-                  Advisor Saved
                 </button>
               </div>
 
@@ -775,8 +801,16 @@ Your Financial Advisor`;
                         </td>
                       )}
                       {userRole !== 'registeredClient' && (
-                        <td className="p-3">
-                          {getStatusBadge(scenario)}
+                        <td className="p-3" onClick={(e) => e.stopPropagation()}>
+                          <select
+                            value={getEffectiveStatus(scenario)}
+                            onChange={(e) => handleStatusChange(scenario.id, e.target.value)}
+                            className={`text-xs font-bold rounded-full px-2 py-1 border cursor-pointer focus:ring-1 focus:ring-offset-0 ${statusStyles[getEffectiveStatus(scenario)]}`}
+                          >
+                            <option value="client">Client</option>
+                            <option value="prospect">Prospect</option>
+                            <option value="in_progress">In Progress</option>
+                          </select>
                         </td>
                       )}
                       {(userRole === 'advisor' || userRole === 'master') && (

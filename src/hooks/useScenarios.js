@@ -135,9 +135,12 @@ export const useScenarios = ({ currentUser, userRole, planFilter = 'mine', teamM
     const isDuplicate = existing && existing.clientInfo?.name !== clientInfo.name;
     const safeDocId = isDuplicate ? `${safeBaseDocId}_${Date.now()}` : safeBaseDocId;
 
+    // Preserve existing clientStatus if set, otherwise default to 'client' for advisor saves
+    const existingScenario = savedScenarios.find(s => s.id === safeDocId);
     const scenarioData = {
       advisorId: currentUser.uid,
       advisorEmail: currentUser.email || 'anonymous',
+      clientStatus: existingScenario?.clientStatus || 'client',
       clientInfo,
       inputs,
       assumptions,
@@ -211,6 +214,7 @@ export const useScenarios = ({ currentUser, userRole, planFilter = 'mine', teamM
       advisorId: isClient ? 'CLIENT_PROGRESS' : currentUser.uid,
       advisorEmail: isClient ? 'Client Progress' : (currentUser.email || 'anonymous'),
       isClientSubmission: false,
+      clientStatus: 'in_progress',
       clientInfo,
       inputs,
       assumptions,
@@ -275,6 +279,7 @@ export const useScenarios = ({ currentUser, userRole, planFilter = 'mine', teamM
       advisorId: 'CLIENT_SUBMISSION',
       advisorEmail: 'Client Submission',
       isClientSubmission: true,
+      clientStatus: 'prospect',
       clientInfo,
       inputs,
       assumptions,
@@ -461,6 +466,40 @@ export const useScenarios = ({ currentUser, userRole, planFilter = 'mine', teamM
   }, [currentUser, userRole, planFilter, teamMemberEmails]);
 
   /**
+   * Update the clientStatus of a scenario
+   * @param {string} scenarioId - Scenario ID to update
+   * @param {string} newStatus - New status ('client', 'prospect', 'in_progress')
+   * @returns {Promise<boolean>} Success status
+   */
+  const updateClientStatus = useCallback(async (scenarioId, newStatus) => {
+    if (!db) return false;
+
+    try {
+      await updateDoc(
+        doc(db, 'artifacts', appId, 'public', 'data', 'scenarios', scenarioId),
+        {
+          clientStatus: newStatus,
+          updatedAt: Date.now()
+        }
+      );
+
+      // Update local state
+      setSavedScenarios(prev =>
+        prev.map(s =>
+          s.id === scenarioId
+            ? { ...s, clientStatus: newStatus, updatedAt: Date.now() }
+            : s
+        )
+      );
+
+      return true;
+    } catch (error) {
+      console.error("Error updating client status:", error);
+      return false;
+    }
+  }, []);
+
+  /**
    * Assign a plan to a client by email
    * @param {string} scenarioId - Scenario ID to assign
    * @param {string} clientEmail - Client email address
@@ -555,7 +594,8 @@ export const useScenarios = ({ currentUser, userRole, planFilter = 'mine', teamM
     reassignScenario,
     refreshScenarios,
     assignPlanToClient,
-    removeClientAssignment
+    removeClientAssignment,
+    updateClientStatus
   };
 };
 
