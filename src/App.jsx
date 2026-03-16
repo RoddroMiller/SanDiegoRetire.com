@@ -187,9 +187,14 @@ export default function BucketPortfolioBuilder() {
     monthlyPension: 0,
     pensionStartAge: 65,
     pensionCOLA: false,
+    pensionSurvivorBenefitPct: 0,
     partnerMonthlyPension: 0,
     partnerPensionStartAge: 65,
     partnerPensionCOLA: false,
+    partnerPensionSurvivorBenefitPct: 0,
+    expectedDeathAge: 95,
+    partnerExpectedDeathAge: 95,
+    spendingReductionAtFirstDeath: 25,
     inflationRate: 2.5,
     personalInflationRate: 1.5,
     ssReinvestRate: 4.5,
@@ -267,6 +272,12 @@ export default function BucketPortfolioBuilder() {
         nqQualifiedDividendPercent: s.inputs.nqQualifiedDividendPercent ?? 80,
         nqCapitalGainRate: s.inputs.nqCapitalGainRate ?? 50,
         withdrawalOverrides: s.inputs.withdrawalOverrides || {},
+        // Migration defaults for life expectancy & survivor benefits
+        expectedDeathAge: s.inputs.expectedDeathAge ?? 95,
+        partnerExpectedDeathAge: s.inputs.partnerExpectedDeathAge ?? 95,
+        pensionSurvivorBenefitPct: s.inputs.pensionSurvivorBenefitPct ?? 0,
+        partnerPensionSurvivorBenefitPct: s.inputs.partnerPensionSurvivorBenefitPct ?? 0,
+        spendingReductionAtFirstDeath: s.inputs.spendingReductionAtFirstDeath ?? 25,
       });
       setAssumptions(s.assumptions);
       if (s.targetMaxPortfolioAge) setTargetMaxPortfolioAge(s.targetMaxPortfolioAge);

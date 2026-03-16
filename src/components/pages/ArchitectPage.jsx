@@ -89,11 +89,13 @@ export const ArchitectPage = ({
   onAccountSplitChange,
   onWithdrawalOverrideChange
 }) => {
-  // Compute legacy balance at age 95 (or last available year)
+  // Compute legacy balance and final projection age
+  const lastProjectionEntry = useMemo(() => projectionData[projectionData.length - 1], [projectionData]);
+  const finalProjectionAge = lastProjectionEntry?.age || 95;
   const legacyAt95 = useMemo(() => {
-    const entry = projectionData.find(p => p.age >= 95) || projectionData[projectionData.length - 1];
+    const entry = projectionData.find(p => p.age >= 95) || lastProjectionEntry;
     return entry?.total || 0;
-  }, [projectionData]);
+  }, [projectionData, lastProjectionEntry]);
 
   // Command Center client selector state
   const [showClientSelector, setShowClientSelector] = useState(false);
@@ -442,18 +444,18 @@ export const ArchitectPage = ({
                 : `${(monteCarloData?.successRate || 0).toFixed(1)}%`}
               subtext={adjustedProjections.hasChanges
                 ? <><span className="line-through opacity-60">{(monteCarloData?.successRate || 0).toFixed(1)}%</span> → +{(adjustedProjections.successRate - (monteCarloData?.successRate || 0)).toFixed(1)}%</>
-                : "Positive balance at age 95"}
+                : `Positive balance through age ${finalProjectionAge}`}
               icon={Activity}
               colorClass={`${(adjustedProjections.hasChanges ? adjustedProjections.successRate : monteCarloData?.successRate) > 80 ? "bg-emerald-600" : "bg-orange-500"} text-white ${adjustedProjections.hasChanges ? 'ring-2 ring-yellow-300' : ''}`}
             />
             <StatBox
-              label="Legacy Balance (Age 95)"
+              label={`Legacy Balance (Age ${finalProjectionAge})`}
               value={adjustedProjections.hasChanges
                 ? `$${(adjustedProjections.legacyBalance / 1000000).toFixed(2)}M`
                 : `$${((legacyAt95) / 1000000).toFixed(2)}M`}
               subtext={adjustedProjections.hasChanges
                 ? <><span className="line-through opacity-60">${((legacyAt95) / 1000000).toFixed(2)}M</span> → +${((adjustedProjections.legacyBalance - (legacyAt95)) / 1000).toFixed(0)}k</>
-                : "Projected value at age 95"}
+                : `Projected value at age ${finalProjectionAge}`}
               icon={Shield}
               colorClass={`bg-emerald-800 text-white ${adjustedProjections.hasChanges ? 'ring-2 ring-yellow-300' : ''}`}
             />
@@ -861,7 +863,7 @@ export const ArchitectPage = ({
             {/* Bottom Stats */}
             <div className="grid grid-cols-2 gap-4">
               <div className="border-2 border-slate-200 rounded-lg p-3 text-center">
-                <p className="text-xs text-slate-500 uppercase tracking-wide mb-1">30-Year Success Probability</p>
+                <p className="text-xs text-slate-500 uppercase tracking-wide mb-1">Success Probability (Age {finalProjectionAge})</p>
                 <div className={`text-3xl font-bold ${monteCarloData.successRate >= 85 ? 'text-emerald-600' : monteCarloData.successRate >= 70 ? 'text-yellow-600' : 'text-red-600'}`}>
                   {monteCarloData.successRate.toFixed(1)}%
                 </div>
@@ -2599,7 +2601,7 @@ const MonteCarloTab = ({ monteCarloData, rebalanceFreq, vaEnabled, vaInputs, onT
       ) : (
         /* Standard single chart when VA not enabled */
         <Card className="p-6">
-          <h3 className="font-bold text-lg text-slate-800 mb-6">Monte Carlo Range (30 Years)</h3>
+          <h3 className="font-bold text-lg text-slate-800 mb-6">Monte Carlo Range (Through Age {finalProjectionAge})</h3>
           <div className="h-96 w-full">
             <ResponsiveContainer width="100%" height="100%">
               <ComposedChart data={monteCarloData.data}>

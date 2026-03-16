@@ -247,7 +247,7 @@ export const GateScreen = ({ onAdvisorClick, onClientLoginClick, onProspectEntry
         <div className="max-w-sm mx-auto">
           <button
             onClick={onAdvisorClick}
-            className="w-full flex items-center justify-center gap-2 p-3 border-2 border-emerald-600 bg-white text-emerald-800 rounded-xl hover:bg-emerald-50 transition-all font-semibold text-sm"
+            className="w-full flex items-center justify-center gap-2 p-3 bg-white text-emerald-800 rounded-xl hover:bg-emerald-50 transition-all font-semibold text-sm"
           >
             <Briefcase className="w-4 h-4" /> Advisor Login
           </button>

@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import {
   Briefcase, DollarSign, Shield, Info, Plus, Trash2, RefreshCcw,
-  TrendingUp, Settings, Table as TableIcon
+  TrendingUp, Settings, Table as TableIcon, Heart
 } from 'lucide-react';
 
 import { estimatePIAFromIncome } from '../../utils';
@@ -315,6 +315,46 @@ export const InputsPage = ({
         </div>
       </Card>
 
+      {/* Life Expectancy Card */}
+      <Card className="p-6">
+        <h3 className="font-semibold text-slate-800 mb-5 flex items-center gap-2 text-lg">
+          <Heart className="w-5 h-5" /> Life Expectancy
+        </h3>
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          <div className="relative group">
+            <label className="text-xs font-bold text-slate-500 uppercase flex items-center gap-1">
+              {clientInfo.name || 'Client'}'s Expected Age at Death <Info className="w-3 h-3 text-slate-400" />
+            </label>
+            <div className="absolute left-0 bottom-full mb-1 hidden group-hover:block w-64 bg-slate-800 text-white text-xs p-2 rounded shadow-lg z-10">
+              The age through which to project income and expenses. Social Security and pensions stop at this age. Defaults to 95.
+            </div>
+            <input type="number" name="expectedDeathAge" value={inputs.expectedDeathAge} onChange={onInputChange} min={65} max={110} className="w-full px-3 py-2 border rounded-md text-sm" />
+          </div>
+          {clientInfo.isMarried && (
+            <div className="relative group">
+              <label className="text-xs font-bold text-slate-500 uppercase flex items-center gap-1">
+                {clientInfo.partnerName || 'Partner'}'s Expected Age at Death <Info className="w-3 h-3 text-slate-400" />
+              </label>
+              <div className="absolute left-0 bottom-full mb-1 hidden group-hover:block w-64 bg-slate-800 text-white text-xs p-2 rounded shadow-lg z-10">
+                Partner's life expectancy. After this age, partner's income stops and survivor benefits may apply.
+              </div>
+              <input type="number" name="partnerExpectedDeathAge" value={inputs.partnerExpectedDeathAge} onChange={onInputChange} min={65} max={110} className="w-full px-3 py-2 border rounded-md text-sm" />
+            </div>
+          )}
+          {clientInfo.isMarried && (
+            <div className="relative group">
+              <label className="text-xs font-bold text-slate-500 uppercase flex items-center gap-1">
+                Spending Reduction at First Death % <Info className="w-3 h-3 text-slate-400" />
+              </label>
+              <div className="absolute left-0 bottom-full mb-1 hidden group-hover:block w-64 bg-slate-800 text-white text-xs p-2 rounded shadow-lg z-10">
+                How much monthly spending decreases after the first spouse passes. Typical range is 20-30% since housing and many fixed costs remain.
+              </div>
+              <input type="number" name="spendingReductionAtFirstDeath" value={inputs.spendingReductionAtFirstDeath} onChange={onInputChange} min={0} max={75} step={5} className="w-full px-3 py-2 border rounded-md text-sm" />
+            </div>
+          )}
+        </div>
+      </Card>
+
       {/* Social Security Card */}
       <Card className="p-6">
         <h3 className="font-semibold text-slate-800 mb-5 flex items-center gap-2 text-lg">
@@ -416,7 +456,7 @@ export const InputsPage = ({
           {/* Client Pension */}
           <div>
             <p className="text-xs font-semibold text-slate-500 uppercase mb-3">{clientInfo.name || 'Client'}'s Pension</p>
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
               <div className="relative group">
                 <label className="text-xs text-slate-500 uppercase flex items-center gap-1">
                   Monthly Pension <Info className="w-3 h-3 text-slate-400" />
@@ -454,6 +494,17 @@ export const InputsPage = ({
                   {inputs.pensionCOLA ? '✓ Yes' : 'No'}
                 </button>
               </div>
+              {clientInfo.isMarried && (
+                <div className="relative group">
+                  <label className="text-xs text-slate-500 uppercase flex items-center gap-1">
+                    Survivor Benefit % <Info className="w-3 h-3 text-slate-400" />
+                  </label>
+                  <div className="absolute left-0 bottom-full mb-1 hidden group-hover:block w-56 bg-slate-800 text-white text-xs p-2 rounded shadow-lg z-10">
+                    Percentage of this pension the surviving spouse receives after the pensioner's death. 0% means pension stops at death.
+                  </div>
+                  <input type="number" name="pensionSurvivorBenefitPct" value={inputs.pensionSurvivorBenefitPct} onChange={onInputChange} min={0} max={100} step={5} className="w-full px-3 py-2 border rounded-md text-sm" />
+                </div>
+              )}
             </div>
           </div>
 
@@ -461,7 +512,7 @@ export const InputsPage = ({
           {clientInfo.isMarried && (
             <div className="border-t border-slate-100 pt-4">
               <p className="text-xs font-semibold text-slate-500 uppercase mb-3">{clientInfo.partnerName || 'Partner'}'s Pension</p>
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
                 <div className="relative group">
                   <label className="text-xs text-slate-500 uppercase flex items-center gap-1">
                     Monthly Pension <Info className="w-3 h-3 text-slate-400" />
@@ -498,6 +549,15 @@ export const InputsPage = ({
                   >
                     {inputs.partnerPensionCOLA ? '✓ Yes' : 'No'}
                   </button>
+                </div>
+                <div className="relative group">
+                  <label className="text-xs text-slate-500 uppercase flex items-center gap-1">
+                    Survivor Benefit % <Info className="w-3 h-3 text-slate-400" />
+                  </label>
+                  <div className="absolute left-0 bottom-full mb-1 hidden group-hover:block w-56 bg-slate-800 text-white text-xs p-2 rounded shadow-lg z-10">
+                    Percentage of partner's pension the surviving spouse receives after partner's death. 0% means pension stops at death.
+                  </div>
+                  <input type="number" name="partnerPensionSurvivorBenefitPct" value={inputs.partnerPensionSurvivorBenefitPct} onChange={onInputChange} min={0} max={100} step={5} className="w-full px-3 py-2 border rounded-md text-sm" />
                 </div>
               </div>
             </div>

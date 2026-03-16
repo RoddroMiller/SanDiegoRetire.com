@@ -420,7 +420,11 @@ export const calculateBasePlan = (inputs, assumptions, clientInfo, vaEnabled = f
   const {
     totalPortfolio, monthlySpending, ssPIA, partnerSSPIA,
     ssStartAge, partnerSSStartAge, monthlyPension, pensionStartAge, pensionCOLA,
+    pensionSurvivorBenefitPct,
     partnerMonthlyPension, partnerPensionStartAge, partnerPensionCOLA,
+    partnerPensionSurvivorBenefitPct,
+    expectedDeathAge, partnerExpectedDeathAge: partnerExpectedDeathAge_val,
+    spendingReductionAtFirstDeath,
     inflationRate, personalInflationRate, additionalIncomes,
     cashFlowAdjustments
   } = inputs;
@@ -460,7 +464,18 @@ export const calculateBasePlan = (inputs, assumptions, clientInfo, vaEnabled = f
     const expenseInflationFactor = Math.pow(1 + (personalInflationRate / 100), yearIndex);
     // Income (SS, pension) uses full inflation rate
     const incomeInflationFactor = Math.pow(1 + (inflationRate / 100), yearIndex);
-    const expenses = monthlySpending * 12 * expenseInflationFactor;
+    // Death age tracking
+    const clientExpectedDeathAge = expectedDeathAge || 95;
+    const partnerExpectedDeathAge = partnerExpectedDeathAge_val || 95;
+    const clientAlive = simAge < clientExpectedDeathAge;
+    const partnerAlive = clientInfo.isMarried && currentPartnerAge < partnerExpectedDeathAge;
+
+    // Spending reduction after first death (only for married couples)
+    const bothAlive = clientAlive && partnerAlive;
+    const reductionPct = (clientInfo.isMarried && !bothAlive && (clientAlive || partnerAlive))
+      ? (spendingReductionAtFirstDeath || 0) / 100
+      : 0;
+    const expenses = monthlySpending * 12 * expenseInflationFactor * (1 - reductionPct);
 
     // Track income by source for tax calculations
     let ssIncome = 0;
@@ -469,28 +484,55 @@ export const calculateBasePlan = (inputs, assumptions, clientInfo, vaEnabled = f
     let vaIncome = 0;
 
     // Social Security income
-    if (clientInfo.currentAge >= 67 || simAge >= ssStartAge) {
+    // Client's SS: stops at death, but surviving partner gets the higher of the two benefits
+    if (clientAlive && (clientInfo.currentAge >= 67 || simAge >= ssStartAge)) {
       ssIncome += clientSS * 12 * incomeInflationFactor;
     }
-    if (clientInfo.isMarried && (clientInfo.partnerAge >= 67 || currentPartnerAge >= partnerSSStartAge)) {
-      ssIncome += partnerSS * 12 * incomeInflationFactor;
+    if (clientInfo.isMarried) {
+      if (partnerAlive && (clientInfo.partnerAge >= 67 || currentPartnerAge >= partnerSSStartAge)) {
+        ssIncome += partnerSS * 12 * incomeInflationFactor;
+      }
+      // Survivor SS benefit: surviving spouse gets the higher of the two benefits (not both)
+      if (!clientAlive && partnerAlive && (clientInfo.partnerAge >= 67 || currentPartnerAge >= partnerSSStartAge)) {
+        // Partner was already collecting; if client's benefit was higher, upgrade to client's benefit
+        const clientSSMonthly = clientSS * incomeInflationFactor;
+        const partnerSSMonthly = partnerSS * incomeInflationFactor;
+        if (clientSSMonthly > partnerSSMonthly) {
+          // Replace partner's benefit with client's (already added partner's above, so add the difference)
+          ssIncome += (clientSSMonthly - partnerSSMonthly) * 12;
+        }
+      }
+      if (clientAlive && !partnerAlive && (clientInfo.currentAge >= 67 || simAge >= ssStartAge)) {
+        // Client was already collecting; if partner's benefit was higher, upgrade to partner's benefit
+        const clientSSMonthly = clientSS * incomeInflationFactor;
+        const partnerSSMonthly = partnerSS * incomeInflationFactor;
+        if (partnerSSMonthly > clientSSMonthly) {
+          ssIncome += (partnerSSMonthly - clientSSMonthly) * 12;
+        }
+      }
     }
 
-    // Pension income
-    if (simAge >= pensionStartAge) {
+    // Pension income with survivor benefits
+    if (clientAlive && simAge >= pensionStartAge) {
       pensionIncome += monthlyPension * 12 * (pensionCOLA ? incomeInflationFactor : 1);
+    } else if (!clientAlive && clientInfo.isMarried && partnerAlive && pensionSurvivorBenefitPct > 0 && simAge >= pensionStartAge) {
+      // Client died but partner gets survivor benefit from client's pension
+      pensionIncome += monthlyPension * (pensionSurvivorBenefitPct / 100) * 12 * (pensionCOLA ? incomeInflationFactor : 1);
     }
 
     // Partner pension (if married and has pension)
-    if (clientInfo.isMarried && partnerMonthlyPension > 0 && currentPartnerAge >= (partnerPensionStartAge || 65)) {
+    if (partnerAlive && partnerMonthlyPension > 0 && currentPartnerAge >= (partnerPensionStartAge || 65)) {
       pensionIncome += partnerMonthlyPension * 12 * (partnerPensionCOLA ? incomeInflationFactor : 1);
+    } else if (!partnerAlive && clientAlive && partnerPensionSurvivorBenefitPct > 0 && partnerMonthlyPension > 0 && currentPartnerAge >= (partnerPensionStartAge || 65)) {
+      // Partner died but client gets survivor benefit from partner's pension
+      pensionIncome += partnerMonthlyPension * (partnerPensionSurvivorBenefitPct / 100) * 12 * (partnerPensionCOLA ? incomeInflationFactor : 1);
     }
 
-    // Recurring additional incomes (monthly * 12)
+    // Recurring additional incomes (monthly * 12) - stop if owner has died
     additionalIncomes.forEach(stream => {
-      // Use partner's age if owner is 'partner', otherwise use client's age
       const ownerAge = stream.owner === 'partner' ? currentPartnerAge : simAge;
-      if (!stream.isOneTime && ownerAge >= stream.startAge && ownerAge <= (stream.endAge || 100)) {
+      const ownerAlive = stream.owner === 'partner' ? partnerAlive : clientAlive;
+      if (ownerAlive && !stream.isOneTime && ownerAge >= stream.startAge && ownerAge <= (stream.endAge || 100)) {
         let streamAmount = stream.amount * 12;
         if (stream.inflationAdjusted) streamAmount *= incomeInflationFactor;
         otherIncome += streamAmount;
@@ -508,7 +550,7 @@ export const calculateBasePlan = (inputs, assumptions, clientInfo, vaEnabled = f
     let employmentIncome = 0;
     const partnerAnnualIncome = clientInfo.partnerAnnualIncome || 0;
     const partnerRetAge = clientInfo.partnerRetirementAge || clientInfo.retirementAge;
-    if (clientInfo.isMarried && partnerAnnualIncome > 0 && currentPartnerAge < partnerRetAge) {
+    if (clientInfo.isMarried && partnerAlive && partnerAnnualIncome > 0 && currentPartnerAge < partnerRetAge) {
       // Partner still working after client retires
       let partnerEmployment = partnerAnnualIncome;
       if (inflationRate > 0) partnerEmployment *= incomeInflationFactor;
@@ -518,12 +560,12 @@ export const calculateBasePlan = (inputs, assumptions, clientInfo, vaEnabled = f
     // Total income
     const income = ssIncome + pensionIncome + otherIncome + vaIncome + employmentIncome;
 
-    // One-time contributions (added to portfolio, not income)
+    // One-time contributions (added to portfolio, not income) - only if owner is alive
     let oneTimeContributions = 0;
     additionalIncomes.forEach(stream => {
-      // Use partner's age if owner is 'partner', otherwise use client's age
       const ownerAge = stream.owner === 'partner' ? currentPartnerAge : simAge;
-      if (stream.isOneTime && ownerAge === stream.startAge) {
+      const ownerAlive = stream.owner === 'partner' ? partnerAlive : clientAlive;
+      if (ownerAlive && stream.isOneTime && ownerAge === stream.startAge) {
         let streamAmount = stream.amount;
         if (stream.inflationAdjusted) streamAmount *= incomeInflationFactor;
         oneTimeContributions += streamAmount;
@@ -615,6 +657,8 @@ export const calculateBasePlan = (inputs, assumptions, clientInfo, vaEnabled = f
     isDeficit: b5Val < 0,
     getAnnualGap,
     getAnnualDetails,
+    simulationStartAge,
+    clientInfo,
     totalSS,
     getAdjustedSS,
     vaAllocationAmount,
@@ -634,8 +678,21 @@ export const calculateBasePlan = (inputs, assumptions, clientInfo, vaEnabled = f
  * @returns {Array|object} Simulation results
  */
 export const runSimulation = (basePlan, assumptions, inputs, rebalanceFreq, isMonteCarlo = false, vaInputs = null, rebalanceTargets = null) => {
-  const { b1Val, b2Val, b3Val, b4Val, b5Val, getAnnualGap, getAnnualDetails } = basePlan;
-  const years = 30;
+  const { b1Val, b2Val, b3Val, b4Val, b5Val, getAnnualGap, getAnnualDetails, simulationStartAge, clientInfo } = basePlan;
+
+  // Run until the later-dying spouse's expected death age, capped at 30 years
+  const startAge = simulationStartAge || 65;
+  const clientDeathAge = inputs.expectedDeathAge || 95;
+  const yearsToClientDeath = clientDeathAge - startAge;
+  let yearsToLastDeath = yearsToClientDeath;
+  if (clientInfo?.isMarried) {
+    const partnerDeathAge = inputs.partnerExpectedDeathAge || 95;
+    // Convert partner's death age to years from simulation start (client's timeline)
+    const ageDiff = (clientInfo.currentAge || 0) - (clientInfo.partnerAge || 0);
+    const partnerDeathInClientAge = partnerDeathAge + ageDiff;
+    yearsToLastDeath = Math.max(yearsToClientDeath, partnerDeathInClientAge - startAge);
+  }
+  const years = Math.min(30, Math.max(1, yearsToLastDeath));
   let results = [];
   let failureCount = 0;
   const iterations = isMonteCarlo ? 500 : 1;
@@ -780,7 +837,11 @@ export const runSimulation = (basePlan, assumptions, inputs, rebalanceFreq, isMo
         const nqOrdinaryDividends = nqTotalDividends - nqQualifiedDividends;
 
         const isSenior = simAge >= 65;
-        const filingStatus = inputs.filingStatus || 'married';
+        // Switch to single filing after first spouse dies
+        const clientAliveForTax = simAge < (inputs.expectedDeathAge || 95);
+        const partnerAliveForTax = clientInfo?.isMarried && currentPartnerAge < (inputs.partnerExpectedDeathAge || 95);
+        const bothAliveForTax = clientAliveForTax && partnerAliveForTax;
+        const filingStatus = (inputs.filingStatus === 'married' && !bothAliveForTax) ? 'single' : (inputs.filingStatus || 'married');
         const stateRate = inputs.stateRate || 0;
 
         // Iterate to convergence (tax depends on withdrawal, withdrawal depends on tax)
@@ -1094,12 +1155,24 @@ export const calculateAlternativeAllocations = (inputs, basePlan) => {
  */
 export const runOptimizedSimulation = (allocation, assumptions, inputs, clientInfo, rebalanceFreq = 0, vaInputs = null) => {
   const { monthlySpending, ssPIA, partnerSSPIA, ssStartAge, partnerSSStartAge,
-    monthlyPension, pensionStartAge, pensionCOLA,
-    partnerMonthlyPension, partnerPensionStartAge, partnerPensionCOLA,
+    monthlyPension, pensionStartAge, pensionCOLA, pensionSurvivorBenefitPct,
+    partnerMonthlyPension, partnerPensionStartAge, partnerPensionCOLA, partnerPensionSurvivorBenefitPct,
+    expectedDeathAge, partnerExpectedDeathAge, spendingReductionAtFirstDeath,
     inflationRate, personalInflationRate, additionalIncomes, cashFlowAdjustments } = inputs;
 
   const simulationStartAge = Math.max(clientInfo.currentAge, clientInfo.retirementAge);
-  const years = Math.max(1, 95 - simulationStartAge);
+
+  // Run until the later-dying spouse's expected death age, capped at 30 years
+  const clientDeathAge = expectedDeathAge || 95;
+  const yearsToClientDeath = clientDeathAge - simulationStartAge;
+  let yearsToLastDeath = yearsToClientDeath;
+  if (clientInfo.isMarried) {
+    const partnerDeathAge_ = partnerExpectedDeathAge || 95;
+    const ageDiff = clientInfo.currentAge - (clientInfo.partnerAge || 0);
+    const partnerDeathInClientAge = partnerDeathAge_ + ageDiff;
+    yearsToLastDeath = Math.max(yearsToClientDeath, partnerDeathInClientAge - simulationStartAge);
+  }
+  const years = Math.min(30, Math.max(1, yearsToLastDeath));
   const iterations = 500;
 
   // Calculate VA allocation if enabled
@@ -1132,29 +1205,57 @@ export const runOptimizedSimulation = (allocation, assumptions, inputs, clientIn
     const currentPartnerAge = clientInfo.partnerAge + (simAge - clientInfo.currentAge);
     const expenseInflationFactor = Math.pow(1 + (personalInflationRate / 100), yearIndex);
     const incomeInflationFactor = Math.pow(1 + (inflationRate / 100), yearIndex);
-    const expenses = monthlySpending * 12 * expenseInflationFactor;
+    // Death age tracking
+    const clientDeathAge = expectedDeathAge || 95;
+    const partnerDeathAge = partnerExpectedDeathAge || 95;
+    const clientAlive = simAge < clientDeathAge;
+    const partnerAlive = clientInfo.isMarried && currentPartnerAge < partnerDeathAge;
+
+    // Spending reduction after first death
+    const bothAlive = clientAlive && partnerAlive;
+    const reductionPct = (clientInfo.isMarried && !bothAlive && (clientAlive || partnerAlive))
+      ? (spendingReductionAtFirstDeath || 0) / 100
+      : 0;
+    const expenses = monthlySpending * 12 * expenseInflationFactor * (1 - reductionPct);
 
     let income = 0;
-    if (clientInfo.currentAge >= 67 || simAge >= ssStartAge) {
-      income += clientSS * 12 * incomeInflationFactor;
+
+    // SS with survivor benefits
+    const clientSSAnnual = clientSS * 12 * incomeInflationFactor;
+    const partnerSSAnnual = partnerSS * 12 * incomeInflationFactor;
+
+    if (clientAlive && (clientInfo.currentAge >= 67 || simAge >= ssStartAge)) {
+      income += clientSSAnnual;
     }
-    if (clientInfo.isMarried && (clientInfo.partnerAge >= 67 || currentPartnerAge >= partnerSSStartAge)) {
-      income += partnerSS * 12 * incomeInflationFactor;
+    if (partnerAlive && (clientInfo.partnerAge >= 67 || currentPartnerAge >= partnerSSStartAge)) {
+      income += partnerSSAnnual;
     }
-    if (simAge >= pensionStartAge) {
+    if (clientInfo.isMarried) {
+      if (!clientAlive && partnerAlive && (clientInfo.partnerAge >= 67 || currentPartnerAge >= partnerSSStartAge) && clientSSAnnual > partnerSSAnnual) {
+        income += (clientSSAnnual - partnerSSAnnual);
+      }
+      if (clientAlive && !partnerAlive && (clientInfo.currentAge >= 67 || simAge >= ssStartAge) && partnerSSAnnual > clientSSAnnual) {
+        income += (partnerSSAnnual - clientSSAnnual);
+      }
+    }
+
+    // Pension with survivor benefits
+    if (clientAlive && simAge >= pensionStartAge) {
       income += monthlyPension * 12 * (pensionCOLA ? incomeInflationFactor : 1);
+    } else if (!clientAlive && partnerAlive && (pensionSurvivorBenefitPct || 0) > 0 && simAge >= pensionStartAge) {
+      income += monthlyPension * (pensionSurvivorBenefitPct / 100) * 12 * (pensionCOLA ? incomeInflationFactor : 1);
     }
-
-    // Partner pension
-    if (clientInfo.isMarried && partnerMonthlyPension > 0 && currentPartnerAge >= (partnerPensionStartAge || 65)) {
+    if (partnerAlive && partnerMonthlyPension > 0 && currentPartnerAge >= (partnerPensionStartAge || 65)) {
       income += partnerMonthlyPension * 12 * (partnerPensionCOLA ? incomeInflationFactor : 1);
+    } else if (!partnerAlive && clientAlive && (partnerPensionSurvivorBenefitPct || 0) > 0 && partnerMonthlyPension > 0 && currentPartnerAge >= (partnerPensionStartAge || 65)) {
+      income += partnerMonthlyPension * (partnerPensionSurvivorBenefitPct / 100) * 12 * (partnerPensionCOLA ? incomeInflationFactor : 1);
     }
 
-    // Recurring additional incomes
+    // Recurring additional incomes - stop if owner has died
     (additionalIncomes || []).forEach(stream => {
-      // Use partner's age if owner is 'partner', otherwise use client's age
       const ownerAge = stream.owner === 'partner' ? currentPartnerAge : simAge;
-      if (!stream.isOneTime && ownerAge >= stream.startAge && ownerAge <= (stream.endAge || 100)) {
+      const ownerAlive = stream.owner === 'partner' ? partnerAlive : clientAlive;
+      if (ownerAlive && !stream.isOneTime && ownerAge >= stream.startAge && ownerAge <= (stream.endAge || 100)) {
         let streamAmount = stream.amount * 12;
         if (stream.inflationAdjusted) streamAmount *= incomeInflationFactor;
         income += streamAmount;
@@ -1164,18 +1265,18 @@ export const runOptimizedSimulation = (allocation, assumptions, inputs, clientIn
     // Staggered retirement: partner's employment income during gap years
     const partnerAnnualIncome = clientInfo.partnerAnnualIncome || 0;
     const partnerRetAge = clientInfo.partnerRetirementAge || clientInfo.retirementAge;
-    if (clientInfo.isMarried && partnerAnnualIncome > 0 && currentPartnerAge < partnerRetAge) {
+    if (clientInfo.isMarried && partnerAlive && partnerAnnualIncome > 0 && currentPartnerAge < partnerRetAge) {
       let partnerEmployment = partnerAnnualIncome;
       if (inflationRate > 0) partnerEmployment *= incomeInflationFactor;
       income += partnerEmployment;
     }
 
-    // One-time contributions
+    // One-time contributions - only if owner is alive
     let oneTimeContributions = 0;
     (additionalIncomes || []).forEach(stream => {
-      // Use partner's age if owner is 'partner', otherwise use client's age
       const ownerAge = stream.owner === 'partner' ? currentPartnerAge : simAge;
-      if (stream.isOneTime && ownerAge === stream.startAge) {
+      const ownerAlive = stream.owner === 'partner' ? partnerAlive : clientAlive;
+      if (ownerAlive && stream.isOneTime && ownerAge === stream.startAge) {
         let streamAmount = stream.amount;
         if (stream.inflationAdjusted) streamAmount *= incomeInflationFactor;
         oneTimeContributions += streamAmount;
