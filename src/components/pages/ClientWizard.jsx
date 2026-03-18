@@ -1,6 +1,6 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import { ResponsiveContainer, AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ComposedChart, Line, Legend } from 'recharts';
-import { User, DollarSign, ArrowRight, ArrowLeft, Shield, Info, Activity, Briefcase, Send, TrendingUp, Clock, PiggyBank, BarChart2, Table as TableIcon, Plus, Trash2, AlertCircle, LogOut, ExternalLink, X, CheckCircle } from 'lucide-react';
+import { User, DollarSign, ArrowRight, ArrowLeft, Shield, Info, Activity, Briefcase, Send, TrendingUp, Clock, PiggyBank, BarChart2, Table as TableIcon, Plus, Trash2, AlertCircle, LogOut, ExternalLink, X, CheckCircle, ChevronDown, ChevronRight } from 'lucide-react';
 
 import { COLORS, LOGO_URL } from '../../constants';
 import { formatPhoneNumber, getAdjustedSS, estimatePIAFromIncome } from '../../utils';
@@ -57,6 +57,8 @@ export const ClientWizard = ({
   const [showPartnerSSEstimator, setShowPartnerSSEstimator] = useState(false);
   const [partnerSSEstimateIncome, setPartnerSSEstimateIncome] = useState('');
   const [showWhatsNext, setShowWhatsNext] = useState(false);
+  const [showSSAbout, setShowSSAbout] = useState(false);
+  const [showPensionIncome, setShowPensionIncome] = useState(false);
 
   // Cap projection data at age 95 to avoid projecting legacy balances at unrealistic ages
   const cappedProjectionData = useMemo(() => {
@@ -113,6 +115,17 @@ export const ClientWizard = ({
 
     setFieldErrors(errors);
   }, [inputs.ssStartAge, inputs.partnerSSStartAge, inputs.additionalIncomes]);
+
+  // Auto-estimate SS PIA from income (or default $2500) when entering page 2 if not already set
+  useEffect(() => {
+    if (wizardStep === 2 && !inputs.ssPIA) {
+      const income = clientInfo.annualIncome || 0;
+      const pia = income > 0 ? estimatePIAFromIncome(income) : 2500;
+      if (pia > 0) {
+        onInputChange({ target: { name: 'ssPIA', value: pia } });
+      }
+    }
+  }, [wizardStep]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Calculate improvement solutions based on actual financial picture
   const improvementSolutions = useMemo(() => {
@@ -868,14 +881,20 @@ export const ClientWizard = ({
         </div>
       </Card>
 
-      {/* Social Security Claiming Age Analysis - Factual narrative */}
+      {/* Social Security Claiming Age Analysis - Collapsible factual narrative */}
       {clientInfo.currentAge < 67 && (
         <div className="p-4 bg-yellow-50 rounded-lg border border-yellow-200">
-          <p className="text-xs font-bold text-yellow-800 uppercase mb-3">
-            About Social Security Claiming Age
-          </p>
+          <button
+            onClick={() => setShowSSAbout(!showSSAbout)}
+            className="w-full flex items-center justify-between text-left"
+          >
+            <p className="text-xs font-bold text-yellow-800 uppercase flex items-center gap-1">
+              About Social Security Claiming Age
+            </p>
+            {showSSAbout ? <ChevronDown className="w-4 h-4 text-yellow-600" /> : <ChevronRight className="w-4 h-4 text-yellow-600" />}
+          </button>
 
-          <div className="text-sm text-slate-700 space-y-3">
+          {showSSAbout && <div className="text-sm text-slate-700 space-y-3 mt-3">
             <p>
               Social Security benefits can be claimed anytime between age 62 and 70. Claiming earlier means a smaller monthly
               benefit paid over more years; claiming later means a larger monthly benefit paid over fewer years. Benefits increase
@@ -952,17 +971,23 @@ export const ClientWizard = ({
                 </p>
               </div>
             )}
-          </div>
+          </div>}
         </div>
       )}
 
-      {/* Pension / Other Income */}
+      {/* Additional Income, Expenses & Life Events - Collapsible */}
       <Card className="p-6">
-          <h3 className="text-lg font-bold text-slate-800 border-b pb-2 mb-4 flex items-center gap-2">
-            <DollarSign className="w-5 h-5 text-emerald-600" /> Pension / Other Income
-          </h3>
+          <button
+            onClick={() => setShowPensionIncome(!showPensionIncome)}
+            className="w-full text-left flex items-center justify-between"
+          >
+            <h3 className="text-lg font-bold text-slate-800 flex items-center gap-2">
+              <DollarSign className="w-5 h-5 text-emerald-600" /> Additional Income, Expenses & Life Events
+            </h3>
+            {showPensionIncome ? <ChevronDown className="w-5 h-5 text-slate-400" /> : <ChevronRight className="w-5 h-5 text-slate-400" />}
+          </button>
 
-          <div className="space-y-4">
+          {showPensionIncome && <div className="space-y-4 mt-4">
             {/* Client Pension */}
             <p className="text-xs font-semibold text-slate-600 uppercase tracking-wider">{clientInfo.name || 'Client'}'s Pension</p>
             <div className="grid grid-cols-3 gap-4">
@@ -1256,7 +1281,7 @@ export const ClientWizard = ({
                           'Downsizing': { type: 'reduction' },
                           'Health Insurance (pre-Medicare)': { type: 'increase', endAge: 65 },
                           'Long-Term Care Insurance': { type: 'increase' },
-                          'Grandchild College': { type: 'one-time' },
+                          'College Expenses': { type: 'increase' },
                           'Wedding': { type: 'one-time' },
                           'Major Medical': { type: 'one-time' },
                           'Home Renovation': { type: 'one-time' }
@@ -1279,7 +1304,7 @@ export const ClientWizard = ({
                       <option value="Downsizing">Downsizing</option>
                       <option value="Health Insurance (pre-Medicare)">Health Insurance (pre-Medicare)</option>
                       <option value="Long-Term Care Insurance">Long-Term Care Insurance</option>
-                      <option value="Grandchild College">Grandchild College</option>
+                      <option value="College Expenses">College Expenses</option>
                       <option value="Wedding">Wedding</option>
                       <option value="Major Medical">Major Medical</option>
                       <option value="Home Renovation">Home Renovation</option>
@@ -1371,7 +1396,7 @@ export const ClientWizard = ({
                 </div>
               ))}
             </div>
-          </div>
+          </div>}
         </Card>
 
       {/* Summary Section */}
