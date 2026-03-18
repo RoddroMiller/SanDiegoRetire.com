@@ -1,6 +1,6 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import { ResponsiveContainer, AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ComposedChart, Line, Legend } from 'recharts';
-import { User, DollarSign, ArrowRight, ArrowLeft, Shield, Info, Activity, Briefcase, Send, TrendingUp, Clock, PiggyBank, BarChart2, Table as TableIcon, Plus, Trash2, AlertCircle, LogOut, ExternalLink } from 'lucide-react';
+import { User, DollarSign, ArrowRight, ArrowLeft, Shield, Info, Activity, Briefcase, Send, TrendingUp, Clock, PiggyBank, BarChart2, Table as TableIcon, Plus, Trash2, AlertCircle, LogOut, ExternalLink, X, CheckCircle } from 'lucide-react';
 
 import { COLORS, LOGO_URL } from '../../constants';
 import { formatPhoneNumber, getAdjustedSS, estimatePIAFromIncome } from '../../utils';
@@ -56,6 +56,7 @@ export const ClientWizard = ({
   const [ssEstimateIncome, setSSEstimateIncome] = useState('');
   const [showPartnerSSEstimator, setShowPartnerSSEstimator] = useState(false);
   const [partnerSSEstimateIncome, setPartnerSSEstimateIncome] = useState('');
+  const [showWhatsNext, setShowWhatsNext] = useState(false);
 
   // Cap projection data at age 95 to avoid projecting legacy balances at unrealistic ages
   const cappedProjectionData = useMemo(() => {
@@ -867,103 +868,91 @@ export const ClientWizard = ({
         </div>
       </Card>
 
-      {/* Claiming Strategy Options - Only show if under FRA */}
+      {/* Social Security Claiming Age Analysis - Factual narrative */}
       {clientInfo.currentAge < 67 && (
         <div className="p-4 bg-yellow-50 rounded-lg border border-yellow-200">
-          <div className="relative group inline-block mb-3">
-            <p className="text-xs font-bold text-yellow-800 uppercase flex items-center gap-1 cursor-help">
-              Claiming Strategy Options <Info className="w-3 h-3 text-yellow-600" />
+          <p className="text-xs font-bold text-yellow-800 uppercase mb-3">
+            About Social Security Claiming Age
+          </p>
+
+          <div className="text-sm text-slate-700 space-y-3">
+            <p>
+              Social Security benefits can be claimed anytime between age 62 and 70. Claiming earlier means a smaller monthly
+              benefit paid over more years; claiming later means a larger monthly benefit paid over fewer years. Benefits increase
+              by approximately 8% per year for each year you delay past full retirement age (67).
             </p>
-            <div className="absolute left-0 bottom-full mb-2 hidden group-hover:block w-72 bg-slate-800 text-white text-xs p-3 rounded shadow-lg z-20">
-              <p className="font-bold mb-1">How is the recommendation calculated?</p>
-              <p>We analyze each claiming age (62-70) by simulating your portfolio through retirement. The recommended age is the one that results in the largest portfolio balance at age 80, considering your spending needs and other income sources.</p>
-            </div>
-          </div>
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
-            {/* Option 1: Maximize Legacy */}
-            <div
-              className={`p-3 rounded-lg border-2 cursor-pointer transition-all ${inputs.ssStartAge === 70 ? 'border-emerald-500 bg-emerald-50' : 'border-slate-200 bg-white hover:border-emerald-300'}`}
-              onClick={() => onUpdateSSStartAge(70)}
-            >
-              <div className="flex justify-between items-center">
-                <div>
-                  <p className="text-sm font-bold text-slate-800">
-                    Maximize Legacy{ssAnalysis?.winner?.age === 70 ? ' (Recommended)' : ''}
-                  </p>
-                  <p className="text-xs text-slate-500">Delay claiming for highest lifetime benefits</p>
-                </div>
-                <span className="text-lg font-bold text-emerald-700">Age 70</span>
-              </div>
-            </div>
+            <p>
+              If you claim benefits before full retirement age and continue working, the Social Security earnings test
+              may temporarily reduce your benefit. In 2025, $1 in benefits is withheld for every $2 earned above $23,400
+              (or $1 for every $3 above $62,160 in the year you reach FRA). These withheld benefits are not lost — once
+              you reach full retirement age, your monthly benefit is recalculated upward to credit the months benefits
+              were reduced. After FRA, there is no earnings offset regardless of income.
+            </p>
 
-            {/* Option 2: Full Retirement Age */}
-            <div
-              className={`p-3 rounded-lg border-2 cursor-pointer transition-all ${inputs.ssStartAge === 67 ? 'border-emerald-500 bg-emerald-50' : 'border-slate-200 bg-white hover:border-emerald-300'}`}
-              onClick={() => onUpdateSSStartAge(67)}
-            >
-              <div className="flex justify-between items-center">
-                <div>
-                  <p className="text-sm font-bold text-slate-800">
-                    Full Retirement Age{ssAnalysis?.winner?.age === 67 ? ' (Recommended)' : ''}
-                  </p>
-                  <p className="text-xs text-slate-500">Claim at FRA with no reduction or increase</p>
-                </div>
-                <span className="text-lg font-bold text-emerald-700">Age 67</span>
-              </div>
-            </div>
-
-            {/* Option 3: Optimized / Recommended - only show if different from fixed options */}
-            {ssAnalysis?.winner?.age && ![62, 67, 70].includes(ssAnalysis.winner.age) && (
-              <div
-                className={`p-3 rounded-lg border-2 cursor-pointer transition-all ${inputs.ssStartAge === ssAnalysis.winner.age ? 'border-emerald-500 bg-emerald-50' : 'border-slate-200 bg-white hover:border-emerald-300'}`}
-                onClick={() => onUpdateSSStartAge(ssAnalysis.winner.age)}
-              >
-                <div className="flex justify-between items-center">
-                  <div>
-                    <p className="text-sm font-bold text-slate-800">Optimized (Recommended)</p>
-                    <p className="text-xs text-slate-500">Maximizes portfolio at age 80</p>
+            {inputs.ssPIA > 0 && (
+              <div className="p-3 bg-white rounded-lg border border-yellow-200">
+                <p className="font-bold text-slate-800 mb-2">Your Benefit at Different Claiming Ages</p>
+                <div className="grid grid-cols-3 gap-2 text-center text-xs">
+                  <div className="p-2 bg-slate-50 rounded">
+                    <p className="text-slate-500">Age 62</p>
+                    <p className="font-bold text-slate-800">${Math.round(getAdjustedSS(inputs.ssPIA, 62)).toLocaleString()}/mo</p>
+                    <p className="text-slate-400">70% of FRA</p>
                   </div>
-                  <span className="text-lg font-bold text-emerald-700">Age {ssAnalysis.winner.age}</span>
+                  <div className="p-2 bg-slate-50 rounded">
+                    <p className="text-slate-500">Age 67 (FRA)</p>
+                    <p className="font-bold text-slate-800">${Math.round(getAdjustedSS(inputs.ssPIA, 67)).toLocaleString()}/mo</p>
+                    <p className="text-slate-400">100% of FRA</p>
+                  </div>
+                  <div className="p-2 bg-slate-50 rounded">
+                    <p className="text-slate-500">Age 70</p>
+                    <p className="font-bold text-slate-800">${Math.round(getAdjustedSS(inputs.ssPIA, 70)).toLocaleString()}/mo</p>
+                    <p className="text-slate-400">124% of FRA</p>
+                  </div>
                 </div>
               </div>
             )}
 
-            {/* Option 4: Maximize Early Portfolio */}
-            <div
-              className={`p-3 rounded-lg border-2 cursor-pointer transition-all ${inputs.ssStartAge === 62 ? 'border-emerald-500 bg-emerald-50' : 'border-slate-200 bg-white hover:border-emerald-300'}`}
-              onClick={() => onUpdateSSStartAge(62)}
-            >
-              <div className="flex justify-between items-center">
-                <div>
-                  <p className="text-sm font-bold text-slate-800">
-                    Maximize Early Portfolio{ssAnalysis?.winner?.age === 62 ? ' (Recommended)' : ''}
-                  </p>
-                  <p className="text-xs text-slate-500">Start benefits early, preserve investments</p>
+            {ssAnalysis?.outcomes && (
+              <div className="p-3 bg-white rounded-lg border border-yellow-200">
+                <p className="font-bold text-slate-800 mb-1">Portfolio Impact by Claiming Age</p>
+                <p className="text-xs text-slate-600 mb-2">
+                  This analysis simulates your full retirement plan under each claiming age, accounting for your spending,
+                  other income sources, and portfolio growth. The result shows your projected portfolio balance
+                  at age {targetMaxPortfolioAge || 80}:
+                </p>
+                <div className={`grid grid-cols-${ssAnalysis.outcomes.length} gap-2 text-center text-xs`}>
+                  {ssAnalysis.outcomes.map(outcome => (
+                    <div key={outcome.age} className={`p-2 rounded ${inputs.ssStartAge === outcome.age ? 'bg-emerald-50 border border-emerald-300' : 'bg-slate-50'}`}>
+                      <p className="text-slate-500">Claim at {outcome.age}</p>
+                      <p className="font-bold text-slate-800">${(outcome.balance / 1000000).toFixed(2)}M</p>
+                      {inputs.ssStartAge === outcome.age && <p className="text-emerald-600 text-[10px] font-bold">CURRENT SELECTION</p>}
+                    </div>
+                  ))}
                 </div>
-                <span className="text-lg font-bold text-emerald-700">Age 62</span>
               </div>
-            </div>
-          </div>
+            )}
 
-          {clientInfo.isMarried && clientInfo.partnerAge < 67 && ssPartnerAnalysis && (
-            <div className="mt-4 pt-3 border-t border-yellow-200">
-              <div className="flex justify-between items-center">
-                <div>
-                  <p className="text-xs font-bold text-yellow-800 uppercase mb-1">Partner Recommendation</p>
-                  <p className="text-sm text-slate-700">
-                    Partner optimal claiming age: <strong className="text-emerald-700">{ssPartnerAnalysis?.winner?.age || 67}</strong>
-                  </p>
-                </div>
-                <button
-                  onClick={() => onUpdatePartnerSSStartAge(ssPartnerAnalysis?.winner?.age || 67)}
-                  className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold rounded-lg transition-all"
-                >
-                  Apply Age {ssPartnerAnalysis?.winner?.age || 67}
-                </button>
+            <p className="text-xs text-slate-500 italic">
+              The right claiming age depends on your health, longevity expectations, other income sources, and overall financial picture.
+              You can change your claiming age above to see how it affects your retirement projection.
+            </p>
+
+            {clientInfo.isMarried && clientInfo.partnerAge < 67 && ssPartnerAnalysis && (
+              <div className="mt-2 pt-3 border-t border-yellow-200">
+                <p className="font-bold text-slate-800 text-xs mb-1">Partner's Claiming Age Analysis</p>
+                <p className="text-xs text-slate-600">
+                  Based on the same portfolio simulation, your partner's projected portfolio balance at age {targetMaxPortfolioAge || 80} by claiming age:{' '}
+                  {ssPartnerAnalysis.outcomes.map((o, i) => (
+                    <span key={o.age}>
+                      {i > 0 && ', '}
+                      <strong>age {o.age}: ${(o.balance / 1000000).toFixed(2)}M</strong>
+                    </span>
+                  ))}.
+                </p>
               </div>
-            </div>
-          )}
+            )}
+          </div>
         </div>
       )}
 
@@ -1535,186 +1524,158 @@ export const ClientWizard = ({
 
       {/* Adjust Your Plan - Always visible */}
       <Card className="p-6 border-t-4 border-slate-400">
-        <h3 className="font-bold text-lg text-slate-800 mb-4 flex items-center gap-2">
+        <h3 className="font-bold text-lg text-slate-800 mb-2 flex items-center gap-2">
           <TrendingUp className="w-5 h-5 text-slate-600" /> Adjust Your Plan
         </h3>
         <p className="text-sm text-slate-600 mb-4">
-          Fine-tune your retirement assumptions to see how changes affect your outlook.
+          Three factors have the greatest impact on retirement outcomes: <strong>when you retire</strong> — working longer allows your
+          portfolio to grow while reducing the number of years you draw from it; <strong>how much you save before retirement</strong> — additional
+          savings compound over time and increase the portfolio available at retirement; and <strong>how much you spend in retirement</strong> — a
+          lower withdrawal rate extends portfolio longevity. Adjust any of these below to see how the projections change.
         </p>
 
-        <div className="space-y-4">
+        <div className={`grid ${clientInfo.isRetired ? 'grid-cols-1' : 'grid-cols-1 md:grid-cols-3'} gap-4`}>
           {!clientInfo.isRetired && (
-            <div className="p-4 bg-blue-50 rounded-lg border border-blue-200">
-              <div className="flex items-start gap-3">
-                <Clock className="w-5 h-5 text-blue-600 mt-0.5" />
-                <div className="flex-1">
-                  <h4 className="font-bold text-blue-800">Retirement Age</h4>
-                  <p className="text-sm text-blue-700 mt-1">
-                    Working longer allows your portfolio to grow and reduces years drawing from it.
-                  </p>
-                  <div className="mt-3 flex items-center gap-2">
-                    <label className="text-xs font-bold text-blue-700 uppercase">Age</label>
-                    <FormattedNumberInput
-                      name="retirementAge"
-                      value={clientInfo.retirementAge}
-                      onChange={onClientChange}
-                      className="p-2 border border-blue-300 rounded-lg w-20 text-center font-bold text-blue-800 bg-white"
-                    />
-                  </div>
-                </div>
+            <div className="p-4 bg-blue-50 rounded-lg border border-blue-200 text-center">
+              <Clock className="w-5 h-5 text-blue-600 mx-auto mb-2" />
+              <h4 className="font-bold text-blue-800 text-sm">Retirement Age</h4>
+              <div className="mt-3 flex items-center justify-center gap-2">
+                <label className="text-xs font-bold text-blue-700 uppercase">Age</label>
+                <FormattedNumberInput
+                  name="retirementAge"
+                  value={clientInfo.retirementAge}
+                  onChange={onClientChange}
+                  className="p-2 border border-blue-300 rounded-lg w-20 text-center font-bold text-blue-800 bg-white"
+                />
               </div>
             </div>
           )}
 
           {!clientInfo.isRetired && (
-            <div className="p-4 bg-emerald-50 rounded-lg border border-emerald-200">
-              <div className="flex items-start gap-3">
-                <PiggyBank className="w-5 h-5 text-emerald-600 mt-0.5" />
-                <div className="flex-1">
-                  <h4 className="font-bold text-emerald-800">Annual Savings</h4>
-                  <p className="text-sm text-emerald-700 mt-1">
-                    Saving more now boosts your retirement portfolio through compounding.
-                  </p>
-                  <div className="mt-3 flex items-center gap-2">
-                    <label className="text-xs font-bold text-emerald-700 uppercase">Per Year</label>
-                    <FormattedNumberInput
-                      name="annualSavings"
-                      value={clientInfo.annualSavings}
-                      onChange={onClientChange}
-                      className="p-2 border border-emerald-300 rounded-lg w-28 text-center font-bold text-emerald-800 bg-white"
-                    />
-                  </div>
-                </div>
+            <div className="p-4 bg-emerald-50 rounded-lg border border-emerald-200 text-center">
+              <PiggyBank className="w-5 h-5 text-emerald-600 mx-auto mb-2" />
+              <h4 className="font-bold text-emerald-800 text-sm">Annual Savings</h4>
+              <div className="mt-3 flex items-center justify-center gap-2">
+                <label className="text-xs font-bold text-emerald-700 uppercase">Per Year</label>
+                <FormattedNumberInput
+                  name="annualSavings"
+                  value={clientInfo.annualSavings}
+                  onChange={onClientChange}
+                  className="p-2 border border-emerald-300 rounded-lg w-28 text-center font-bold text-emerald-800 bg-white"
+                />
               </div>
             </div>
           )}
 
-          <div className="p-4 bg-orange-50 rounded-lg border border-orange-200">
-            <div className="flex items-start gap-3">
-              <DollarSign className="w-5 h-5 text-orange-600 mt-0.5" />
-              <div className="flex-1">
-                <h4 className="font-bold text-orange-800">Monthly Spending in Retirement</h4>
-                <p className="text-sm text-orange-700 mt-1">
-                  Adjusting your retirement lifestyle changes how much you need from your portfolio.
-                </p>
-                <div className="mt-3 flex flex-wrap items-center gap-3">
-                  <div className="flex items-center gap-2">
-                    <label className="text-xs font-bold text-orange-700 uppercase">Per Month</label>
-                    <FormattedNumberInput
-                      name="monthlySpending"
-                      value={inputs.monthlySpending}
-                      onChange={onInputChange}
-                      className="p-2 border border-orange-300 rounded-lg w-28 text-center font-bold text-orange-800 bg-white"
-                    />
-                  </div>
-                  <button
-                    onClick={() => {
-                      const portfolioWithdrawal = (inputs.totalPortfolio * 0.04) / 12;
-                      const clientSS = getAdjustedSS(inputs.ssPIA, inputs.ssStartAge);
-                      const partnerSS = clientInfo.isMarried ? getAdjustedSS(inputs.partnerSSPIA, inputs.partnerSSStartAge) : 0;
-                      const fourPercentMonthly = Math.round(portfolioWithdrawal + clientSS + partnerSS);
-                      onInputChange({ target: { name: 'monthlySpending', value: fourPercentMonthly, type: 'number' } });
-                    }}
-                    className="px-4 py-2 bg-orange-600 text-white text-sm font-medium rounded-lg hover:bg-orange-700 transition-colors"
-                  >
-                    Try 4% Rule (${(() => {
-                      const portfolioWithdrawal = (inputs.totalPortfolio * 0.04) / 12;
-                      const clientSS = getAdjustedSS(inputs.ssPIA, inputs.ssStartAge);
-                      const partnerSS = clientInfo.isMarried ? getAdjustedSS(inputs.partnerSSPIA, inputs.partnerSSStartAge) : 0;
-                      return Math.round(portfolioWithdrawal + clientSS + partnerSS).toLocaleString();
-                    })()}/mo)
-                  </button>
-                </div>
-              </div>
+          <div className="p-4 bg-orange-50 rounded-lg border border-orange-200 text-center">
+            <DollarSign className="w-5 h-5 text-orange-600 mx-auto mb-2" />
+            <h4 className="font-bold text-orange-800 text-sm">Monthly Spending</h4>
+            <div className="mt-3 flex items-center justify-center gap-2">
+              <label className="text-xs font-bold text-orange-700 uppercase">Per Month</label>
+              <FormattedNumberInput
+                name="monthlySpending"
+                value={inputs.monthlySpending}
+                onChange={onInputChange}
+                className="p-2 border border-orange-300 rounded-lg w-28 text-center font-bold text-orange-800 bg-white"
+              />
             </div>
           </div>
         </div>
       </Card>
 
-      {/* Planning Guidance */}
-      {(() => {
-        const successRate = monteCarloData?.successRate || 0;
-        const legacyBalance = cappedProjectionData[cappedProjectionData.length - 1]?.total || 0;
-        const annualSpending = inputs.monthlySpending * 12;
-        const legacyToSpendingRatio = legacyBalance / annualSpending;
-        const isLowSuccess = successRate < 80;
-        const isVeryHighLegacy = successRate >= 95 && legacyToSpendingRatio > 20;
+      {/* What's Next Button */}
+      <div className="text-center">
+        <button
+          onClick={() => setShowWhatsNext(true)}
+          className="inline-flex items-center gap-2 px-8 py-4 bg-gradient-to-r from-slate-900 to-slate-800 text-white text-lg font-bold rounded-xl hover:from-slate-800 hover:to-slate-700 transition-all shadow-lg hover:shadow-xl"
+        >
+          <ArrowRight className="w-5 h-5" />
+          What's Next?
+        </button>
+      </div>
 
-        if (isLowSuccess) {
-          return (
-            <Card className="p-6 border-t-4 border-yellow-500">
-              <h3 className="font-bold text-lg text-slate-800 mb-4 flex items-center gap-2">
-                <TrendingUp className="w-5 h-5 text-yellow-600" /> Ways to Improve Your Outcome
-              </h3>
-              <p className="text-sm text-slate-600">
-                Your current success probability is <strong>{successRate.toFixed(1)}%</strong>.
-                Consider delaying retirement, increasing savings, or reducing spending using the controls above.
-              </p>
-              <p className="text-xs text-slate-500 mt-4 italic">
-                Discuss these options with your financial advisor to determine the best approach for your situation.
-              </p>
-            </Card>
-          );
-        } else if (isVeryHighLegacy) {
-          return (
-            <Card className="p-6 border-t-4 border-purple-500">
-              <h3 className="font-bold text-lg text-slate-800 mb-4 flex items-center gap-2">
-                <TrendingUp className="w-5 h-5 text-purple-600" /> You May Be Leaving a Large Legacy
-              </h3>
-              <p className="text-sm text-slate-600 mb-4">
-                With a <strong>{successRate.toFixed(1)}%</strong> success probability and a projected legacy of
-                <strong> ${(legacyBalance / 1000000).toFixed(2)}M</strong>, you may have more flexibility than you realize.
-                Consider whether you'd prefer to enjoy more of your wealth during retirement:
+      {/* What's Next Modal - One Process / 7 Pillars */}
+      {showWhatsNext && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50">
+          <div className="bg-white rounded-2xl shadow-2xl max-w-2xl w-full max-h-[90vh] overflow-hidden flex flex-col">
+            {/* Header */}
+            <div className="bg-gradient-to-r from-slate-900 to-slate-800 text-white p-6 flex items-center justify-between">
+              <div>
+                <h2 className="text-xl font-bold">A Great Projection Is Just the Starting Point</h2>
+                <p className="text-slate-400 text-sm mt-1">There's so much more to a confident retirement</p>
+              </div>
+              <button
+                onClick={() => setShowWhatsNext(false)}
+                className="p-2 hover:bg-slate-700 rounded-lg transition-colors"
+                aria-label="Close"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* Content */}
+            <div className="flex-1 overflow-y-auto p-6 space-y-6">
+              <p className="text-sm text-slate-700">
+                Whether your success probability is 60% or 99%, the projection you just explored only accounts for
+                one dimension of your financial life — the investment strategy. At Miller Wealth Management, we believe
+                a truly confident retirement is built on <strong>seven pillars</strong>, each working together through
+                what we call <strong>The One Process</strong>.
               </p>
 
-              <div className="space-y-4">
-                <div className="p-4 bg-purple-50 rounded-lg border border-purple-200">
-                  <div className="flex items-start gap-3">
-                    <Clock className="w-5 h-5 text-purple-600 mt-0.5" />
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                {[
+                  { num: '1', title: 'Investment Strategy', desc: 'The portfolio projection you just explored — critical, but only one of the seven pillars' },
+                  { num: '2', title: 'Balance Sheet Optimization', desc: 'Aligning assets, liabilities, real estate holdings, and cash flow so every dollar works harder for your goals' },
+                  { num: '3', title: 'Asset Protection', desc: 'Shielding what you\'ve built from lawsuits, creditors, and unforeseen risks' },
+                  { num: '4', title: 'Proactive Tax Strategy', desc: 'Roth conversions, harvesting, asset location, and withdrawal sequencing — keeping more of what you\'ve earned' },
+                  { num: '5', title: 'Wealth Transfer', desc: 'Passing assets to the next generation efficiently and on your terms' },
+                  { num: '6', title: 'Philanthropy', desc: 'Giving strategically in ways that maximize impact and align with your tax picture' },
+                  { num: '7', title: 'Family Governance', desc: 'Preparing heirs, establishing shared values, and creating a framework for multi-generational success' },
+                ].map(pillar => (
+                  <div key={pillar.num} className="flex items-start gap-3 p-3 bg-slate-50 rounded-lg border border-slate-200">
+                    <div className="w-7 h-7 rounded-full bg-emerald-600 text-white flex items-center justify-center font-bold text-xs flex-shrink-0">
+                      {pillar.num}
+                    </div>
                     <div>
-                      <h4 className="font-bold text-purple-800">Consider Retiring Earlier</h4>
-                      <p className="text-sm text-purple-700 mt-1">
-                        With your strong financial position, you may be able to start retirement sooner and enjoy more years of freedom.
-                        To explore this, go back to Step 1 and decrease your Retirement Age.
-                      </p>
+                      <p className="font-bold text-slate-800 text-sm">{pillar.title}</p>
+                      <p className="text-xs text-slate-600 mt-0.5">{pillar.desc}</p>
                     </div>
                   </div>
-                </div>
-
-                <div className="p-4 bg-indigo-50 rounded-lg border border-indigo-200">
-                  <div className="flex items-start gap-3">
-                    <DollarSign className="w-5 h-5 text-indigo-600 mt-0.5" />
-                    <div>
-                      <h4 className="font-bold text-indigo-800">Increase Your Retirement Lifestyle</h4>
-                      <p className="text-sm text-indigo-700 mt-1">
-                        You could afford a more comfortable retirement with additional travel, hobbies, or experiences.
-                        To explore this, go back to Step 1 and increase your Monthly Spending.
-                      </p>
-                    </div>
-                  </div>
-                </div>
+                ))}
               </div>
 
-              <p className="text-xs text-slate-500 mt-4 italic">
-                Of course, if leaving a legacy is important to you, your current plan accomplishes that goal beautifully.
-              </p>
-            </Card>
-          );
-        } else {
-          return (
-            <Card className="p-6 border-t-4 border-emerald-500">
-              <div className="text-center">
-                <Activity className="w-12 h-12 text-emerald-600 mx-auto mb-4" />
-                <h3 className="font-bold text-xl text-slate-800 mb-2">You're On Track!</h3>
-                <p className="text-slate-600">
-                  Your retirement plan has a {successRate.toFixed(1)}% probability of success.
-                  You're well-positioned for a comfortable retirement.
+              <div className="p-4 bg-emerald-50 rounded-lg border border-emerald-200">
+                <p className="text-sm text-slate-700">
+                  <strong>The One Process</strong> weaves all seven pillars into a single, coordinated strategy — reviewed and
+                  adjusted as your life evolves. It's the difference between a projection on a screen and a plan you can
+                  actually live by.
                 </p>
               </div>
-            </Card>
-          );
-        }
-      })()}
+
+              <p className="text-sm text-slate-600 italic">
+                An introductory call is free, carries no obligation, and takes about 20 minutes. We'll listen to what
+                matters most to you and share how The One Process might apply to your situation.
+              </p>
+            </div>
+
+            {/* Footer CTA */}
+            <div className="p-6 border-t border-slate-200 bg-slate-50 text-center">
+              <button
+                onClick={() => {
+                  setShowWhatsNext(false);
+                  onClientSubmit();
+                }}
+                disabled={saveStatus === 'saving'}
+                className="inline-flex items-center gap-2 px-8 py-4 bg-emerald-600 hover:bg-emerald-700 text-white text-lg font-bold rounded-xl transition-all shadow-lg hover:shadow-xl"
+              >
+                <Send className="w-5 h-5" />
+                {saveStatus === 'saving' ? 'Saving...' : 'Schedule an Intro Call'}
+              </button>
+              <p className="text-xs text-slate-500 mt-3">Free, no-obligation consultation</p>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Risk Factors Warning */}
       <Card className="p-6 border-t-4 border-amber-400 bg-amber-50">
