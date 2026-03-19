@@ -26,7 +26,7 @@ This policy defines how third-party vendors and services used by Portfolio Archi
 | Vendor | Service | Data Accessed | SOC 2 Status |
 |--------|---------|--------------|-------------|
 | **npm Registry** | Package manager for build dependencies | None — packages downloaded at build time | N/A (open-source registry) |
-| **QR Server API** | QR code generation for MFA enrollment | TOTP secret URI (transmitted via URL) | N/A |
+| ~~**QR Server API**~~ | ~~QR code generation for MFA enrollment~~ | ~~TOTP secret URI (transmitted via URL)~~ | **Removed 2026-03-19** — replaced with client-side `qrcode.js` library |
 
 ---
 
@@ -74,7 +74,7 @@ For each critical vendor, annually:
 | Google Cloud / Firebase | **High dependency, Low risk** | Hosts all application data and compute. Maintains SOC 2 Type II, ISO 27001, FedRAMP. Google's security team is industry-leading. Risk is concentration, not capability. |
 | GitHub | **High dependency, Low risk** | Hosts source code and CI/CD. SOC 2 Type II certified. Source code does not contain secrets (environment variables are managed separately). |
 | npm Registry | **Medium dependency, Low risk** | Build-time dependency only. Packages are pinned via package-lock.json. CI/CD runs `npm audit` on every build. |
-| QR Server API | **Low dependency, Medium risk** | TOTP secret URI is passed via URL during MFA enrollment. Used only once per user during setup. Consider self-hosting QR generation in the future. |
+| ~~QR Server API~~ | **Eliminated 2026-03-19** | Replaced with client-side `qrcode.js` library. TOTP secret URI no longer transmitted to a third party. |
 
 ---
 
@@ -107,4 +107,4 @@ When discontinuing a vendor:
 | Medium | Download and file Google Cloud SOC 2 Type II report | 2026-03-15 | Completed 2026-03-19 |
 | Medium | Download and file GitHub SOC 2 Type II report | 2026-03-15 | Pending — request submitted 2026-03-19 |
 | Medium | Download Google Data Processing Addendum (DPA) | 2026-03-19 | Completed 2026-03-19 |
-| Low | Evaluate self-hosted QR code generation to eliminate QR Server API dependency | 2026-06-01 | Open |
+| Low | Evaluate self-hosted QR code generation to eliminate QR Server API dependency | 2026-06-01 | Completed 2026-03-19 — replaced with client-side qrcode.js |

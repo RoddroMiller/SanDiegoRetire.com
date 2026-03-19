@@ -1,7 +1,7 @@
 # Data Retention Policy
 
 **Owner:** Rodd Miller (rmiller@millerwm.com)
-**Last Reviewed:** 2026-02-13
+**Last Reviewed:** 2026-03-19
 **Review Cadence:** Annually
 
 ---
@@ -45,14 +45,14 @@ When an advisor leaves:
 3. Disable the advisor's Firebase Authentication account (do not delete — retain for audit trail).
 4. Revoke any Command Center access.
 
-### 3.3 Automated Cleanup (Future)
+### 3.3 Automated Cleanup
 
-The following automated processes should be implemented:
+The following automated processes are implemented as scheduled Cloud Functions in the One Process project (`functions/index.js`):
 
-- **Security records:** Cloud Function scheduled to delete records with no activity in 1 year.
-- **Audit log archival:** Cloud Function scheduled to export audit logs older than 3 years to Cloud Storage (cold storage), delete from Firestore after confirmed export.
+- **Security records:** `cleanupStaleSecurityRecords` — runs daily at 02:00 UTC. Deletes security records with no activity in 1+ year. Uses batch deletes (500 per batch) for efficiency.
+- **Audit log cleanup:** `archiveOldAuditLogs` — runs weekly (Monday 03:00 UTC). Deletes audit logs older than 7 years. Uses batch deletes (500 per batch).
 
-> **Current state:** Automated cleanup is not yet implemented. Manual review should be performed quarterly until automation is in place.
+> **Deployed:** 2026-03-19. Cloud Storage export for long-term archival can be added as a future enhancement.
 
 ---
 
