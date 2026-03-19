@@ -49,7 +49,7 @@ export const useCommandCenter = ({ currentUser }) => {
       setIsLoadingClients(true);
       try {
         const getAdvisorClients = httpsCallable(commandCenterFunctions, 'getAdvisorClients');
-        const result = await getAdvisorClients({ advisorEmail: currentUser.email });
+        const result = await getAdvisorClients({ advisorEmail: currentUser.email, apiKey: import.meta.env.VITE_COMMAND_CENTER_API_KEY });
         const { success, advisorId, clients } = result.data;
 
         if (!success || !advisorId) {
@@ -87,7 +87,7 @@ export const useCommandCenter = ({ currentUser }) => {
       setIsLoadingTeams(true);
       try {
         const getAdvisorTeams = httpsCallable(commandCenterFunctions, 'getAdvisorTeams');
-        const result = await getAdvisorTeams({ advisorEmail: currentUser.email });
+        const result = await getAdvisorTeams({ advisorEmail: currentUser.email, apiKey: import.meta.env.VITE_COMMAND_CENTER_API_KEY });
         const { success, teams, teamMemberEmails: emails } = result.data;
 
         if (success) {
@@ -121,7 +121,7 @@ export const useCommandCenter = ({ currentUser }) => {
       setIsLoadingTeamClients(true);
       try {
         const getTeamClients = httpsCallable(commandCenterFunctions, 'getTeamClients');
-        const result = await getTeamClients({ advisorEmail: currentUser.email });
+        const result = await getTeamClients({ advisorEmail: currentUser.email, apiKey: import.meta.env.VITE_COMMAND_CENTER_API_KEY });
         const { success, teamClients: clients } = result.data;
 
         if (success) {
@@ -274,7 +274,8 @@ export const useCommandCenter = ({ currentUser }) => {
         advisorEmail: currentUser.email,
         advisorId: commandCenterAdvisorId,
         clientId: resolvedClientId,
-        data: portfolioArchitectData
+        data: portfolioArchitectData,
+        apiKey: import.meta.env.VITE_COMMAND_CENTER_API_KEY
       };
       if (ownerAdvisorId && ownerAdvisorId !== commandCenterAdvisorId) {
         payload.ownerAdvisorId = ownerAdvisorId;
