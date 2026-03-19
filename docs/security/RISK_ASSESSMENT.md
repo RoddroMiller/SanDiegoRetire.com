@@ -160,7 +160,7 @@ This assessment covers:
 | Risk | Inherent | Residual | Action Needed |
 |------|----------|----------|---------------|
 | Unauthorized access | High | Low | Maintain current controls |
-| Master account compromise | Critical | Medium | Consider hardware security key as second MFA factor |
+| Master account compromise | Critical | Medium | Risk accepted — TOTP MFA sufficient for current operation |
 | Security rule misconfiguration | Critical | Low | Maintain CI rules tests |
 | Cloud Functions failure | Medium | Low | Cloud Logging alerts configured (2026-03-19) |
 | API key abuse | Medium | Low | API keys restricted by HTTP referrer + API scope (2026-03-19) |
@@ -184,7 +184,7 @@ This assessment covers:
 | Medium | Confirm Firestore region is US | 2026-03-15 | Completed 2026-03-19 (nam5) |
 | Medium | Download Google Data Processing Addendum (DPA) | 2026-03-15 | Completed 2026-03-19 |
 | Medium | Review and restrict Firebase API keys in GCP Console | 2026-03-15 | Completed 2026-03-19 (HTTP referrer + API restrictions on both projects) |
-| Medium | Consider hardware security key for master account | 2026-04-01 | Open |
+| Medium | Consider hardware security key for master account | 2026-04-01 | Evaluated 2026-03-19 — risk accepted. Current TOTP MFA + account lockout + password policy provides sufficient protection for single-office operation. Will reassess if team size or threat profile changes. |
 | Low | Audit CI secrets and environment variable usage | 2026-06-01 | Open |
 
 ---
