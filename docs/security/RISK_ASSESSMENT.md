@@ -163,7 +163,7 @@ This assessment covers:
 | Master account compromise | Critical | Medium | Consider hardware security key as second MFA factor |
 | Security rule misconfiguration | Critical | Low | Maintain CI rules tests |
 | Cloud Functions failure | Medium | Low | Cloud Logging alerts configured (2026-03-19) |
-| API key abuse | Medium | Low | Review API key restrictions quarterly |
+| API key abuse | Medium | Low | API keys restricted by HTTP referrer + API scope (2026-03-19) |
 | Insider threat | Medium | Low | Conduct quarterly access reviews |
 | Vendor compromise | Medium | Low | Google Cloud SOC 2 report filed (2026-03-19); GitHub pending |
 | Supply chain attack | High | Medium | Monitor dependency advisories |
@@ -183,7 +183,7 @@ This assessment covers:
 | Medium | Download GitHub SOC 2 Type II report | 2026-03-15 | Pending — request submitted to GitHub |
 | Medium | Confirm Firestore region is US | 2026-03-15 | Completed 2026-03-19 (nam5) |
 | Medium | Download Google Data Processing Addendum (DPA) | 2026-03-15 | Completed 2026-03-19 |
-| Medium | Review and restrict Firebase API keys in GCP Console | 2026-03-15 | Open |
+| Medium | Review and restrict Firebase API keys in GCP Console | 2026-03-15 | Completed 2026-03-19 (HTTP referrer + API restrictions on both projects) |
 | Medium | Consider hardware security key for master account | 2026-04-01 | Open |
 | Low | Audit CI secrets and environment variable usage | 2026-06-01 | Open |
 
