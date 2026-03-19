@@ -1,7 +1,7 @@
 # Vendor Management Policy
 
 **Owner:** Rodd Miller (rmiller@millerwm.com)
-**Last Reviewed:** 2026-02-13
+**Last Reviewed:** 2026-03-19
 **Review Cadence:** Annually
 
 ---
@@ -94,14 +94,17 @@ When discontinuing a vendor:
 
 | Date | Reviewer | Vendor | Action |
 |------|----------|--------|--------|
+| 2026-03-19 | Rodd Miller | Google Cloud | Downloaded SOC 2 Type II report and Data Processing Addendum (DPA) |
+| 2026-03-19 | Rodd Miller | GitHub | SOC 2 Type II report requested; awaiting response |
 | 2026-02-13 | Rodd Miller | All vendors | Initial inventory and risk assessment |
 
 ---
 
 ## 8. Action Items
 
-| Priority | Action | Target Date |
-|----------|--------|-------------|
-| Medium | Download and file Google Cloud SOC 2 Type II report | 2026-03-15 |
-| Medium | Download and file GitHub SOC 2 Type II report | 2026-03-15 |
-| Low | Evaluate self-hosted QR code generation to eliminate QR Server API dependency | 2026-06-01 |
+| Priority | Action | Target Date | Status |
+|----------|--------|-------------|--------|
+| Medium | Download and file Google Cloud SOC 2 Type II report | 2026-03-15 | Completed 2026-03-19 |
+| Medium | Download and file GitHub SOC 2 Type II report | 2026-03-15 | Pending — request submitted 2026-03-19 |
+| Medium | Download Google Data Processing Addendum (DPA) | 2026-03-19 | Completed 2026-03-19 |
+| Low | Evaluate self-hosted QR code generation to eliminate QR Server API dependency | 2026-06-01 | Open |

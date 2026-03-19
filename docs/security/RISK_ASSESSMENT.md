@@ -1,7 +1,7 @@
 # Risk Assessment
 
 **Owner:** Rodd Miller (rmiller@millerwm.com)
-**Last Reviewed:** 2026-02-13
+**Last Reviewed:** 2026-03-19
 **Review Cadence:** Annually
 
 ---
@@ -162,25 +162,30 @@ This assessment covers:
 | Unauthorized access | High | Low | Maintain current controls |
 | Master account compromise | Critical | Medium | Consider hardware security key as second MFA factor |
 | Security rule misconfiguration | Critical | Low | Maintain CI rules tests |
-| Cloud Functions failure | Medium | Low | Set up Cloud Logging alerts |
+| Cloud Functions failure | Medium | Low | Cloud Logging alerts configured (2026-03-19) |
 | API key abuse | Medium | Low | Review API key restrictions quarterly |
 | Insider threat | Medium | Low | Conduct quarterly access reviews |
-| Vendor compromise | Medium | Low | Annual vendor SOC 2 review |
+| Vendor compromise | Medium | Low | Google Cloud SOC 2 report filed (2026-03-19); GitHub pending |
 | Supply chain attack | High | Medium | Monitor dependency advisories |
-| Data loss | Medium | Low | Enable and verify Firestore backups |
+| Data loss | Medium | Low | Firestore daily backups enabled (2026-03-19) |
 | Environment variable exposure | Medium | Low | Audit CI secrets quarterly |
 
 ---
 
 ## 6. Action Items
 
-| Priority | Action | Target Date |
-|----------|--------|-------------|
-| High | Enable Firestore scheduled backups | 2026-03-01 |
-| High | Configure Cloud Logging alerts for function errors | 2026-03-01 |
-| Medium | Review and restrict Firebase API keys in GCP Console | 2026-03-15 |
-| Medium | Consider hardware security key for master account | 2026-04-01 |
-| Low | Audit CI secrets and environment variable usage | 2026-06-01 |
+| Priority | Action | Target Date | Status |
+|----------|--------|-------------|--------|
+| High | Enable Firestore scheduled backups | 2026-03-01 | Completed 2026-03-19 (daily, 30-day retention, nam5) |
+| High | Configure Cloud Logging alerts for function errors | 2026-03-01 | Completed 2026-03-19 (threshold > 0, 5-min window) |
+| High | Secure cross-project Cloud Functions with API key | 2026-03-19 | Completed 2026-03-19 (BOSP 6.3 compliance) |
+| Medium | Download Google Cloud SOC 2 Type II report | 2026-03-15 | Completed 2026-03-19 |
+| Medium | Download GitHub SOC 2 Type II report | 2026-03-15 | Pending — request submitted to GitHub |
+| Medium | Confirm Firestore region is US | 2026-03-15 | Completed 2026-03-19 (nam5) |
+| Medium | Download Google Data Processing Addendum (DPA) | 2026-03-15 | Completed 2026-03-19 |
+| Medium | Review and restrict Firebase API keys in GCP Console | 2026-03-15 | Open |
+| Medium | Consider hardware security key for master account | 2026-04-01 | Open |
+| Low | Audit CI secrets and environment variable usage | 2026-06-01 | Open |
 
 ---
 
@@ -188,4 +193,5 @@ This assessment covers:
 
 | Date | Reviewer | Changes |
 |------|----------|---------|
+| 2026-03-19 | Rodd Miller | BOSP compliance review: enabled Firestore backups, Cloud Logging alerts, cross-project API key security, filed Google Cloud SOC 2 and DPA, confirmed US data residency (nam5) |
 | 2026-02-13 | Rodd Miller | Initial risk assessment |
