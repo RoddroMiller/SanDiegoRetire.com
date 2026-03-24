@@ -407,12 +407,12 @@ export const ArchitectPage = ({
       </PrintPageWrapper>
 
       {/* MAIN ARCHITECT PAGE */}
-      <div className="max-w-7xl mx-auto print:block print:break-after-page">
+      <div className="max-w-7xl mx-auto print:hidden">
 
         <div className="space-y-6">
 
           {/* Stats Row */}
-          <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 print:hidden">
             <StatBox
               label="Starting Balance"
               value={adjustedProjections.hasChanges && (selectedImprovements.delay || selectedImprovements.savings)
@@ -462,7 +462,7 @@ export const ArchitectPage = ({
           </div>
 
           {/* Quick Adjustments - Retirement Age & Savings */}
-          <div className={`grid grid-cols-1 ${!clientInfo.isRetired ? 'md:grid-cols-3' : 'md:grid-cols-1 max-w-md'} gap-4`}>
+          <div className={`print:hidden grid grid-cols-1 ${!clientInfo.isRetired ? 'md:grid-cols-3' : 'md:grid-cols-1 max-w-md'} gap-4`}>
             {!clientInfo.isRetired && (
               <div className="p-4 bg-blue-50 rounded-lg border border-blue-200">
                 <div className="flex items-center gap-3">
@@ -549,6 +549,12 @@ export const ArchitectPage = ({
                 className={`${activeTab === 'optimizer' ? 'border-emerald-500 text-emerald-700' : 'border-transparent text-slate-500 hover:text-slate-700 hover:border-slate-300'} whitespace-nowrap py-3 sm:py-4 px-1 border-b-2 font-medium text-xs sm:text-sm flex items-center gap-1 sm:gap-2`}
               >
                 <Target className="w-3 h-3 sm:w-4 sm:h-4" /> Optimizer
+              </button>
+              <button
+                onClick={() => onSetActiveTab('cashflows')}
+                className={`${activeTab === 'cashflows' ? 'border-emerald-500 text-emerald-700' : 'border-transparent text-slate-500 hover:text-slate-700 hover:border-slate-300'} whitespace-nowrap py-3 sm:py-4 px-1 border-b-2 font-medium text-xs sm:text-sm flex items-center gap-1 sm:gap-2`}
+              >
+                <TableIcon className="w-3 h-3 sm:w-4 sm:h-4" /> Cash Flows
               </button>
             </nav>
           </div>
@@ -643,6 +649,14 @@ export const ArchitectPage = ({
               vaEnabled={vaEnabled}
               vaInputs={vaInputs}
               vaOptimizerData={vaOptimizerData}
+            />
+          )}
+
+          {activeTab === 'cashflows' && (
+            <CashFlowsTab
+              projectionData={projectionData}
+              inputs={inputs}
+              clientInfo={clientInfo}
             />
           )}
         </div>
@@ -928,7 +942,12 @@ export const ArchitectPage = ({
               </tr>
             </thead>
             <tbody>
-              {projectionData.map((row, i) => (
+              {projectionData
+                .filter((row, i) => {
+                  const yearNum = i + 1; // 1-indexed year
+                  return yearNum <= 15 || yearNum % 5 === 0;
+                })
+                .map((row, i) => (
                 <tr key={row.year} className={i % 2 === 0 ? 'bg-white' : 'bg-slate-50'}>
                   <td className="p-1 text-left font-bold text-slate-700">{row.age}</td>
                   <td className="p-1 text-slate-500">${row.startBalance.toLocaleString()}</td>
@@ -1022,7 +1041,7 @@ export const ArchitectPage = ({
       </PrintPageWrapper>
 
       {/* PRINT PAGE 7: Monte Carlo Simulation */}
-      <PrintPageWrapper pageNumber={7} title="Monte Carlo Simulation" subtitle="Probability analysis based on 500 market scenarios">
+      <PrintPageWrapper pageNumber={7} title="Monte Carlo Simulation" subtitle="Probability analysis based on 1,000 market scenarios">
         {/* Success Rate */}
         <div className={`${monteCarloData.successRate > 85 ? 'bg-emerald-500' : 'bg-orange-500'} text-white p-6 rounded-lg mb-4`}>
           <div className="flex items-center justify-between">
@@ -1058,100 +1077,8 @@ export const ArchitectPage = ({
         </div>
       </PrintPageWrapper>
 
-      {/* PRINT PAGE 8: Planning Guidance */}
-      <PrintPageWrapper pageNumber={8} title="Planning Guidance" subtitle="Recommendations based on your analysis">
-        {(() => {
-          const successRate = monteCarloData?.successRate || 0;
-          const legacyBalance = legacyAt95;
-          const annualSpending = inputs.monthlySpending * 12;
-          const legacyToSpendingRatio = annualSpending > 0 ? legacyBalance / annualSpending : 0;
-          const isLowSuccess = successRate < 80;
-          const isVeryHighLegacy = successRate >= 95 && legacyToSpendingRatio > 20;
-
-          if (isLowSuccess) {
-            return (
-              <div className="border-l-4 border-yellow-500 bg-yellow-50 p-6 rounded-r-lg">
-                <h3 className="font-bold text-base text-yellow-800 mb-4">Consider These Improvements</h3>
-                <p className="text-[13px] text-yellow-700 mb-4">
-                  Your current success probability is {successRate.toFixed(1)}%, which is below the recommended 80% threshold.
-                </p>
-                <div className="space-y-4">
-                  <div className="bg-white p-4 rounded-lg">
-                    <h4 className="font-bold text-blue-800">Delay Retirement</h4>
-                    <p className="text-[13px] text-slate-600">Working a few more years allows your portfolio to grow while reducing retirement years to fund.</p>
-                  </div>
-                  <div className="bg-white p-4 rounded-lg">
-                    <h4 className="font-bold text-emerald-800">Increase Savings</h4>
-                    <p className="text-[13px] text-slate-600">Boosting annual savings will increase your retirement portfolio and improve success rate.</p>
-                  </div>
-                  <div className="bg-white p-4 rounded-lg">
-                    <h4 className="font-bold text-orange-800">Reduce Spending</h4>
-                    <p className="text-[13px] text-slate-600">Lowering planned monthly distribution reduces withdrawal rate and extends portfolio longevity.</p>
-                  </div>
-                </div>
-              </div>
-            );
-          } else if (isVeryHighLegacy) {
-            return (
-              <div className="border-l-4 border-purple-500 bg-purple-50 p-6 rounded-r-lg">
-                <h3 className="font-bold text-base text-purple-800 mb-4">You May Be Leaving Too Large a Legacy</h3>
-                <p className="text-[13px] text-purple-700 mb-4">
-                  With a {successRate.toFixed(1)}% success rate and projected legacy of ${Math.round(legacyBalance).toLocaleString()},
-                  you have more flexibility than you may realize.
-                </p>
-                <div className="space-y-4">
-                  <div className="bg-white p-4 rounded-lg">
-                    <h4 className="font-bold text-purple-800">Consider Retiring Earlier</h4>
-                    <p className="text-[13px] text-slate-600">Your strong financial position may allow you to start retirement sooner.</p>
-                  </div>
-                  <div className="bg-white p-4 rounded-lg">
-                    <h4 className="font-bold text-purple-800">Increase Retirement Lifestyle</h4>
-                    <p className="text-[13px] text-slate-600">You could afford a more comfortable retirement with additional travel, hobbies, or experiences.</p>
-                  </div>
-                </div>
-              </div>
-            );
-          } else {
-            return (
-              <div className="border-l-4 border-emerald-500 bg-emerald-50 p-6 rounded-r-lg">
-                <h3 className="font-bold text-base text-emerald-800 mb-4">You're On Track!</h3>
-                <p className="text-[13px] text-emerald-700 mb-4">
-                  Your retirement plan has a {successRate.toFixed(1)}% probability of success.
-                  You're well-positioned for a comfortable retirement.
-                </p>
-                <div className="bg-white p-4 rounded-lg">
-                  <h4 className="font-bold text-slate-800">Key Metrics Summary</h4>
-                  <div className="grid grid-cols-2 gap-4 mt-3 text-[13px]">
-                    <div>
-                      <p className="text-[12px] text-slate-500">Retirement Portfolio</p>
-                      <p className="font-bold text-base">${inputs.totalPortfolio.toLocaleString()}</p>
-                    </div>
-                    <div>
-                      <p className="text-[12px] text-slate-500">Monthly Distribution</p>
-                      <p className="font-bold text-base">${inputs.monthlySpending.toLocaleString()}</p>
-                    </div>
-                    <div>
-                      <p className="text-[12px] text-slate-500">Success Probability</p>
-                      <p className="font-bold text-base text-emerald-600">{successRate.toFixed(1)}%</p>
-                    </div>
-                    <div>
-                      <p className="text-[12px] text-slate-500">Projected Legacy</p>
-                      <p className="font-bold text-base">${Math.round(legacyBalance).toLocaleString()}</p>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            );
-          }
-        })()}
-
-        <div className="mt-4 bg-slate-100 p-4 rounded-lg text-[13px] text-slate-600">
-          <p><strong>Disclaimer:</strong> All projections are hypothetical and based on the assumptions outlined in this document. Actual results may vary based on market conditions, changes in personal circumstances, and other factors. Please consult with your financial advisor before making any decisions.</p>
-        </div>
-      </PrintPageWrapper>
-
-      {/* PRINT PAGE 9: Strategy Optimizer */}
-      <PrintPageWrapper pageNumber={9} title="Strategy Comparison" subtitle="Alternative allocation strategies analyzed">
+      {/* PRINT PAGE 8: Strategy Optimizer */}
+      <PrintPageWrapper pageNumber={8} title="Strategy Comparison" subtitle="Alternative allocation strategies analyzed">
         {/* Strategy Comparison Table */}
         <div className="border border-slate-200 rounded-lg overflow-hidden mb-4">
           <table className="w-full text-[12px]">
@@ -1260,16 +1187,16 @@ export const ArchitectPage = ({
         </div>
       </PrintPageWrapper>
 
-      {/* PRINT PAGE 10: Disclosures */}
-      <PrintPageWrapper pageNumber={10} title="Important Disclosures" subtitle="Assumptions, methodology, and limitations">
-        <div className="space-y-3 text-[13px] text-slate-600">
+      {/* PRINT PAGE 9: Disclosures */}
+      <PrintPageWrapper pageNumber={9} title="Important Disclosures" subtitle="Assumptions, methodology, and limitations">
+        <div className="space-y-2 text-[12px] text-slate-600">
           {/* Return Assumptions */}
-          <div className="border border-slate-200 rounded-lg p-3">
-            <h3 className="font-bold text-sm text-slate-800 mb-2">Return & Interest Rate Assumptions</h3>
-            <div className="grid grid-cols-2 gap-3">
+          <div className="border border-slate-200 rounded-lg p-2">
+            <h3 className="font-bold text-[12px] text-slate-800 mb-1">Return & Interest Rate Assumptions</h3>
+            <div className="grid grid-cols-2 gap-2">
               <div>
-                <p className="mb-1">The projected returns used in this analysis are based on historical averages and forward-looking estimates:</p>
-                <ul className="list-disc list-inside space-y-0.5 ml-1">
+                <p className="mb-0.5">Projected returns based on historical averages and forward-looking estimates:</p>
+                <ul className="list-disc list-inside ml-1">
                   <li>B1 (Short Term): {assumptions.b1.return}% return, {assumptions.b1.stdDev}% std dev</li>
                   <li>B2 (Mid Term): {assumptions.b2.return}% return, {assumptions.b2.stdDev}% std dev</li>
                   <li>B3 (Balanced): {assumptions.b3.return}% return, {assumptions.b3.stdDev}% std dev</li>
@@ -1278,54 +1205,93 @@ export const ArchitectPage = ({
                 </ul>
               </div>
               <div>
-                <p className="mb-1">These assumptions are estimates and actual results may vary significantly. Past performance does not guarantee future results.</p>
-                <p className="mb-1"><strong>Inflation:</strong> {inputs.inflationRate}% annual rate for SS COLA and expense projections.</p>
+                <p className="mb-0.5">These assumptions are estimates and actual results may vary significantly. Past performance does not guarantee future results.</p>
+                <p className="mb-0.5"><strong>Inflation:</strong> {inputs.inflationRate}% annual rate for SS COLA and expense projections.</p>
                 <p><strong>Personal Inflation:</strong> {inputs.personalInflationRate}% applied to retirement spending projections.</p>
               </div>
             </div>
           </div>
 
           {/* Monte Carlo Methodology */}
-          <div className="border border-slate-200 rounded-lg p-3">
-            <h3 className="font-bold text-sm text-slate-800 mb-2">Monte Carlo Simulation Methodology</h3>
-            <div className="grid grid-cols-2 gap-3">
+          <div className="border border-slate-200 rounded-lg p-2">
+            <h3 className="font-bold text-[12px] text-slate-800 mb-1">Monte Carlo Simulation Methodology</h3>
+            <div className="grid grid-cols-2 gap-2">
               <div>
-                <p className="mb-1">Success rates are calculated using Monte Carlo simulation:</p>
-                <ul className="list-disc list-inside space-y-0.5 ml-1">
-                  <li>500 independent simulation iterations</li>
-                  <li>Random returns using normal distribution</li>
-                  <li>Returns correlated based on historical relationships</li>
-                  <li>Annual rebalancing between buckets</li>
-                  <li>30-year projection horizon</li>
-                </ul>
+                <p className="mb-0.5">Success rates calculated using Monte Carlo simulation: 1,000 independent iterations with random returns using normal distribution, correlated based on historical relationships, with annual rebalancing over a 30-year projection horizon.</p>
               </div>
               <div>
-                <p className="mb-1"><strong>Success Definition:</strong> Portfolio maintains positive balance throughout the 30-year projection period.</p>
+                <p className="mb-0.5"><strong>Success Definition:</strong> Portfolio maintains positive balance throughout the projection period.</p>
                 <p><strong>Limitations:</strong> Simulations cannot predict actual future returns. They provide a range of possible outcomes based on historical patterns and may not account for extreme market events or changes in tax law.</p>
               </div>
             </div>
           </div>
 
           {/* Social Security Assumptions */}
-          <div className="border border-slate-200 rounded-lg p-3">
-            <h3 className="font-bold text-sm text-slate-800 mb-2">Social Security & Income Assumptions</h3>
-            <p className="mb-1">Social Security benefits adjusted based on claiming age: Before FRA (67): reduced ~6.67%/year. After FRA: increased 8%/year up to age 70. Annual COLA applied based on assumed inflation rate. Pension income assumes continued payment per stated terms with COLA only if indicated.</p>
+          <div className="border border-slate-200 rounded-lg p-2">
+            <h3 className="font-bold text-[12px] text-slate-800 mb-1">Social Security & Income Assumptions</h3>
+            <p>Social Security benefits adjusted based on claiming age: Before FRA (67): reduced ~6.67%/year. After FRA: increased 8%/year up to age 70. Annual COLA applied based on assumed inflation rate. Pension income assumes continued payment per stated terms with COLA only if indicated.</p>
           </div>
 
           {/* General Disclaimers */}
-          <div className="border border-slate-200 rounded-lg p-3">
-            <h3 className="font-bold text-sm text-slate-800 mb-2">General Disclaimers</h3>
-            <p className="mb-1">This analysis is for educational and illustrative purposes only and should not be construed as personalized investment advice. Projections are hypothetical and do not represent actual investment results.</p>
-            <p className="mb-1">Investment involves risk, including possible loss of principal. No guarantee any strategy will achieve its objectives. Diversification does not ensure profit or protect against loss. Tax considerations are important but not fully addressed here - consult a qualified tax professional.</p>
+          <div className="border border-slate-200 rounded-lg p-2">
+            <h3 className="font-bold text-[12px] text-slate-800 mb-1">General Disclaimers</h3>
+            <p className="mb-0.5">This analysis is for educational and illustrative purposes only and should not be construed as personalized investment advice. Projections are hypothetical and do not represent actual investment results. Investment involves risk, including possible loss of principal. No guarantee any strategy will achieve its objectives. Diversification does not ensure profit or protect against loss. Tax considerations are important but not fully addressed here - consult a qualified tax professional.</p>
             <p>Report generated {new Date().toLocaleDateString()}. Regular reviews and updates recommended.</p>
           </div>
 
           {/* Regulatory Disclosure */}
-          <div className="bg-slate-100 rounded-lg p-3 text-[13px]">
+          <div className="bg-slate-100 rounded-lg p-2">
             <p>Securities offered through LPL Financial, Member FINRA/SIPC. Investment Advice offered through Miller Wealth Management, a Registered Investment Advisor. Miller Wealth Management is a separate entity from LPL Financial. The opinions voiced in this material are for general information only and are not intended to provide specific advice or recommendations for any individual.</p>
           </div>
         </div>
       </PrintPageWrapper>
+
+      {/* PRINT PAGE 10: Back Cover - The One Process */}
+      <div className="hidden print:flex flex-col min-h-[10in] break-after-page p-12 bg-white">
+        <div className="flex-1 flex flex-col items-center justify-center text-center">
+          <img src={LOGO_URL} alt="Logo" className="h-24 mb-6" />
+          <h2 className="text-3xl font-bold text-slate-900 mb-2">The One Process</h2>
+          <div className="w-24 h-1 bg-emerald-600 mx-auto mb-3"></div>
+          <p className="text-[13px] text-slate-600 mb-8 max-w-lg">
+            A truly confident retirement is built on <strong>seven pillars</strong>, each working together through one coordinated strategy — reviewed and refined as life evolves.
+          </p>
+
+          <div className="grid grid-cols-2 gap-3 w-full max-w-xl mb-10">
+            {[
+              { num: '1', title: 'Investment Strategy', desc: 'Time-segmented bucket strategy engineered for income, growth, and resilience' },
+              { num: '2', title: 'Balance Sheet Optimization', desc: 'Aligning assets, liabilities, and cash flow so every dollar works harder' },
+              { num: '3', title: 'Asset Protection', desc: 'Shielding what you\'ve built from lawsuits, creditors, and unforeseen risks' },
+              { num: '4', title: 'Proactive Tax Strategy', desc: 'Roth conversions, harvesting, and withdrawal sequencing to keep more of what you\'ve earned' },
+              { num: '5', title: 'Legacy Planning', desc: 'Coordinating gifting, estate documents, and beneficiary designations so your wealth transfers exactly as intended' },
+              { num: '6', title: 'Philanthropy', desc: 'Giving strategically in ways that maximize impact and align with your tax picture' },
+              { num: '7', title: 'Family Stewardship', desc: 'Preparing heirs, establishing shared values, and creating a framework for multi-generational success' },
+            ].map(pillar => (
+              <div key={pillar.num} className={`flex items-start gap-2 p-2.5 bg-slate-50 rounded-lg border border-slate-200 text-left ${pillar.num === '7' ? 'col-span-2 max-w-xs mx-auto' : ''}`}>
+                <div className="w-6 h-6 rounded-full bg-emerald-600 text-white flex items-center justify-center font-bold text-[10px] flex-shrink-0 mt-0.5">
+                  {pillar.num}
+                </div>
+                <div>
+                  <p className="font-bold text-slate-800 text-[12px]">{pillar.title}</p>
+                  <p className="text-[10px] text-slate-600 leading-tight">{pillar.desc}</p>
+                </div>
+              </div>
+            ))}
+          </div>
+
+          {/* QR Code & CTA */}
+          <div className="border-t border-slate-200 pt-6 w-full max-w-md">
+            <p className="text-lg font-bold text-slate-900 mb-1">Ready to explore your full plan?</p>
+            <p className="text-[13px] text-slate-600 mb-4">Scan to schedule a complimentary consultation</p>
+            <img
+              src={`https://api.qrserver.com/v1/create-qr-code/?size=150x150&data=${encodeURIComponent(SCHEDULING_URL)}`}
+              alt="Schedule a meeting"
+              className="mx-auto mb-3"
+              style={{ width: '120px', height: '120px' }}
+            />
+            <p className="text-[12px] text-slate-500">www.millerwm.com | (480) 613-7400</p>
+          </div>
+        </div>
+      </div>
 
       {/* Command Center Client Selector Modal */}
       {showClientSelector && (
@@ -3447,7 +3413,143 @@ const OptimizerTab = ({ optimizerData, inputs, basePlan, monteCarloData, project
   );
 };
 
+// ============================================
+// Cash Flows Tab - Transposed: metrics on Y-axis, years on X-axis
+// ============================================
+const CashFlowsTab = ({ projectionData, inputs, clientInfo }) => {
+  const fmt = (val) => `$${Math.round(val).toLocaleString()}`;
+  const fmtShort = (val) => val >= 1000000 ? `$${(val / 1000000).toFixed(1)}M` : val >= 1000 ? `$${Math.round(val / 1000)}k` : `$${Math.round(val)}`;
+
+  const hasEmployment = projectionData.some(r => r.employmentIncomeDetail > 0);
+  const hasOther = projectionData.some(r => r.otherIncomeDetail > 0);
+  const hasContributions = projectionData.some(r => r.contribution > 0);
+  const hasNqData = inputs.taxEnabled && projectionData.some(r => r.nqWithdrawal > 0);
+
+  // Build row definitions for the transposed table
+  const buildRows = () => {
+    const rows = [
+      { label: 'Plan Year', cls: 'font-bold text-slate-800 bg-slate-100', getValue: (r) => r.year },
+      { label: `${clientInfo.name || 'Client'} Age`, cls: 'font-bold text-slate-700 bg-slate-50', getValue: (r) => r.age },
+    ];
+    if (clientInfo.isMarried) {
+      rows.push({ label: `${clientInfo.partnerName || 'Partner'} Age`, cls: 'text-slate-500 bg-slate-50', getValue: (r) => Math.floor(r.partnerAge) });
+    }
+    rows.push(
+      { label: '', cls: 'bg-slate-200', getValue: () => '', isSeparator: true },
+      { label: 'Starting Balance', cls: 'text-slate-700', getValue: (r) => fmt(r.startBalance) },
+      { label: 'Growth', cls: 'text-emerald-700', getValue: (r) => `${r.growth >= 0 ? '+' : ''}${fmt(r.growth)}` },
+      { label: '', cls: 'bg-slate-200', getValue: () => '', isSeparator: true },
+      { label: 'Social Security', cls: 'text-blue-700', getValue: (r) => fmt(r.ssIncomeDetail || 0) },
+      { label: 'Pension', cls: 'text-blue-700', getValue: (r) => fmt(r.pensionIncomeDetail || 0) },
+    );
+    if (hasEmployment) rows.push({ label: 'Employment Income', cls: 'text-teal-700', getValue: (r) => r.employmentIncomeDetail > 0 ? fmt(r.employmentIncomeDetail) : '-' });
+    if (hasOther) rows.push({ label: 'Other Income', cls: 'text-cyan-700', getValue: (r) => r.otherIncomeDetail > 0 ? fmt(r.otherIncomeDetail) : '-' });
+    if (hasContributions) rows.push({ label: 'One-Time Contributions', cls: 'text-purple-700', getValue: (r) => r.contribution > 0 ? `+${fmt(r.contribution)}` : '-' });
+    rows.push(
+      { label: 'Total Income', cls: 'font-bold text-blue-800 bg-blue-50', getValue: (r) => fmt(r.ssIncome) },
+      { label: '', cls: 'bg-slate-200', getValue: () => '', isSeparator: true },
+      { label: 'Total Spending', cls: 'font-bold text-slate-800', getValue: (r) => fmt(r.expenses) },
+      { label: 'Portfolio Withdrawal', cls: 'text-orange-700', getValue: (r) => fmt(r.distribution) },
+    );
+    if (inputs.taxEnabled) {
+      rows.push(
+        { label: '', cls: 'bg-slate-200', getValue: () => '', isSeparator: true },
+        { label: 'Federal Tax', cls: 'text-red-600', getValue: (r) => fmt(r.federalTax || 0) },
+        { label: 'State Tax', cls: 'text-red-600', getValue: (r) => fmt(r.stateTax || 0) },
+        { label: 'Total Tax', cls: 'font-bold text-red-700 bg-red-50', getValue: (r) => fmt(r.totalTax || 0) },
+        { label: 'Effective Rate', cls: 'text-amber-700', getValue: (r) => `${r.effectiveRate || '0'}%` },
+      );
+    }
+    if (hasNqData) {
+      rows.push(
+        { label: '', cls: 'bg-slate-200', getValue: () => '', isSeparator: true },
+        { label: 'Traditional Withdrawal', cls: 'text-blue-600', getValue: (r) => fmt(r.distribution * (r.traditionalPctUsed || 0) / 100) },
+        { label: 'Roth Withdrawal', cls: 'text-emerald-600', getValue: (r) => fmt(r.distribution * (r.rothPctUsed || 0) / 100) },
+        { label: 'NQ Withdrawal', cls: 'text-amber-600', getValue: (r) => fmt(r.nqWithdrawal || 0) },
+        { label: '  Cost Basis', cls: 'text-slate-500 pl-4', getValue: (r) => fmt(r.nqCostBasis || 0) },
+        { label: '  Capital Gain', cls: 'text-red-500 pl-4', getValue: (r) => fmt(r.nqTaxableGain || 0) },
+        { label: 'Qualified Dividends', cls: 'text-purple-600', getValue: (r) => fmt(r.nqQualifiedDividends || 0) },
+        { label: 'Ordinary Dividends', cls: 'text-pink-600', getValue: (r) => fmt(r.nqOrdinaryDividends || 0) },
+      );
+    }
+    rows.push(
+      { label: '', cls: 'bg-slate-200', getValue: () => '', isSeparator: true },
+      { label: 'Distribution Rate', cls: 'text-red-600', getValue: (r) => `${r.distRate?.toFixed(1) || '0'}%` },
+      { label: 'Ending Balance', cls: 'font-bold text-slate-900 bg-emerald-50 text-base', getValue: (r) => fmt(Math.max(0, r.total)) },
+    );
+    return rows;
+  };
+
+  const allRows = buildRows();
+
+  // 5-year chunks for print
+  const chunkSize = 5;
+  const chunks = [];
+  for (let i = 0; i < projectionData.length; i += chunkSize) {
+    chunks.push(projectionData.slice(i, i + chunkSize));
+  }
+
+  const renderTransposedTable = (cols, fontSize = 'text-xs') => (
+    <div className="overflow-x-auto border border-slate-200 rounded-lg">
+      <table className={`w-full ${fontSize} border-collapse`}>
+        <tbody>
+          {allRows.map((rowDef, ri) => (
+            <tr key={ri} className={rowDef.isSeparator ? 'h-1' : 'border-b border-slate-100'}>
+              <td className={`p-1.5 text-left whitespace-nowrap font-medium sticky left-0 bg-white border-r border-slate-200 min-w-[160px] ${rowDef.cls || ''}`}>
+                {rowDef.label}
+              </td>
+              {cols.map((col, ci) => (
+                <td key={ci} className={`p-1.5 text-right whitespace-nowrap ${rowDef.isSeparator ? '' : rowDef.cls || ''}`}>
+                  {rowDef.isSeparator ? '' : rowDef.getValue(col)}
+                </td>
+              ))}
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+
+  return (
+    <div className="space-y-6">
+      <Card>
+        <h3 className="font-semibold text-slate-800 text-lg mb-1 flex items-center gap-2">
+          <TableIcon className="w-5 h-5" /> Detailed Retirement Cash Flows
+        </h3>
+        <p className="text-sm text-slate-500 mb-4">
+          Comprehensive income, withdrawal, tax, and portfolio detail by year.
+        </p>
+
+        {renderTransposedTable(projectionData)}
+
+        {inputs.taxEnabled && (
+          <div className="mt-3 p-2 bg-amber-50 text-xs text-amber-800 rounded border border-amber-100">
+            <strong>Tax Note:</strong> Estimated taxes based on {inputs.filingStatus === 'married' ? 'Married Filing Jointly' : 'Single'} status, {inputs.traditionalPercent}% Trad / {inputs.rothPercent}% Roth / {inputs.nqPercent}% NQ, {inputs.stateRate}% state rate.{Object.keys(inputs.withdrawalOverrides || {}).length > 0 ? ` ${Object.keys(inputs.withdrawalOverrides).length} custom year override(s) applied.` : ''}
+          </div>
+        )}
+      </Card>
+
+      {/* Print pages: 5-year chunks, transposed */}
+      {chunks.map((chunk, idx) => {
+        const startAge = chunk[0]?.age;
+        const endAge = chunk[chunk.length - 1]?.age;
+        return (
+          <PrintPageWrapper
+            key={idx}
+            pageNumber={idx + 1}
+            title={`Cash Flow Detail — Ages ${startAge}–${endAge}`}
+            subtitle={`Plan years ${chunk[0]?.year}–${chunk[chunk.length - 1]?.year}`}
+          >
+            {renderTransposedTable(chunk, 'text-[11px]')}
+          </PrintPageWrapper>
+        );
+      })}
+    </div>
+  );
+};
+
 const TOTAL_PAGES = 10;
+const SCHEDULING_URL = 'https://www.millerwm.com/schedule';
 
 const PrintFooter = ({ pageNumber }) => (
   <div className="border-t border-slate-200 pt-4 mt-6">

@@ -443,7 +443,18 @@ export const ClientWizard = ({
         </div>
         {/* Partner Info Row */}
         {clientInfo.isMarried && (
-          <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+            <div>
+              <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Partner's Name</label>
+              <input
+                type="text"
+                name="partnerName"
+                value={clientInfo.partnerName || ''}
+                onChange={onClientChange}
+                placeholder="Partner's Name"
+                className="p-3 border rounded-lg w-full text-sm"
+              />
+            </div>
             <div className="relative group">
               <label className="block text-xs font-bold text-slate-500 uppercase mb-1 flex items-center gap-1">
                 Partner Age <Info className="w-3 h-3 text-slate-400" />
@@ -1653,9 +1664,9 @@ export const ClientWizard = ({
                   { num: '2', title: 'Balance Sheet Optimization', desc: 'Aligning assets, liabilities, real estate holdings, and cash flow so every dollar works harder for your goals' },
                   { num: '3', title: 'Asset Protection', desc: 'Shielding what you\'ve built from lawsuits, creditors, and unforeseen risks' },
                   { num: '4', title: 'Proactive Tax Strategy', desc: 'Roth conversions, harvesting, asset location, and withdrawal sequencing — keeping more of what you\'ve earned' },
-                  { num: '5', title: 'Wealth Transfer', desc: 'Passing assets to the next generation efficiently and on your terms' },
+                  { num: '5', title: 'Legacy Planning', desc: 'Coordinating gifting, estate documents, and beneficiary designations so your wealth transfers exactly as intended' },
                   { num: '6', title: 'Philanthropy', desc: 'Giving strategically in ways that maximize impact and align with your tax picture' },
-                  { num: '7', title: 'Family Governance', desc: 'Preparing heirs, establishing shared values, and creating a framework for multi-generational success' },
+                  { num: '7', title: 'Family Stewardship', desc: 'Preparing heirs, establishing shared values, and creating a framework for multi-generational success' },
                 ].map(pillar => (
                   <div key={pillar.num} className="flex items-start gap-3 p-3 bg-slate-50 rounded-lg border border-slate-200">
                     <div className="w-7 h-7 rounded-full bg-emerald-600 text-white flex items-center justify-center font-bold text-xs flex-shrink-0">

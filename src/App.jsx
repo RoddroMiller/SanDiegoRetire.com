@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useEffect, useCallback } from 'react';
+import React, { useState, useMemo, useEffect, useCallback, useRef } from 'react';
 
 // --- Local Imports ---
 import { formatPhoneNumber, calculateAccumulation, calculateBasePlan, runSimulation, calculateSSAnalysis, calculateSSPartnerAnalysis, getAdjustedSS, calculateAlternativeAllocations, runOptimizedSimulation } from './utils';
@@ -128,7 +128,7 @@ export default function BucketPortfolioBuilder() {
   const [showSettings, setShowSettings] = useState(true);
   const [activeTab, setActiveTab] = useState('chart');
   const [rebalanceFreq, setRebalanceFreq] = useState(3);
-  const [optimizerRebalanceFreq, setOptimizerRebalanceFreq] = useState(0); // 0 = sequential, 1 = annual, 3 = every 3 years
+  const [optimizerRebalanceFreq, setOptimizerRebalanceFreq] = useState(3); // 0 = sequential, 1 = annual, 3 = every 3 years (default matches architect)
   const [isGeneratingReport, setIsGeneratingReport] = useState(false);
   const [showCashFlowTable, setShowCashFlowTable] = useState(false);
 
@@ -164,6 +164,7 @@ export default function BucketPortfolioBuilder() {
     phone: '',
     isMarried: false,
     isRetired: false,
+    partnerName: '',
     partnerIsRetired: false,
     currentAge: 55,
     retirementAge: 65,
@@ -434,72 +435,88 @@ export default function BucketPortfolioBuilder() {
     return null;
   }, [useManualAllocation, useManualForRebalance, manualPercentages]);
 
+  // Debounce heavy calculations — wait 400ms after last change before recalculating
+  const [debouncedCalcInputs, setDebouncedCalcInputs] = useState({ inputs, assumptions, basePlan, clientInfo, rebalanceTargets });
+  const debounceTimer = useRef(null);
+  useEffect(() => {
+    if (debounceTimer.current) clearTimeout(debounceTimer.current);
+    debounceTimer.current = setTimeout(() => {
+      setDebouncedCalcInputs({ inputs, assumptions, basePlan, clientInfo, rebalanceTargets });
+    }, 400);
+    return () => { if (debounceTimer.current) clearTimeout(debounceTimer.current); };
+  }, [inputs, assumptions, basePlan, clientInfo, rebalanceTargets]);
+
+  const di = debouncedCalcInputs;
+
+  // Projection uses immediate values for snappy chart updates (single run, fast)
   const projectionData = useMemo(() => runSimulation(basePlan, assumptions, inputs, rebalanceFreq, false, null, rebalanceTargets), [basePlan, assumptions, inputs, rebalanceFreq, rebalanceTargets]);
-  const monteCarloData = useMemo(() => runSimulation(basePlan, assumptions, inputs, rebalanceFreq, true, null, rebalanceTargets), [basePlan, assumptions, inputs, rebalanceFreq, rebalanceTargets]);
+
+  // Monte Carlo uses debounced values — expensive (1000 iterations)
+  const monteCarloData = useMemo(() => runSimulation(di.basePlan, di.assumptions, di.inputs, rebalanceFreq, true, null, di.rebalanceTargets), [di, rebalanceFreq]);
 
   // Tax-forced inputs for client view: assume 100% traditional IRA/401k, 5% state tax
   const clientTaxInputs = useMemo(() => ({
-    ...inputs,
+    ...di.inputs,
     taxEnabled: true,
     traditionalPercent: 100,
     rothPercent: 0,
     nqPercent: 0,
     stateRate: 5,
-    filingStatus: inputs.filingStatus || 'married',
+    filingStatus: di.inputs.filingStatus || 'married',
     withdrawalOverrides: {},
-  }), [inputs]);
+  }), [di]);
 
   const clientProjectionData = useMemo(() =>
-    runSimulation(basePlan, assumptions, clientTaxInputs, rebalanceFreq, false, null, rebalanceTargets),
-    [basePlan, assumptions, clientTaxInputs, rebalanceFreq, rebalanceTargets]
+    runSimulation(di.basePlan, di.assumptions, clientTaxInputs, rebalanceFreq, false, null, di.rebalanceTargets),
+    [di, clientTaxInputs, rebalanceFreq]
   );
   const clientMonteCarloData = useMemo(() =>
-    runSimulation(basePlan, assumptions, clientTaxInputs, rebalanceFreq, true, null, rebalanceTargets),
-    [basePlan, assumptions, clientTaxInputs, rebalanceFreq, rebalanceTargets]
+    runSimulation(di.basePlan, di.assumptions, clientTaxInputs, rebalanceFreq, true, null, di.rebalanceTargets),
+    [di, clientTaxInputs, rebalanceFreq]
   );
 
   // VA GIB Monte Carlo - uses VA-adjusted bucket allocations
   const vaMonteCarloData = useMemo(() => {
     if (!vaEnabled || !vaAdjustedBasePlan) return null;
-    return runSimulation(vaAdjustedBasePlan, assumptions, inputs, rebalanceFreq, true, vaInputs, rebalanceTargets);
-  }, [vaAdjustedBasePlan, assumptions, inputs, rebalanceFreq, vaEnabled, vaInputs, rebalanceTargets]);
+    return runSimulation(vaAdjustedBasePlan, di.assumptions, di.inputs, rebalanceFreq, true, vaInputs, di.rebalanceTargets);
+  }, [vaAdjustedBasePlan, di, rebalanceFreq, vaEnabled, vaInputs]);
 
   // Optimizer data - compare six allocation strategies with consistent rebalancing
   const optimizerData = useMemo(() => {
     try {
-      const allocations = calculateAlternativeAllocations(inputs, basePlan);
+      const allocations = calculateAlternativeAllocations(di.inputs, di.basePlan);
       return {
-        strategy1: runOptimizedSimulation(allocations.strategy1, assumptions, inputs, clientInfo, optimizerRebalanceFreq),
-        strategy2: runOptimizedSimulation(allocations.strategy2, assumptions, inputs, clientInfo, optimizerRebalanceFreq),
-        strategy3: runOptimizedSimulation(allocations.strategy3, assumptions, inputs, clientInfo, optimizerRebalanceFreq),
-        strategy4: runOptimizedSimulation(allocations.strategy4, assumptions, inputs, clientInfo, optimizerRebalanceFreq),
-        strategy5: runOptimizedSimulation(allocations.strategy5, assumptions, inputs, clientInfo, optimizerRebalanceFreq),
-        strategy6: runOptimizedSimulation(allocations.strategy6, assumptions, inputs, clientInfo, optimizerRebalanceFreq)
+        strategy1: runOptimizedSimulation(allocations.strategy1, di.assumptions, di.inputs, di.clientInfo, optimizerRebalanceFreq),
+        strategy2: runOptimizedSimulation(allocations.strategy2, di.assumptions, di.inputs, di.clientInfo, optimizerRebalanceFreq),
+        strategy3: runOptimizedSimulation(allocations.strategy3, di.assumptions, di.inputs, di.clientInfo, optimizerRebalanceFreq),
+        strategy4: runOptimizedSimulation(allocations.strategy4, di.assumptions, di.inputs, di.clientInfo, optimizerRebalanceFreq),
+        strategy5: runOptimizedSimulation(allocations.strategy5, di.assumptions, di.inputs, di.clientInfo, optimizerRebalanceFreq),
+        strategy6: runOptimizedSimulation(allocations.strategy6, di.assumptions, di.inputs, di.clientInfo, optimizerRebalanceFreq)
       };
     } catch (error) {
       console.error('Optimizer calculation error:', error);
       return null;
     }
-  }, [inputs, basePlan, assumptions, clientInfo, optimizerRebalanceFreq]);
+  }, [di, optimizerRebalanceFreq]);
 
   // VA-enabled optimizer data
   const vaOptimizerData = useMemo(() => {
     if (!vaEnabled) return null;
     try {
-      const allocations = calculateAlternativeAllocations(inputs, basePlan);
+      const allocations = calculateAlternativeAllocations(di.inputs, di.basePlan);
       return {
-        strategy1: runOptimizedSimulation(allocations.strategy1, assumptions, inputs, clientInfo, optimizerRebalanceFreq, vaInputs),
-        strategy2: runOptimizedSimulation(allocations.strategy2, assumptions, inputs, clientInfo, optimizerRebalanceFreq, vaInputs),
-        strategy3: runOptimizedSimulation(allocations.strategy3, assumptions, inputs, clientInfo, optimizerRebalanceFreq, vaInputs),
-        strategy4: runOptimizedSimulation(allocations.strategy4, assumptions, inputs, clientInfo, optimizerRebalanceFreq, vaInputs),
-        strategy5: runOptimizedSimulation(allocations.strategy5, assumptions, inputs, clientInfo, optimizerRebalanceFreq, vaInputs),
-        strategy6: runOptimizedSimulation(allocations.strategy6, assumptions, inputs, clientInfo, optimizerRebalanceFreq, vaInputs)
+        strategy1: runOptimizedSimulation(allocations.strategy1, di.assumptions, di.inputs, di.clientInfo, optimizerRebalanceFreq, vaInputs),
+        strategy2: runOptimizedSimulation(allocations.strategy2, di.assumptions, di.inputs, di.clientInfo, optimizerRebalanceFreq, vaInputs),
+        strategy3: runOptimizedSimulation(allocations.strategy3, di.assumptions, di.inputs, di.clientInfo, optimizerRebalanceFreq, vaInputs),
+        strategy4: runOptimizedSimulation(allocations.strategy4, di.assumptions, di.inputs, di.clientInfo, optimizerRebalanceFreq, vaInputs),
+        strategy5: runOptimizedSimulation(allocations.strategy5, di.assumptions, di.inputs, di.clientInfo, optimizerRebalanceFreq, vaInputs),
+        strategy6: runOptimizedSimulation(allocations.strategy6, di.assumptions, di.inputs, di.clientInfo, optimizerRebalanceFreq, vaInputs)
       };
     } catch (error) {
       console.error('VA Optimizer calculation error:', error);
       return null;
     }
-  }, [inputs, basePlan, assumptions, clientInfo, optimizerRebalanceFreq, vaEnabled, vaInputs]);
+  }, [di, optimizerRebalanceFreq, vaEnabled, vaInputs]);
 
   // Keep totalPortfolio in sync with accumulation data
   const finalAccumulationBalance = accumulationData.length > 0 ? accumulationData[accumulationData.length - 1].balance : 0;
@@ -609,7 +626,7 @@ export default function BucketPortfolioBuilder() {
       ...prev,
       additionalIncomes: [
         ...prev.additionalIncomes,
-        { id: Date.now(), name: '', amount: 0, startAge: clientInfo.retirementAge, endAge: 100, isOneTime: false, inflationAdjusted: false, owner: 'client' }
+        { id: Date.now(), name: '', amount: 0, startAge: clientInfo.retirementAge, endAge: 100, isOneTime: false, inflationAdjusted: false, owner: 'client', taxablePercent: 100 }
       ]
     }));
   };

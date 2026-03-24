@@ -598,6 +598,17 @@ export const InputsPage = ({
                     const isOneTime = oneTimeTypes.includes(type);
                     onUpdateAdditionalIncome(income.id, 'isOneTime', isOneTime);
                     if (isOneTime) onUpdateAdditionalIncome(income.id, 'endAge', income.startAge);
+                    // Smart taxable % defaults by income type
+                    const taxDefaults = {
+                      'Rental Income': 70,
+                      'Part-Time Work': 100,
+                      'Annuity': 100,
+                      'Real Estate Sale': 50,
+                      'Inheritance': 0,
+                      'Business Sale': 50,
+                      'Other': 100
+                    };
+                    onUpdateAdditionalIncome(income.id, 'taxablePercent', taxDefaults[type] ?? 100);
                   }}
                   className="text-sm font-medium bg-white border rounded px-2 py-1"
                 >
@@ -625,7 +636,7 @@ export const InputsPage = ({
                   <Trash2 className="w-4 h-4" />
                 </button>
               </div>
-              <div className="grid grid-cols-4 gap-3">
+              <div className="grid grid-cols-5 gap-3">
                 <div>
                   <label className="block text-xs text-slate-500 uppercase mb-1">{income.isOneTime ? 'Amount' : 'Monthly'}</label>
                   <FormattedNumberInput
@@ -658,6 +669,17 @@ export const InputsPage = ({
                     />
                   </div>
                 )}
+                <div>
+                  <label className="block text-xs text-slate-500 uppercase mb-1">% Taxable</label>
+                  <input
+                    type="number"
+                    min="0"
+                    max="100"
+                    value={income.taxablePercent ?? 100}
+                    onChange={(e) => onUpdateAdditionalIncome(income.id, 'taxablePercent', Math.min(100, Math.max(0, parseInt(e.target.value) || 0)))}
+                    className="w-full px-2 py-1.5 border rounded text-sm"
+                  />
+                </div>
                 <div className="flex flex-col justify-end gap-1">
                   <label className="flex items-center gap-1 text-xs text-slate-500">
                     <input

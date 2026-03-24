@@ -93,6 +93,16 @@ export const AccumulationPage = ({
                 />
                 <label className="text-sm text-slate-600">Married / Partner?</label>
               </div>
+              {clientInfo.isMarried && (
+                <input
+                  type="text"
+                  name="partnerName"
+                  value={clientInfo.partnerName || ''}
+                  onChange={onClientChange}
+                  placeholder="Partner's Name"
+                  className="p-3 border rounded-lg text-sm"
+                />
+              )}
             </div>
 
             {/* Age Inputs */}

@@ -219,17 +219,18 @@ export const calculateAnnualTax = (incomeBreakdown, taxSettings, isSenior = true
     nqTaxableGain = 0,           // LTCG portion of NQ withdrawal
     nqQualifiedDividends = 0,    // Qualified divs from NQ holdings (LTCG rates)
     nqOrdinaryDividends = 0,     // Non-qualified divs (ordinary rates)
-    otherIncome = 0
+    otherIncome = 0,
+    employmentIncome = 0         // Spouse employment income during gap years
   } = incomeBreakdown;
 
   const { filingStatus = 'married', stateRate = 0 } = taxSettings;
 
   // Calculate taxable SS (NQ ordinary dividends count as ordinary income)
-  const ordinaryIncomeBeforeSS = pensionIncome + traditionalWithdrawal + nqOrdinaryDividends + otherIncome;
+  const ordinaryIncomeBeforeSS = pensionIncome + traditionalWithdrawal + nqOrdinaryDividends + otherIncome + employmentIncome;
   const taxableSS = calculateTaxableSS(ssIncome, ordinaryIncomeBeforeSS, filingStatus);
 
-  // Total ordinary taxable income (includes NQ ordinary dividends)
-  const grossOrdinaryIncome = taxableSS + pensionIncome + traditionalWithdrawal + nqOrdinaryDividends + otherIncome;
+  // Total ordinary taxable income (includes NQ ordinary dividends and employment income)
+  const grossOrdinaryIncome = taxableSS + pensionIncome + traditionalWithdrawal + nqOrdinaryDividends + otherIncome + employmentIncome;
 
   // Standard deduction (with senior bonus)
   let deduction = STANDARD_DEDUCTION[filingStatus] || STANDARD_DEDUCTION.married;
@@ -262,7 +263,7 @@ export const calculateAnnualTax = (incomeBreakdown, taxSettings, isSenior = true
   const totalTax = federalTax + stateTax;
 
   // Effective rate (based on gross income excluding Roth)
-  const grossTaxableIncome = ssIncome + pensionIncome + traditionalWithdrawal + nqTaxableGain + nqQualifiedDividends + nqOrdinaryDividends + otherIncome;
+  const grossTaxableIncome = ssIncome + pensionIncome + traditionalWithdrawal + nqTaxableGain + nqQualifiedDividends + nqOrdinaryDividends + otherIncome + employmentIncome;
   const effectiveRate = grossTaxableIncome > 0 ? (totalTax / grossTaxableIncome) * 100 : 0;
 
   return {
@@ -481,6 +482,7 @@ export const calculateBasePlan = (inputs, assumptions, clientInfo, vaEnabled = f
     let ssIncome = 0;
     let pensionIncome = 0;
     let otherIncome = 0;
+    let nonTaxableAdditionalIncome = 0;
     let vaIncome = 0;
 
     // Social Security income
@@ -529,13 +531,17 @@ export const calculateBasePlan = (inputs, assumptions, clientInfo, vaEnabled = f
     }
 
     // Recurring additional incomes (monthly * 12) - stop if owner has died
+    // taxablePercent controls what portion is taxed as ordinary income
     additionalIncomes.forEach(stream => {
       const ownerAge = stream.owner === 'partner' ? currentPartnerAge : simAge;
       const ownerAlive = stream.owner === 'partner' ? partnerAlive : clientAlive;
       if (ownerAlive && !stream.isOneTime && ownerAge >= stream.startAge && ownerAge <= (stream.endAge || 100)) {
         let streamAmount = stream.amount * 12;
         if (stream.inflationAdjusted) streamAmount *= incomeInflationFactor;
-        otherIncome += streamAmount;
+        const taxablePct = (stream.taxablePercent ?? 100) / 100;
+        otherIncome += streamAmount * taxablePct;
+        // Non-taxable portion still counts as income for gap calculation
+        nonTaxableAdditionalIncome += streamAmount * (1 - taxablePct);
       }
     });
 
@@ -557,10 +563,11 @@ export const calculateBasePlan = (inputs, assumptions, clientInfo, vaEnabled = f
       employmentIncome += partnerEmployment;
     }
 
-    // Total income
-    const income = ssIncome + pensionIncome + otherIncome + vaIncome + employmentIncome;
+    // Total income (includes non-taxable portion for gap calculation; only otherIncome is taxed)
+    const income = ssIncome + pensionIncome + otherIncome + nonTaxableAdditionalIncome + vaIncome + employmentIncome;
 
-    // One-time contributions (added to portfolio, not income) - only if owner is alive
+    // One-time contributions - only if owner is alive
+    // Taxable portion is added to otherIncome; non-taxable portion goes directly to portfolio
     let oneTimeContributions = 0;
     additionalIncomes.forEach(stream => {
       const ownerAge = stream.owner === 'partner' ? currentPartnerAge : simAge;
@@ -568,7 +575,13 @@ export const calculateBasePlan = (inputs, assumptions, clientInfo, vaEnabled = f
       if (ownerAlive && stream.isOneTime && ownerAge === stream.startAge) {
         let streamAmount = stream.amount;
         if (stream.inflationAdjusted) streamAmount *= incomeInflationFactor;
-        oneTimeContributions += streamAmount;
+        const taxablePct = (stream.taxablePercent ?? 100) / 100;
+        const taxablePortion = streamAmount * taxablePct;
+        const nonTaxablePortion = streamAmount - taxablePortion;
+        // Taxable portion treated as ordinary income for the year
+        otherIncome += taxablePortion;
+        // Non-taxable portion added directly to portfolio
+        oneTimeContributions += nonTaxablePortion;
       }
     });
 
@@ -695,7 +708,7 @@ export const runSimulation = (basePlan, assumptions, inputs, rebalanceFreq, isMo
   const years = Math.min(30, Math.max(1, yearsToLastDeath));
   let results = [];
   let failureCount = 0;
-  const iterations = isMonteCarlo ? 500 : 1;
+  const iterations = isMonteCarlo ? 1000 : 1;
   const benchmarkReturn = assumptions.b3.return / 100;
 
   // Calculate VA allocation if enabled
@@ -858,7 +871,8 @@ export const runSimulation = (basePlan, assumptions, inputs, rebalanceFreq, isMo
             nqTaxableGain,
             nqQualifiedDividends,
             nqOrdinaryDividends,
-            otherIncome
+            otherIncome,
+            employmentIncome
           }, { filingStatus, stateRate }, isSenior);
 
           const newWithdrawal = adjustedGap + taxData.totalTax;
@@ -1173,7 +1187,7 @@ export const runOptimizedSimulation = (allocation, assumptions, inputs, clientIn
     yearsToLastDeath = Math.max(yearsToClientDeath, partnerDeathInClientAge - simulationStartAge);
   }
   const years = Math.min(30, Math.max(1, yearsToLastDeath));
-  const iterations = 500;
+  const iterations = 1000;
 
   // Calculate VA allocation if enabled
   let vaAllocationAmount = 0;
@@ -1218,37 +1232,41 @@ export const runOptimizedSimulation = (allocation, assumptions, inputs, clientIn
       : 0;
     const expenses = monthlySpending * 12 * expenseInflationFactor * (1 - reductionPct);
 
-    let income = 0;
+    let ssIncome = 0;
+    let pensionIncome = 0;
+    let otherIncome = 0;
+    let nonTaxableAdditionalIncome = 0;
+    let employmentIncome = 0;
 
     // SS with survivor benefits
     const clientSSAnnual = clientSS * 12 * incomeInflationFactor;
     const partnerSSAnnual = partnerSS * 12 * incomeInflationFactor;
 
     if (clientAlive && (clientInfo.currentAge >= 67 || simAge >= ssStartAge)) {
-      income += clientSSAnnual;
+      ssIncome += clientSSAnnual;
     }
     if (partnerAlive && (clientInfo.partnerAge >= 67 || currentPartnerAge >= partnerSSStartAge)) {
-      income += partnerSSAnnual;
+      ssIncome += partnerSSAnnual;
     }
     if (clientInfo.isMarried) {
       if (!clientAlive && partnerAlive && (clientInfo.partnerAge >= 67 || currentPartnerAge >= partnerSSStartAge) && clientSSAnnual > partnerSSAnnual) {
-        income += (clientSSAnnual - partnerSSAnnual);
+        ssIncome += (clientSSAnnual - partnerSSAnnual);
       }
       if (clientAlive && !partnerAlive && (clientInfo.currentAge >= 67 || simAge >= ssStartAge) && partnerSSAnnual > clientSSAnnual) {
-        income += (partnerSSAnnual - clientSSAnnual);
+        ssIncome += (partnerSSAnnual - clientSSAnnual);
       }
     }
 
     // Pension with survivor benefits
     if (clientAlive && simAge >= pensionStartAge) {
-      income += monthlyPension * 12 * (pensionCOLA ? incomeInflationFactor : 1);
+      pensionIncome += monthlyPension * 12 * (pensionCOLA ? incomeInflationFactor : 1);
     } else if (!clientAlive && partnerAlive && (pensionSurvivorBenefitPct || 0) > 0 && simAge >= pensionStartAge) {
-      income += monthlyPension * (pensionSurvivorBenefitPct / 100) * 12 * (pensionCOLA ? incomeInflationFactor : 1);
+      pensionIncome += monthlyPension * (pensionSurvivorBenefitPct / 100) * 12 * (pensionCOLA ? incomeInflationFactor : 1);
     }
     if (partnerAlive && partnerMonthlyPension > 0 && currentPartnerAge >= (partnerPensionStartAge || 65)) {
-      income += partnerMonthlyPension * 12 * (partnerPensionCOLA ? incomeInflationFactor : 1);
+      pensionIncome += partnerMonthlyPension * 12 * (partnerPensionCOLA ? incomeInflationFactor : 1);
     } else if (!partnerAlive && clientAlive && (partnerPensionSurvivorBenefitPct || 0) > 0 && partnerMonthlyPension > 0 && currentPartnerAge >= (partnerPensionStartAge || 65)) {
-      income += partnerMonthlyPension * (partnerPensionSurvivorBenefitPct / 100) * 12 * (partnerPensionCOLA ? incomeInflationFactor : 1);
+      pensionIncome += partnerMonthlyPension * (partnerPensionSurvivorBenefitPct / 100) * 12 * (partnerPensionCOLA ? incomeInflationFactor : 1);
     }
 
     // Recurring additional incomes - stop if owner has died
@@ -1258,7 +1276,9 @@ export const runOptimizedSimulation = (allocation, assumptions, inputs, clientIn
       if (ownerAlive && !stream.isOneTime && ownerAge >= stream.startAge && ownerAge <= (stream.endAge || 100)) {
         let streamAmount = stream.amount * 12;
         if (stream.inflationAdjusted) streamAmount *= incomeInflationFactor;
-        income += streamAmount;
+        const taxablePct = (stream.taxablePercent ?? 100) / 100;
+        otherIncome += streamAmount * taxablePct;
+        nonTaxableAdditionalIncome += streamAmount * (1 - taxablePct);
       }
     });
 
@@ -1268,7 +1288,7 @@ export const runOptimizedSimulation = (allocation, assumptions, inputs, clientIn
     if (clientInfo.isMarried && partnerAlive && partnerAnnualIncome > 0 && currentPartnerAge < partnerRetAge) {
       let partnerEmployment = partnerAnnualIncome;
       if (inflationRate > 0) partnerEmployment *= incomeInflationFactor;
-      income += partnerEmployment;
+      employmentIncome += partnerEmployment;
     }
 
     // One-time contributions - only if owner is alive
@@ -1279,9 +1299,13 @@ export const runOptimizedSimulation = (allocation, assumptions, inputs, clientIn
       if (ownerAlive && stream.isOneTime && ownerAge === stream.startAge) {
         let streamAmount = stream.amount;
         if (stream.inflationAdjusted) streamAmount *= incomeInflationFactor;
-        oneTimeContributions += streamAmount;
+        const taxablePct = (stream.taxablePercent ?? 100) / 100;
+        otherIncome += streamAmount * taxablePct;
+        oneTimeContributions += streamAmount * (1 - taxablePct);
       }
     });
+
+    const income = ssIncome + pensionIncome + otherIncome + nonTaxableAdditionalIncome + employmentIncome;
 
     // Apply cash flow adjustments to expenses
     let adjustedExpenses = expenses;
@@ -1309,7 +1333,8 @@ export const runOptimizedSimulation = (allocation, assumptions, inputs, clientIn
     }
 
     const gap = Math.max(0, adjustedExpenses - income);
-    return { expenses: adjustedExpenses, income, gap, simAge, currentPartnerAge, oneTimeContributions };
+    return { expenses: adjustedExpenses, income, gap, simAge, currentPartnerAge, oneTimeContributions,
+      ssIncome, pensionIncome, otherIncome, employmentIncome, clientAlive, partnerAlive };
   };
 
   let failureCount = 0;
@@ -1399,8 +1424,52 @@ export const runOptimizedSimulation = (allocation, assumptions, inputs, clientIn
       // Adjust gap by VA guaranteed income
       const adjustedGap = vaInputs ? Math.max(0, details.gap - vaGuaranteedIncome) : details.gap;
 
-      // Withdraw for spending gap
+      // Tax-inclusive withdrawal calculation (mirrors runSimulation logic)
       let withdrawalAmount = adjustedGap;
+      if (inputs.taxEnabled) {
+        const override = inputs.withdrawalOverrides?.[details.simAge];
+        const traditionalPct = (override?.traditionalPercent ?? inputs.traditionalPercent ?? 60) / 100;
+        const rothPct = (override?.rothPercent ?? inputs.rothPercent ?? 25) / 100;
+        const nqPct = (override?.nqPercent ?? inputs.nqPercent ?? 15) / 100;
+
+        const nqDividendYield = (inputs.nqDividendYield ?? 2.0) / 100;
+        const nqQualifiedDividendPct = (inputs.nqQualifiedDividendPercent ?? 80) / 100;
+        const nqCapitalGainRate = (inputs.nqCapitalGainRate ?? 50) / 100;
+
+        const startTotal = balances.b1 + balances.b2 + balances.b3 + balances.b4 + balances.b5;
+        const nqBalance = startTotal * nqPct;
+        const nqTotalDividends = nqBalance * nqDividendYield;
+        const nqQualifiedDividends = nqTotalDividends * nqQualifiedDividendPct;
+        const nqOrdinaryDividends = nqTotalDividends - nqQualifiedDividends;
+
+        const isSenior = details.simAge >= 65;
+        const bothAliveForTax = details.clientAlive && details.partnerAlive;
+        const filingStatus = (inputs.filingStatus === 'married' && !bothAliveForTax) ? 'single' : (inputs.filingStatus || 'married');
+        const stateRate = inputs.stateRate || 0;
+
+        let withdrawal = adjustedGap;
+        for (let taxIter = 0; taxIter < 5; taxIter++) {
+          const nqWithdrawal = withdrawal * nqPct;
+          const nqTaxableGain = nqWithdrawal * nqCapitalGainRate;
+
+          const taxData = calculateAnnualTax({
+            ssIncome: details.ssIncome,
+            pensionIncome: details.pensionIncome,
+            traditionalWithdrawal: withdrawal * traditionalPct,
+            rothWithdrawal: withdrawal * rothPct,
+            nqTaxableGain,
+            nqQualifiedDividends,
+            nqOrdinaryDividends,
+            otherIncome: details.otherIncome,
+            employmentIncome: details.employmentIncome
+          }, { filingStatus, stateRate }, isSenior);
+
+          const newWithdrawal = adjustedGap + taxData.totalTax;
+          if (Math.abs(newWithdrawal - withdrawal) < 1) break;
+          withdrawal = newWithdrawal;
+        }
+        withdrawalAmount = withdrawal;
+      }
       const withdrawOrder = ['b1', 'b2', 'b3', 'b4', 'b5'];
       for (let b of withdrawOrder) {
         if (withdrawalAmount <= 0) break;
@@ -1418,11 +1487,41 @@ export const runOptimizedSimulation = (allocation, assumptions, inputs, clientIn
       if (rebalanceFreq > 0 && (i + 1) % rebalanceFreq === 0) {
         const currentTotal = balances.b1 + balances.b2 + balances.b3 + balances.b4 + balances.b5;
         if (currentTotal > 0) {
-          balances.b1 = currentTotal * targetPcts.b1;
-          balances.b2 = currentTotal * targetPcts.b2;
-          balances.b3 = currentTotal * targetPcts.b3;
-          balances.b4 = currentTotal * targetPcts.b4;
-          balances.b5 = currentTotal * targetPcts.b5;
+          // Dynamic rolling-window rebalancing (matches architect logic)
+          const calcPVGaps = (startYear, endYear, rate) => {
+            let totalPV = 0;
+            for (let yr = startYear; yr <= endYear; yr++) {
+              if (yr > years) break;
+              const futureDetails = getAnnualDetails(yr);
+              const yearsOut = yr - (i + 1); // Years from current rebalance point
+              const pvFactor = Math.pow(1 + (rate / 100), yearsOut);
+              totalPV += futureDetails.gap / pvFactor;
+            }
+            return totalPV;
+          };
+
+          const yearNum = i + 1; // 1-indexed year number
+          // B1: Next 3 years
+          const b1Target = calcPVGaps(yearNum + 1, yearNum + 3, assumptions.b1.return);
+          // B2: Years 4-6
+          const b2Target = calcPVGaps(yearNum + 4, yearNum + 6, assumptions.b2.return);
+          // B3: Years 7-15 with minimum 20%
+          const b3Calculated = calcPVGaps(yearNum + 7, yearNum + 15, assumptions.b3.return);
+          const b3Min = currentTotal * 0.20;
+          const b3Target = Math.max(b3Calculated, b3Min);
+          // B4: 10% of total
+          const b4Target = currentTotal * 0.10;
+
+          let availableFunds = currentTotal;
+          balances.b1 = Math.min(b1Target, availableFunds);
+          availableFunds -= balances.b1;
+          balances.b2 = Math.min(b2Target, Math.max(0, availableFunds));
+          availableFunds -= balances.b2;
+          balances.b3 = Math.min(b3Target, Math.max(0, availableFunds));
+          availableFunds -= balances.b3;
+          balances.b4 = Math.min(b4Target, Math.max(0, availableFunds));
+          availableFunds -= balances.b4;
+          balances.b5 = Math.max(0, availableFunds);
         }
       }
 
