@@ -193,7 +193,7 @@ export const useCommandCenter = ({ currentUser }) => {
       // Monte Carlo results
       monteCarloResults: {
         successRate: monteCarloData?.successRate || 0,
-        simulations: 500
+        simulations: 1000
       },
 
       // Projected legacy (median balance at end of simulation period)

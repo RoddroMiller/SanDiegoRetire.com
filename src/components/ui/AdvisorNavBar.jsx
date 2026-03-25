@@ -10,7 +10,7 @@ const tabs = [
 
 export const AdvisorNavBar = ({ activeView, onNavigate, userRole, onLogout }) => {
   return (
-    <nav className="bg-white border-b border-slate-200 print:hidden sticky top-0 z-50">
+    <nav className="bg-white border-b border-slate-200 print:hidden no-print sticky top-0 z-50">
       <div className="max-w-7xl mx-auto px-3 sm:px-6">
         <div className="flex items-center justify-between h-14 sm:h-16">
           {/* Left: Logo */}

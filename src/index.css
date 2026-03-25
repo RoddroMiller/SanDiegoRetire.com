@@ -87,4 +87,9 @@
   table, tr, td, th {
     page-break-inside: avoid;
   }
+
+  /* Force-hide interactive page content during print */
+  .no-print {
+    display: none !important;
+  }
 }

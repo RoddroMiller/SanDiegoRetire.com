@@ -269,6 +269,97 @@ export const ArchitectPage = ({
     };
   }, [selectedImprovements, customImprovements, inputs, clientInfo, monteCarloData, projectionData, accumulationData]);
 
+  // --- Cash Flow print page data ---
+  const cashFlowPrintData = useMemo(() => {
+    const fmt = (val) => `$${Math.round(val).toLocaleString()}`;
+    const hasEmployment = projectionData.some(r => r.employmentIncomeDetail > 0);
+    const hasOther = projectionData.some(r => r.otherIncomeDetail > 0);
+    const hasContributions = projectionData.some(r => r.contribution > 0);
+    const hasNqData = inputs.taxEnabled && projectionData.some(r => r.nqWithdrawal > 0);
+
+    const rows = [
+      { label: 'Plan Year', cls: 'font-bold text-slate-800 bg-slate-100', getValue: (r) => r.year },
+      { label: `${clientInfo.name || 'Client'} Age`, cls: 'font-bold text-slate-700 bg-slate-50', getValue: (r) => r.age },
+    ];
+    if (clientInfo.isMarried) {
+      rows.push({ label: `${clientInfo.partnerName || 'Partner'} Age`, cls: 'text-slate-500 bg-slate-50', getValue: (r) => Math.floor(r.partnerAge) });
+    }
+    rows.push(
+      { label: '', cls: 'bg-slate-200', getValue: () => '', isSeparator: true },
+      { label: 'Starting Balance', cls: 'text-slate-700', getValue: (r) => fmt(r.startBalance) },
+      { label: 'Growth', cls: 'text-emerald-700', getValue: (r) => `${r.growth >= 0 ? '+' : ''}${fmt(r.growth)}` },
+      { label: '', cls: 'bg-slate-200', getValue: () => '', isSeparator: true },
+      { label: 'Social Security', cls: 'text-blue-700', getValue: (r) => fmt(r.ssIncomeDetail || 0) },
+      { label: 'Pension', cls: 'text-blue-700', getValue: (r) => fmt(r.pensionIncomeDetail || 0) },
+    );
+    if (hasEmployment) rows.push({ label: 'Employment Income', cls: 'text-teal-700', getValue: (r) => r.employmentIncomeDetail > 0 ? fmt(r.employmentIncomeDetail) : '-' });
+    if (hasOther) rows.push({ label: 'Other Income', cls: 'text-cyan-700', getValue: (r) => r.otherIncomeDetail > 0 ? fmt(r.otherIncomeDetail) : '-' });
+    if (hasContributions) rows.push({ label: 'One-Time Contributions', cls: 'text-purple-700', getValue: (r) => r.contribution > 0 ? `+${fmt(r.contribution)}` : '-' });
+    rows.push(
+      { label: 'Total Income', cls: 'font-bold text-blue-800 bg-blue-50', getValue: (r) => fmt(r.ssIncome) },
+      { label: '', cls: 'bg-slate-200', getValue: () => '', isSeparator: true },
+      { label: 'Total Spending', cls: 'font-bold text-slate-800', getValue: (r) => fmt(r.expenses) },
+      { label: 'Portfolio Withdrawal', cls: 'text-orange-700', getValue: (r) => fmt(r.distribution) },
+    );
+    if (inputs.taxEnabled) {
+      rows.push(
+        { label: '', cls: 'bg-slate-200', getValue: () => '', isSeparator: true },
+        { label: 'Federal Tax', cls: 'text-red-600', getValue: (r) => fmt(r.federalTax || 0) },
+        { label: 'State Tax', cls: 'text-red-600', getValue: (r) => fmt(r.stateTax || 0) },
+        { label: 'Total Tax', cls: 'font-bold text-red-700 bg-red-50', getValue: (r) => fmt(r.totalTax || 0) },
+        { label: 'Effective Rate', cls: 'text-amber-700', getValue: (r) => `${r.effectiveRate || '0'}%` },
+      );
+    }
+    if (hasNqData) {
+      rows.push(
+        { label: '', cls: 'bg-slate-200', getValue: () => '', isSeparator: true },
+        { label: 'Traditional Withdrawal', cls: 'text-blue-600', getValue: (r) => fmt(r.distribution * (r.traditionalPctUsed || 0) / 100) },
+        { label: 'Roth Withdrawal', cls: 'text-emerald-600', getValue: (r) => fmt(r.distribution * (r.rothPctUsed || 0) / 100) },
+        { label: 'NQ Withdrawal', cls: 'text-amber-600', getValue: (r) => fmt(r.nqWithdrawal || 0) },
+        { label: '  Cost Basis', cls: 'text-slate-500 pl-4', getValue: (r) => fmt(r.nqCostBasis || 0) },
+        { label: '  Capital Gain', cls: 'text-red-500 pl-4', getValue: (r) => fmt(r.nqTaxableGain || 0) },
+        { label: 'Qualified Dividends', cls: 'text-purple-600', getValue: (r) => fmt(r.nqQualifiedDividends || 0) },
+        { label: 'Ordinary Dividends', cls: 'text-pink-600', getValue: (r) => fmt(r.nqOrdinaryDividends || 0) },
+      );
+    }
+    rows.push(
+      { label: '', cls: 'bg-slate-200', getValue: () => '', isSeparator: true },
+      { label: 'Distribution Rate', cls: 'text-red-600', getValue: (r) => `${r.distRate?.toFixed(1) || '0'}%` },
+      { label: 'Ending Balance', cls: 'font-bold text-slate-900 bg-emerald-50 text-base', getValue: (r) => fmt(Math.max(0, r.total)) },
+    );
+
+    const chunks = [];
+    for (let i = 0; i < projectionData.length; i += 5) {
+      chunks.push(projectionData.slice(i, i + 5));
+    }
+
+    return { rows, chunks };
+  }, [projectionData, inputs, clientInfo]);
+
+  const cashFlowPageCount = cashFlowPrintData.chunks.length;
+  const totalPrintPages = 10 + cashFlowPageCount; // 10 base pages + N cash flow pages
+
+  const renderCashFlowPrintTable = (cols, allRows) => (
+    <div className="overflow-x-auto border border-slate-200 rounded-lg">
+      <table className="w-full text-[11px] border-collapse">
+        <tbody>
+          {allRows.map((rowDef, ri) => (
+            <tr key={ri} className={rowDef.isSeparator ? 'h-1' : 'border-b border-slate-100'}>
+              <td className={`p-1.5 text-left whitespace-nowrap font-medium bg-white border-r border-slate-200 min-w-[160px] ${rowDef.cls || ''}`}>
+                {rowDef.label}
+              </td>
+              {cols.map((col, ci) => (
+                <td key={ci} className={`p-1.5 text-right whitespace-nowrap ${rowDef.isSeparator ? '' : rowDef.cls || ''}`}>
+                  {rowDef.isSeparator ? '' : rowDef.getValue(col)}
+                </td>
+              ))}
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+
   return (
     <div className={`min-h-screen bg-slate-50 font-sans text-slate-800 ${isGeneratingReport ? 'print-mode' : 'p-4 sm:p-6 lg:p-8'}`}>
 
@@ -291,7 +382,7 @@ export const ArchitectPage = ({
       </div>
 
       {/* ACTION BAR */}
-      <div className="max-w-7xl mx-auto mb-4 sm:mb-6 md:mb-8 print:hidden">
+      <div className="max-w-7xl mx-auto mb-4 sm:mb-6 md:mb-8 print:hidden no-print">
         <div className="flex flex-wrap items-center justify-end gap-1.5 sm:gap-2">
             {userRole !== 'client' && (
               <button
@@ -335,7 +426,7 @@ export const ArchitectPage = ({
       </div>
 
       {/* PRINT PAGE 2: Phase 1 - Accumulation */}
-      <PrintPageWrapper pageNumber={2} title="Phase 1 - Accumulation" subtitle="Building your retirement portfolio">
+      <PrintPageWrapper pageNumber={2} totalPages={totalPrintPages} title="Phase 1 - Accumulation" subtitle="Building your retirement portfolio">
         <div className="border rounded-lg p-3 mb-4">
           <AreaChart width={670} height={200} data={accumulationData}>
             <CartesianGrid strokeDasharray="3 3" vertical={false} />
@@ -369,28 +460,73 @@ export const ArchitectPage = ({
           <table className="w-full text-[12px]">
             <thead>
               <tr className="bg-slate-100">
-                <th className="p-1 text-left">Age</th>
-                <th className="p-1 text-right">Start Balance</th>
-                <th className="p-1 text-right text-emerald-600">Savings</th>
-                <th className="p-1 text-right text-blue-600">Growth</th>
-                <th className="p-1 text-right font-bold">End Balance</th>
+                <th className="px-1 py-0.5 text-left">Age</th>
+                <th className="px-1 py-0.5 text-right">Start Balance</th>
+                <th className="px-1 py-0.5 text-right text-emerald-600">Savings</th>
+                <th className="px-1 py-0.5 text-right text-blue-600">Growth</th>
+                <th className="px-1 py-0.5 text-right font-bold">End Balance</th>
               </tr>
             </thead>
             <tbody>
-              {accumulationData.map((row, i) => {
-                const prevBalance = i > 0 ? accumulationData[i - 1].balance : clientInfo.currentPortfolio;
-                const savings = i > 0 ? Math.round(clientInfo.annualSavings * Math.pow(1 + (inputs.inflationRate / 100), i - 1)) : 0;
-                const growth = i > 0 ? row.balance - prevBalance - savings : 0;
-                return (
-                  <tr key={i} className={i % 2 === 0 ? 'bg-white' : 'bg-slate-50'}>
-                    <td className="p-1">{row.age}</td>
-                    <td className="p-1 text-right">${prevBalance.toLocaleString()}</td>
-                    <td className="p-1 text-right text-emerald-600">{savings > 0 ? `+$${savings.toLocaleString()}` : '-'}</td>
-                    <td className="p-1 text-right text-blue-600">{growth > 0 ? `+$${Math.round(growth).toLocaleString()}` : '-'}</td>
-                    <td className="p-1 text-right font-bold">${row.balance.toLocaleString()}</td>
-                  </tr>
-                );
-              })}
+              {(() => {
+                const MAX_ROWS = 10;
+                const total = accumulationData.length;
+                // Build list of indices to display
+                let displayIndices;
+                if (total <= MAX_ROWS) {
+                  displayIndices = accumulationData.map((_, i) => i);
+                } else {
+                  const indexSet = new Set();
+                  // First 3
+                  for (let i = 0; i < 3 && i < total; i++) indexSet.add(i);
+                  // Last 3
+                  for (let i = Math.max(0, total - 3); i < total; i++) indexSet.add(i);
+                  // One-time event years during accumulation
+                  const retAge = clientInfo.retirementAge;
+                  (inputs.additionalIncomes || []).forEach(income => {
+                    if (income.isOneTime && income.startAge < retAge) {
+                      const idx = accumulationData.findIndex(r => r.age === income.startAge);
+                      if (idx >= 0) indexSet.add(idx);
+                    }
+                  });
+                  // Fill remaining slots with evenly spaced years
+                  const remaining = MAX_ROWS - indexSet.size;
+                  if (remaining > 0) {
+                    const candidates = [];
+                    for (let i = 0; i < total; i++) {
+                      if (!indexSet.has(i)) candidates.push(i);
+                    }
+                    const step = candidates.length / (remaining + 1);
+                    for (let j = 1; j <= remaining; j++) {
+                      indexSet.add(candidates[Math.round(step * j - 1)] ?? candidates[candidates.length - 1]);
+                    }
+                  }
+                  displayIndices = [...indexSet].sort((a, b) => a - b).slice(0, MAX_ROWS);
+                }
+                // Render rows with ellipsis separators for gaps
+                const rows = [];
+                displayIndices.forEach((idx, pos) => {
+                  if (pos > 0 && idx > displayIndices[pos - 1] + 1) {
+                    rows.push(
+                      <tr key={`gap-${idx}`}><td colSpan={5} className="py-0 leading-none text-center text-slate-300 text-[8px]">⋮</td></tr>
+                    );
+                  }
+                  const row = accumulationData[idx];
+                  const prevBalance = idx > 0 ? accumulationData[idx - 1].balance : clientInfo.currentPortfolio;
+                  const savings = idx > 0 ? Math.round(clientInfo.annualSavings * Math.pow(1 + (inputs.inflationRate / 100), idx - 1)) : 0;
+                  const growth = idx > 0 ? row.balance - prevBalance - savings : 0;
+                  rows.push(
+                    <tr key={idx} className={pos % 2 === 0 ? 'bg-white' : 'bg-slate-50'}>
+                      <td className="px-1 py-0.5">{row.age}</td>
+                      <td className="px-1 py-0.5 text-right">${prevBalance.toLocaleString()}</td>
+                      <td className="px-1 py-0.5 text-right text-emerald-600">{savings > 0 ? `+$${savings.toLocaleString()}` : '-'}</td>
+                      <td className="px-1 py-0.5 text-right text-blue-600">{growth > 0 ? `+$${Math.round(growth).toLocaleString()}` : '-'}</td>
+                      <td className="px-1 py-0.5 text-right font-bold">${row.balance.toLocaleString()}</td>
+                    </tr>
+                  );
+                });
+                return rows;
+              })()}
             </tbody>
           </table>
         </div>
@@ -407,7 +543,7 @@ export const ArchitectPage = ({
       </PrintPageWrapper>
 
       {/* MAIN ARCHITECT PAGE */}
-      <div className="max-w-7xl mx-auto print:hidden">
+      <div className="max-w-7xl mx-auto print:hidden no-print">
 
         <div className="space-y-6">
 
@@ -446,7 +582,7 @@ export const ArchitectPage = ({
                 ? <><span className="line-through opacity-60">{(monteCarloData?.successRate || 0).toFixed(1)}%</span> → +{(adjustedProjections.successRate - (monteCarloData?.successRate || 0)).toFixed(1)}%</>
                 : `Positive balance through age ${finalProjectionAge}`}
               icon={Activity}
-              colorClass={`${(adjustedProjections.hasChanges ? adjustedProjections.successRate : monteCarloData?.successRate) > 80 ? "bg-emerald-600" : "bg-orange-500"} text-white ${adjustedProjections.hasChanges ? 'ring-2 ring-yellow-300' : ''}`}
+              colorClass={`${(() => { const sr = adjustedProjections.hasChanges ? adjustedProjections.successRate : monteCarloData?.successRate; return sr >= 85 ? "bg-emerald-600" : sr >= 65 ? "bg-orange-500" : "bg-red-600"; })()} text-white ${adjustedProjections.hasChanges ? 'ring-2 ring-yellow-300' : ''}`}
             />
             <StatBox
               label={`Legacy Balance (Age ${finalProjectionAge})`}
@@ -666,7 +802,7 @@ export const ArchitectPage = ({
       </div>
 
       {/* PRINT PAGE 3: Bucket Architecture */}
-      <PrintPageWrapper pageNumber={3} title="Bucket Architecture" subtitle="Time-segmented allocation strategy">
+      <PrintPageWrapper pageNumber={3} totalPages={totalPrintPages} title="Bucket Architecture" subtitle="Time-segmented allocation strategy">
         {/* Bucket Allocation Summary */}
         <div className="grid grid-cols-5 gap-3 mb-4">
           <div className="p-4 rounded-lg text-center" style={{ backgroundColor: `${COLORS.shortTerm}20`, borderTop: `4px solid ${COLORS.shortTerm}` }}>
@@ -816,7 +952,7 @@ export const ArchitectPage = ({
         ];
 
         return (
-          <PrintPageWrapper pageNumber={4} title="Phase 2 - Distribution Strategy" subtitle="Bucket-based withdrawal sequence">
+          <PrintPageWrapper pageNumber={4} totalPages={totalPrintPages} title="Phase 2 - Distribution Strategy" subtitle="Bucket-based withdrawal sequence">
             {/* Starting Balance */}
             <div className="flex flex-col items-center mb-3">
               <div className="bg-slate-800 text-white px-10 py-2 rounded-lg shadow-lg text-center">
@@ -878,13 +1014,13 @@ export const ArchitectPage = ({
             <div className="grid grid-cols-2 gap-4">
               <div className="border-2 border-slate-200 rounded-lg p-3 text-center">
                 <p className="text-xs text-slate-500 uppercase tracking-wide mb-1">Success Probability (Age {finalProjectionAge})</p>
-                <div className={`text-3xl font-bold ${monteCarloData.successRate >= 85 ? 'text-emerald-600' : monteCarloData.successRate >= 70 ? 'text-yellow-600' : 'text-red-600'}`}>
+                <div className={`text-3xl font-bold ${monteCarloData.successRate >= 85 ? 'text-emerald-600' : monteCarloData.successRate >= 65 ? 'text-orange-600' : 'text-red-600'}`}>
                   {monteCarloData.successRate.toFixed(1)}%
                 </div>
-                <p className="text-xs text-slate-500 mt-1">Based on 500 Monte Carlo simulations</p>
+                <p className="text-xs text-slate-500 mt-1">Based on 1,000 Monte Carlo simulations</p>
                 <div className="w-full bg-slate-200 rounded-full h-1.5 mt-1">
                   <div
-                    className={`h-1.5 rounded-full ${monteCarloData.successRate >= 85 ? 'bg-emerald-500' : monteCarloData.successRate >= 70 ? 'bg-yellow-500' : 'bg-red-500'}`}
+                    className={`h-1.5 rounded-full ${monteCarloData.successRate >= 85 ? 'bg-emerald-500' : monteCarloData.successRate >= 65 ? 'bg-orange-500' : 'bg-red-500'}`}
                     style={{ width: `${Math.min(monteCarloData.successRate, 100)}%` }}
                   ></div>
                 </div>
@@ -910,7 +1046,7 @@ export const ArchitectPage = ({
       })()}
 
       {/* PRINT PAGE 5: Portfolio Sustainability */}
-      <PrintPageWrapper pageNumber={5} title="Portfolio Sustainability" subtitle={inputs.taxEnabled ? 'Projected portfolio balance and cash flow (with estimated taxes)' : 'Projected portfolio balance and annual cash flow detail'}>
+      <PrintPageWrapper pageNumber={5} totalPages={totalPrintPages} title="Portfolio Sustainability" subtitle={inputs.taxEnabled ? 'Projected portfolio balance and cash flow (with estimated taxes)' : 'Projected portfolio balance and annual cash flow detail'}>
         {/* Chart */}
         <div className="border border-slate-200 rounded-lg p-3 mb-4">
           <ComposedChart width={670} height={180} data={projectionData}>
@@ -970,8 +1106,25 @@ export const ArchitectPage = ({
         )}
       </PrintPageWrapper>
 
-      {/* PRINT PAGE 6: Social Security Optimization */}
-      <PrintPageWrapper pageNumber={6} title="Social Security Optimization" subtitle="Optimal claiming strategy analysis">
+      {/* PRINT PAGES 6+: Cash Flow Detail (5 years per page) */}
+      {cashFlowPrintData.chunks.map((chunk, idx) => {
+        const startAge = chunk[0]?.age;
+        const endAge = chunk[chunk.length - 1]?.age;
+        return (
+          <PrintPageWrapper
+            key={`cf-${idx}`}
+            pageNumber={6 + idx}
+            totalPages={totalPrintPages}
+            title={`Cash Flow Detail — Ages ${startAge}–${endAge}`}
+            subtitle={`Plan years ${chunk[0]?.year}–${chunk[chunk.length - 1]?.year}`}
+          >
+            {renderCashFlowPrintTable(chunk, cashFlowPrintData.rows)}
+          </PrintPageWrapper>
+        );
+      })}
+
+      {/* PRINT PAGE: Social Security Optimization */}
+      <PrintPageWrapper pageNumber={6 + cashFlowPageCount} totalPages={totalPrintPages} title="Social Security Optimization" subtitle="Optimal claiming strategy analysis">
         {/* Primary Recommendation */}
         <div className="bg-black text-white p-4 rounded-lg mb-4">
           <div className="flex items-center gap-3">
@@ -1040,10 +1193,10 @@ export const ArchitectPage = ({
         </div>
       </PrintPageWrapper>
 
-      {/* PRINT PAGE 7: Monte Carlo Simulation */}
-      <PrintPageWrapper pageNumber={7} title="Monte Carlo Simulation" subtitle="Probability analysis based on 1,000 market scenarios">
+      {/* PRINT PAGE: Monte Carlo Simulation */}
+      <PrintPageWrapper pageNumber={7 + cashFlowPageCount} totalPages={totalPrintPages} title="Monte Carlo Simulation" subtitle="Probability analysis based on 1,000 market scenarios">
         {/* Success Rate */}
-        <div className={`${monteCarloData.successRate > 85 ? 'bg-emerald-500' : 'bg-orange-500'} text-white p-6 rounded-lg mb-4`}>
+        <div className={`${monteCarloData.successRate >= 85 ? 'bg-emerald-500' : monteCarloData.successRate >= 65 ? 'bg-orange-500' : 'bg-red-500'} text-white p-6 rounded-lg mb-4`}>
           <div className="flex items-center justify-between">
             <div>
               <p className="text-[13px] opacity-80">Success Probability</p>
@@ -1070,15 +1223,15 @@ export const ArchitectPage = ({
 
         <div className="bg-slate-100 p-4 rounded-lg text-[13px]">
           <p className="text-slate-700">
-            <strong>How to interpret:</strong> This simulation runs 500 random market scenarios using historical return patterns.
+            <strong>How to interpret:</strong> This simulation runs 1,000 random market scenarios using historical return patterns.
             The shaded area shows the range between best (90th percentile) and worst (10th percentile) outcomes.
             A success rate above 85% indicates a robust retirement plan.
           </p>
         </div>
       </PrintPageWrapper>
 
-      {/* PRINT PAGE 8: Strategy Optimizer */}
-      <PrintPageWrapper pageNumber={8} title="Strategy Comparison" subtitle="Alternative allocation strategies analyzed">
+      {/* PRINT PAGE: Strategy Comparison */}
+      <PrintPageWrapper pageNumber={8 + cashFlowPageCount} totalPages={totalPrintPages} title="Strategy Comparison" subtitle="Alternative allocation strategies analyzed">
         {/* Strategy Comparison Table */}
         <div className="border border-slate-200 rounded-lg overflow-hidden mb-4">
           <table className="w-full text-[12px]">
@@ -1183,12 +1336,12 @@ export const ArchitectPage = ({
         </div>
 
         <div className="mt-4 bg-slate-100 p-3 rounded-lg text-[13px] text-slate-500">
-          <p><strong>Note:</strong> Success rates are based on 500-iteration Monte Carlo simulations. Legacy values represent median outcomes. Actual results will vary based on market conditions and personal circumstances.</p>
+          <p><strong>Note:</strong> Success rates are based on 1,000-iteration Monte Carlo simulations. Legacy values represent median outcomes. Actual results will vary based on market conditions and personal circumstances.</p>
         </div>
       </PrintPageWrapper>
 
-      {/* PRINT PAGE 9: Disclosures */}
-      <PrintPageWrapper pageNumber={9} title="Important Disclosures" subtitle="Assumptions, methodology, and limitations">
+      {/* PRINT PAGE: Disclosures */}
+      <PrintPageWrapper pageNumber={9 + cashFlowPageCount} totalPages={totalPrintPages} title="Important Disclosures" subtitle="Assumptions, methodology, and limitations">
         <div className="space-y-2 text-[12px] text-slate-600">
           {/* Return Assumptions */}
           <div className="border border-slate-200 rounded-lg p-2">
@@ -2432,7 +2585,7 @@ const MonteCarloTab = ({ monteCarloData, rebalanceFreq, vaEnabled, vaInputs, onT
           value={`${monteCarloData.successRate.toFixed(1)}%`}
           subtext="Iterations ending > $0"
           icon={Activity}
-          colorClass={monteCarloData.successRate > 85 ? "bg-emerald-500" : "bg-orange-500"}
+          colorClass={monteCarloData.successRate >= 85 ? "bg-emerald-500" : monteCarloData.successRate >= 65 ? "bg-orange-500" : "bg-red-500"}
         />
         {vaEnabled && vaMonteCarloData && (
           <StatBox
@@ -2440,12 +2593,12 @@ const MonteCarloTab = ({ monteCarloData, rebalanceFreq, vaEnabled, vaInputs, onT
             value={`${vaMonteCarloData.successRate.toFixed(1)}%`}
             subtext="With guaranteed income"
             icon={Shield}
-            colorClass={vaMonteCarloData.successRate > 85 ? "bg-purple-500" : "bg-orange-500"}
+            colorClass={vaMonteCarloData.successRate >= 85 ? "bg-purple-500" : vaMonteCarloData.successRate >= 65 ? "bg-orange-500" : "bg-red-500"}
           />
         )}
         <div className={`${vaEnabled ? '' : 'md:col-span-2'} bg-indigo-50 p-4 rounded-lg text-sm text-indigo-900 flex items-center`}>
           <p>
-            <strong>Simulation Logic:</strong> 500 iterations using Gaussian distribution.
+            <strong>Simulation Logic:</strong> 1,000 iterations using Gaussian distribution.
             Strategy: <strong>{rebalanceFreq === 0 ? 'Sequential Depletion' : `Bucket Refill Every ${rebalanceFreq} Years`}</strong>.
           </p>
         </div>
@@ -2473,7 +2626,7 @@ const MonteCarloTab = ({ monteCarloData, rebalanceFreq, vaEnabled, vaInputs, onT
               </div>
               <div className="mt-3 flex justify-around text-center">
                 <div>
-                  <span className={`text-2xl font-bold ${monteCarloData.successRate > 85 ? 'text-emerald-600' : 'text-orange-600'}`}>
+                  <span className={`text-2xl font-bold ${monteCarloData.successRate >= 85 ? 'text-emerald-600' : monteCarloData.successRate >= 65 ? 'text-orange-600' : 'text-red-600'}`}>
                     {monteCarloData.successRate.toFixed(1)}%
                   </span>
                   <div className="text-slate-500 text-sm">Success Rate</div>
@@ -2507,7 +2660,7 @@ const MonteCarloTab = ({ monteCarloData, rebalanceFreq, vaEnabled, vaInputs, onT
               </div>
               <div className="mt-3 flex justify-around text-center">
                 <div>
-                  <span className={`text-2xl font-bold ${vaMonteCarloData.successRate > 85 ? 'text-purple-600' : 'text-orange-600'}`}>
+                  <span className={`text-2xl font-bold ${vaMonteCarloData.successRate >= 85 ? 'text-purple-600' : vaMonteCarloData.successRate >= 65 ? 'text-orange-600' : 'text-red-600'}`}>
                     {vaMonteCarloData.successRate.toFixed(1)}%
                   </span>
                   <div className="text-slate-500 text-sm">Success Rate</div>
@@ -3138,13 +3291,13 @@ const OptimizerTab = ({ optimizerData, inputs, basePlan, monteCarloData, project
         <div className="mb-4">
           <div className="flex justify-between items-center mb-1">
             <span className="text-sm text-slate-600">Success Rate</span>
-            <span className={`font-bold text-lg ${successRate >= 85 ? 'text-emerald-600' : successRate >= 70 ? 'text-yellow-600' : 'text-red-600'}`}>
+            <span className={`font-bold text-lg ${successRate >= 85 ? 'text-emerald-600' : successRate >= 65 ? 'text-orange-600' : 'text-red-600'}`}>
               {successRate.toFixed(1)}%
             </span>
           </div>
           <div className="w-full bg-slate-200 rounded-full h-2">
             <div
-              className={`h-2 rounded-full ${successRate >= 85 ? 'bg-emerald-500' : successRate >= 70 ? 'bg-yellow-500' : 'bg-red-500'}`}
+              className={`h-2 rounded-full ${successRate >= 85 ? 'bg-emerald-500' : successRate >= 65 ? 'bg-orange-500' : 'bg-red-500'}`}
               style={{ width: `${Math.min(100, successRate)}%` }}
             />
           </div>
@@ -3529,33 +3682,17 @@ const CashFlowsTab = ({ projectionData, inputs, clientInfo }) => {
         )}
       </Card>
 
-      {/* Print pages: 5-year chunks, transposed */}
-      {chunks.map((chunk, idx) => {
-        const startAge = chunk[0]?.age;
-        const endAge = chunk[chunk.length - 1]?.age;
-        return (
-          <PrintPageWrapper
-            key={idx}
-            pageNumber={idx + 1}
-            title={`Cash Flow Detail — Ages ${startAge}–${endAge}`}
-            subtitle={`Plan years ${chunk[0]?.year}–${chunk[chunk.length - 1]?.year}`}
-          >
-            {renderTransposedTable(chunk, 'text-[11px]')}
-          </PrintPageWrapper>
-        );
-      })}
     </div>
   );
 };
 
-const TOTAL_PAGES = 10;
-const SCHEDULING_URL = 'https://www.millerwm.com/schedule';
+const SCHEDULING_URL = 'https://oncehub.com/RoddMiller-30';
 
-const PrintFooter = ({ pageNumber }) => (
+const PrintFooter = ({ pageNumber, totalPages }) => (
   <div className="border-t border-slate-200 pt-4 mt-6">
     <div className="flex justify-between text-[11px] text-slate-400 mb-2">
       <span>Miller Wealth Management | Confidential</span>
-      <span>Page {pageNumber} of {TOTAL_PAGES}</span>
+      <span>Page {pageNumber} of {totalPages}</span>
     </div>
     <p className="text-[10px] text-slate-400 text-center leading-tight">
       Securities offered through LPL Financial, Member FINRA/SIPC. Investment Advice offered through Miller Wealth Management, a Registered Investment Advisor. Miller Wealth Management is a separate entity from LPL Financial.
@@ -3563,7 +3700,7 @@ const PrintFooter = ({ pageNumber }) => (
   </div>
 );
 
-const PrintPageWrapper = ({ pageNumber, title, subtitle, children }) => (
+const PrintPageWrapper = ({ pageNumber, totalPages, title, subtitle, children }) => (
   <div className="hidden print:flex flex-col min-h-[10in] break-after-page p-6">
     <div className="flex justify-between items-start mb-4">
       <div>
@@ -3576,7 +3713,7 @@ const PrintPageWrapper = ({ pageNumber, title, subtitle, children }) => (
     <div className="flex-1">
       {children}
     </div>
-    <PrintFooter pageNumber={pageNumber} />
+    <PrintFooter pageNumber={pageNumber} totalPages={totalPages} />
   </div>
 );
 
