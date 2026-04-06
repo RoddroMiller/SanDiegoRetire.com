@@ -1067,10 +1067,23 @@ export const runSimulation = (basePlan, assumptions, inputs, rebalanceFreq, isMo
       ? finalBalances[Math.floor(finalBalances.length / 2)]
       : 0;
 
+    // Find representative iterations for full cash flow table views
+    const sortedByFinal = results
+      .map((history, idx) => ({ idx, final: history[years - 1]?.total || 0 }))
+      .sort((a, b) => a.final - b.final);
+    const p10Target = sortedByFinal[Math.floor(iterations * 0.1)]?.idx || 0;
+    const medianTarget = sortedByFinal[Math.floor(iterations * 0.5)]?.idx || 0;
+    const p90Target = sortedByFinal[Math.floor(iterations * 0.9)]?.idx || 0;
+
     return {
       data: processed,
       successRate: ((iterations - failureCount) / iterations) * 100,
-      medianLegacy: Math.round(medianLegacy)
+      medianLegacy: Math.round(medianLegacy),
+      scenarios: {
+        conservative: results[p10Target],
+        median: results[medianTarget],
+        optimistic: results[p90Target]
+      }
     };
   }
 

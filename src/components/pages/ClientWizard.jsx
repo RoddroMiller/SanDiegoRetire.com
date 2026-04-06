@@ -50,6 +50,7 @@ export const ClientWizard = ({
 }) => {
   const [wizardStep, setWizardStep] = useState(1);
   const [showCashFlowTable, setShowCashFlowTable] = useState(false);
+  const [mcScenario, setMcScenario] = useState('median');
   const [validationError, setValidationError] = useState('');
   const [fieldErrors, setFieldErrors] = useState({});
   const [showSSEstimator, setShowSSEstimator] = useState(false);
@@ -218,7 +219,7 @@ export const ClientWizard = ({
         portfolio: inputs.totalPortfolio,
         monthlyNeed: inputs.monthlySpending,
         successRate: monteCarloData?.successRate || 0,
-        legacyBalance: cappedProjectionData[cappedProjectionData.length - 1]?.total || 0
+        legacyBalance: monteCarloData?.medianLegacy || cappedProjectionData[cappedProjectionData.length - 1]?.total || 0
       };
     }
 
@@ -271,7 +272,7 @@ export const ClientWizard = ({
       adjustedSuccessRate = Math.max(5, 20 - (distributionRate - 10) * 5);
     }
 
-    const baseLegacy = cappedProjectionData[cappedProjectionData.length - 1]?.total || 0;
+    const baseLegacy = monteCarloData?.medianLegacy || cappedProjectionData[cappedProjectionData.length - 1]?.total || 0;
     const portfolioRatio = adjustedPortfolio / (inputs.totalPortfolio || 1);
     const spendingRatio = adjustedMonthlyNeed / (inputs.monthlySpending || 1);
     const legacyMultiplier = portfolioRatio * (2 - spendingRatio);
@@ -1460,12 +1461,18 @@ export const ClientWizard = ({
         />
         <StatBox
           label="Legacy Balance"
-          value={adjustedProjections.hasChanges
-            ? `$${(adjustedProjections.legacyBalance / 1000000).toFixed(2)}M`
-            : `$${((cappedProjectionData[cappedProjectionData.length - 1]?.total || 0) / 1000000).toFixed(2)}M`}
+          value={(() => {
+            const legacy = adjustedProjections.hasChanges
+              ? adjustedProjections.legacyBalance
+              : (monteCarloData?.medianLegacy || cappedProjectionData[cappedProjectionData.length - 1]?.total || 0);
+            return legacy >= 1000000 ? `$${(legacy / 1000000).toFixed(2)}M` : `$${Math.round(legacy).toLocaleString()}`;
+          })()}
           subtext={adjustedProjections.hasChanges
-            ? <><span className="line-through opacity-60">${((cappedProjectionData[cappedProjectionData.length - 1]?.total || 0) / 1000000).toFixed(2)}M</span> → +${((adjustedProjections.legacyBalance - (cappedProjectionData[cappedProjectionData.length - 1]?.total || 0)) / 1000).toFixed(0)}k</>
-            : `At age ${cappedProjectionData[cappedProjectionData.length - 1]?.age || Math.min(clientInfo.retirementAge + 30, 95)}`}
+            ? (() => {
+                const baseLegacy = monteCarloData?.medianLegacy || cappedProjectionData[cappedProjectionData.length - 1]?.total || 0;
+                return <><span className="line-through opacity-60">${(baseLegacy / 1000000).toFixed(2)}M</span> → +${((adjustedProjections.legacyBalance - baseLegacy) / 1000).toFixed(0)}k</>;
+              })()
+            : `Median outcome at age ${cappedProjectionData[cappedProjectionData.length - 1]?.age || Math.min(clientInfo.retirementAge + 30, 95)}`}
           icon={Shield}
           colorClass={`bg-emerald-800 text-white ${adjustedProjections.hasChanges ? 'ring-2 ring-yellow-300' : ''}`}
         />
@@ -1493,68 +1500,143 @@ export const ClientWizard = ({
 
         {!showCashFlowTable ? (
           <>
-            <div className="h-80 w-full">
-              <ResponsiveContainer width="100%" height="100%">
-                <ComposedChart data={cappedProjectionData} margin={{ top: 5, right: 5, bottom: 30, left: 5 }}>
-                  <CartesianGrid strokeDasharray="3 3" vertical={false} />
-                  <XAxis dataKey="age" tick={{ dy: 5 }} />
-                  <YAxis tickFormatter={(val) => {
-                    if (val >= 1000000) {
-                      const millions = val / 1000000;
-                      return millions >= 10 ? `$${Math.round(millions)}M` : `$${millions.toFixed(1)}M`;
-                    }
-                    return `$${Math.round(val / 1000)}k`;
-                  }} />
-                  <YAxis yAxisId="right" orientation="right" tickFormatter={(val) => `${val.toFixed(1)}%`} domain={[0, 'auto']} />
-                  <Tooltip
-                    formatter={(val, name) => {
-                      if (name === 'Distribution Rate') return `${val.toFixed(2)}%`;
-                      return `$${Math.round(val).toLocaleString()}`;
-                    }}
-                    labelFormatter={(l) => `Age ${l}`}
-                  />
-                  <Legend verticalAlign="bottom" wrapperStyle={{ paddingTop: '30px', paddingBottom: '0px' }} />
-                  <Area type="monotone" dataKey="total" name="Miller Portfolio Architect Strategy" fill={COLORS.areaFill} stroke={COLORS.areaFill} fillOpacity={0.8} />
-                  <Line type="monotone" dataKey="benchmark" name="Benchmark 60/40 (Annual Rebalance)" stroke={COLORS.benchmark} strokeDasharray="5 5" strokeWidth={2} dot={false} />
-                  <Line yAxisId="right" type="monotone" dataKey="distRate" name="Distribution Rate" stroke={COLORS.distRate} strokeWidth={2} dot={false} />
-                </ComposedChart>
-              </ResponsiveContainer>
-            </div>
+            {monteCarloData?.data ? (() => {
+              const startAge = cappedProjectionData[0]?.age || clientInfo.retirementAge || 65;
+              const mcChartData = (monteCarloData.data || []).slice(0, cappedProjectionData.length).map((mc, idx) => ({
+                age: startAge + idx,
+                p90: Math.round(mc.p90),
+                median: Math.round(mc.median),
+                p10: Math.round(mc.p10),
+                total: cappedProjectionData[idx]?.total || 0,
+              }));
+              return (
+                <div className="h-80 w-full">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <ComposedChart data={mcChartData} margin={{ top: 5, right: 5, bottom: 30, left: 5 }}>
+                      <CartesianGrid strokeDasharray="3 3" vertical={false} />
+                      <XAxis dataKey="age" tick={{ dy: 5 }} />
+                      <YAxis tickFormatter={(val) => {
+                        if (val >= 1000000) {
+                          const millions = val / 1000000;
+                          return millions >= 10 ? `$${Math.round(millions)}M` : `$${millions.toFixed(1)}M`;
+                        }
+                        return `$${Math.round(val / 1000)}k`;
+                      }} />
+                      <Tooltip
+                        formatter={(val, name) => `$${Math.round(val).toLocaleString()}`}
+                        labelFormatter={(l) => `Age ${l}`}
+                      />
+                      <Legend verticalAlign="bottom" wrapperStyle={{ paddingTop: '30px', paddingBottom: '0px' }} />
+                      <Area type="monotone" dataKey="p90" name="Optimistic (90th Percentile)" fill="#d1fae5" stroke="#10b981" fillOpacity={0.4} />
+                      <Area type="monotone" dataKey="median" name="Expected (Median)" fill="#bfdbfe" stroke="#3b82f6" fillOpacity={0.5} />
+                      <Area type="monotone" dataKey="p10" name="Conservative (10th Percentile)" fill="#fee2e2" stroke="#ef4444" fillOpacity={0.4} />
+                    </ComposedChart>
+                  </ResponsiveContainer>
+                </div>
+              );
+            })() : (
+              <div className="h-80 w-full">
+                <ResponsiveContainer width="100%" height="100%">
+                  <ComposedChart data={cappedProjectionData} margin={{ top: 5, right: 5, bottom: 30, left: 5 }}>
+                    <CartesianGrid strokeDasharray="3 3" vertical={false} />
+                    <XAxis dataKey="age" tick={{ dy: 5 }} />
+                    <YAxis tickFormatter={(val) => {
+                      if (val >= 1000000) {
+                        const millions = val / 1000000;
+                        return millions >= 10 ? `$${Math.round(millions)}M` : `$${millions.toFixed(1)}M`;
+                      }
+                      return `$${Math.round(val / 1000)}k`;
+                    }} />
+                    <YAxis yAxisId="right" orientation="right" tickFormatter={(val) => `${val.toFixed(1)}%`} domain={[0, 'auto']} />
+                    <Tooltip
+                      formatter={(val, name) => {
+                        if (name === 'Distribution Rate') return `${val.toFixed(2)}%`;
+                        return `$${Math.round(val).toLocaleString()}`;
+                      }}
+                      labelFormatter={(l) => `Age ${l}`}
+                    />
+                    <Legend verticalAlign="bottom" wrapperStyle={{ paddingTop: '30px', paddingBottom: '0px' }} />
+                    <Area type="monotone" dataKey="total" name="Miller Portfolio Architect Strategy" fill={COLORS.areaFill} stroke={COLORS.areaFill} fillOpacity={0.8} />
+                    <Line type="monotone" dataKey="benchmark" name="Benchmark 60/40 (Annual Rebalance)" stroke={COLORS.benchmark} strokeDasharray="5 5" strokeWidth={2} dot={false} />
+                    <Line yAxisId="right" type="monotone" dataKey="distRate" name="Distribution Rate" stroke={COLORS.distRate} strokeWidth={2} dot={false} />
+                  </ComposedChart>
+                </ResponsiveContainer>
+              </div>
+            )}
           </>
         ) : (
-          <div className="overflow-x-auto max-h-80">
-            <table className="w-full text-xs text-right border-collapse">
-              <thead className="sticky top-0 bg-white">
-                <tr className="bg-slate-100 text-slate-600 font-bold border-b border-slate-200">
-                  <th className="p-2 text-left">Age</th>
-                  <th className="p-2">Start Balance</th>
-                  <th className="p-2 text-emerald-600">Growth</th>
-                  <th className="p-2 text-purple-600">Contribution</th>
-                  <th className="p-2 text-blue-600">Income</th>
-                  <th className="p-2 text-orange-600">Withdrawal</th>
-                  <th className="p-2 text-red-600">Est. Taxes</th>
-                  <th className="p-2 text-slate-900">End Balance</th>
-                </tr>
-              </thead>
-              <tbody>
-                {cappedProjectionData.map((row) => (
-                  <tr key={row.year} className="border-b border-slate-50 hover:bg-slate-50">
-                    <td className="p-2 text-left font-bold text-slate-700">{row.age}</td>
-                    <td className="p-2 text-slate-500">${row.startBalance.toLocaleString()}</td>
-                    <td className="p-2 text-emerald-600">+${row.growth.toLocaleString()}</td>
-                    <td className="p-2 text-purple-600">{row.contribution > 0 ? `+$${row.contribution.toLocaleString()}` : '-'}</td>
-                    <td className="p-2 text-blue-600">+${row.ssIncome.toLocaleString()}</td>
-                    <td className="p-2 text-orange-600">-${row.distribution.toLocaleString()}</td>
-                    <td className="p-2 text-red-500">-${row.totalTax?.toLocaleString() || '0'}</td>
-                    <td className={`p-2 font-bold ${row.total > 0 ? 'text-slate-900' : 'text-red-500'}`}>${Math.round(row.total).toLocaleString()}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+          <>
+            {monteCarloData?.scenarios && (
+              <div className="flex items-center gap-2 mb-3">
+                <span className="text-xs font-bold text-slate-500 uppercase">Scenario:</span>
+                <div className="flex items-center bg-slate-100 p-1 rounded-lg">
+                  <button
+                    onClick={() => setMcScenario('optimistic')}
+                    className={`px-3 py-1.5 text-xs font-bold rounded transition-all ${mcScenario === 'optimistic' ? 'bg-emerald-500 text-white shadow' : 'text-slate-500 hover:text-slate-700'}`}
+                  >
+                    Optimistic
+                  </button>
+                  <button
+                    onClick={() => setMcScenario('median')}
+                    className={`px-3 py-1.5 text-xs font-bold rounded transition-all ${mcScenario === 'median' ? 'bg-blue-500 text-white shadow' : 'text-slate-500 hover:text-slate-700'}`}
+                  >
+                    Median
+                  </button>
+                  <button
+                    onClick={() => setMcScenario('conservative')}
+                    className={`px-3 py-1.5 text-xs font-bold rounded transition-all ${mcScenario === 'conservative' ? 'bg-red-500 text-white shadow' : 'text-slate-500 hover:text-slate-700'}`}
+                  >
+                    Conservative
+                  </button>
+                </div>
+                <span className="text-xs text-slate-400 italic">
+                  {mcScenario === 'optimistic' ? '90th percentile — better than 90% of simulated outcomes'
+                    : mcScenario === 'conservative' ? '10th percentile — worse than only 10% of simulated outcomes'
+                    : '50th percentile — the most likely outcome'}
+                </span>
+              </div>
+            )}
+            <div className="overflow-x-auto max-h-80">
+              {(() => {
+                const tableData = monteCarloData?.scenarios
+                  ? (monteCarloData.scenarios[mcScenario] || []).filter(row => row.age <= 95)
+                  : cappedProjectionData;
+                return (
+                  <table className="w-full text-xs text-right border-collapse">
+                    <thead className="sticky top-0 bg-white">
+                      <tr className="bg-slate-100 text-slate-600 font-bold border-b border-slate-200">
+                        <th className="p-2 text-left">Age</th>
+                        <th className="p-2">Start Balance</th>
+                        <th className="p-2 text-emerald-600">Growth</th>
+                        <th className="p-2 text-purple-600">Contribution</th>
+                        <th className="p-2 text-blue-600">Income</th>
+                        <th className="p-2 text-orange-600">Withdrawal</th>
+                        <th className="p-2 text-red-600">Est. Taxes</th>
+                        <th className="p-2 text-slate-900">End Balance</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {tableData.map((row) => (
+                        <tr key={row.year} className="border-b border-slate-50 hover:bg-slate-50">
+                          <td className="p-2 text-left font-bold text-slate-700">{row.age}</td>
+                          <td className="p-2 text-slate-500">${(row.startBalance || 0).toLocaleString()}</td>
+                          <td className={`p-2 ${(row.growth || 0) >= 0 ? 'text-emerald-600' : 'text-red-600'}`}>{(row.growth || 0) >= 0 ? `+$${row.growth.toLocaleString()}` : `($${Math.abs(row.growth).toLocaleString()})`}</td>
+                          <td className="p-2 text-purple-600">{(row.contribution || 0) > 0 ? `+$${row.contribution.toLocaleString()}` : '-'}</td>
+                          <td className="p-2 text-blue-600">+${(row.ssIncome || 0).toLocaleString()}</td>
+                          <td className="p-2 text-orange-600">-${(row.distribution || 0).toLocaleString()}</td>
+                          <td className="p-2 text-red-500">-${(row.totalTax || 0).toLocaleString()}</td>
+                          <td className={`p-2 font-bold ${(row.total || 0) > 0 ? 'text-slate-900' : 'text-red-500'}`}>${Math.round(row.total || 0).toLocaleString()}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                );
+              })()}
+            </div>
+          </>
         )}
         <p className="mt-3 text-xs text-slate-500 italic">
-          Projections assume all savings are held in pre-tax retirement accounts (IRA/401k) with a 5% state income tax rate.
+          Projections are generated using Monte Carlo simulation methodology (1,000 iterations) with randomized annual returns based on historical asset class performance and standard deviations. The chart displays the range of probable outcomes across optimistic (90th percentile), expected (median), and conservative (10th percentile) scenarios. All savings are assumed to be held in pre-tax retirement accounts (IRA/401k) with a 5% state income tax rate.
         </p>
       </Card>
 

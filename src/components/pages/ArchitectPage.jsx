@@ -93,9 +93,10 @@ export const ArchitectPage = ({
   const lastProjectionEntry = useMemo(() => projectionData[projectionData.length - 1], [projectionData]);
   const finalProjectionAge = lastProjectionEntry?.age || 95;
   const legacyAt95 = useMemo(() => {
+    if (monteCarloData?.medianLegacy != null) return monteCarloData.medianLegacy;
     const entry = projectionData.find(p => p.age >= 95) || lastProjectionEntry;
     return entry?.total || 0;
-  }, [projectionData, lastProjectionEntry]);
+  }, [monteCarloData, projectionData, lastProjectionEntry]);
 
   // Command Center client selector state
   const [showClientSelector, setShowClientSelector] = useState(false);
@@ -702,6 +703,7 @@ export const ArchitectPage = ({
               basePlan={basePlan}
               assumptions={assumptions}
               projectionData={projectionData}
+              monteCarloData={monteCarloData}
               clientInfo={clientInfo}
               showCashFlowTable={showCashFlowTable}
               onSetShowCashFlowTable={onSetShowCashFlowTable}
@@ -1087,7 +1089,7 @@ export const ArchitectPage = ({
                 <tr key={row.year} className={i % 2 === 0 ? 'bg-white' : 'bg-slate-50'}>
                   <td className="p-1 text-left font-bold text-slate-700">{row.age}</td>
                   <td className="p-1 text-slate-500">${row.startBalance.toLocaleString()}</td>
-                  <td className="p-1 text-emerald-600">+${row.growth.toLocaleString()}</td>
+                  <td className={`p-1 ${row.growth >= 0 ? 'text-emerald-600' : 'text-red-600'}`}>{row.growth >= 0 ? `+$${row.growth.toLocaleString()}` : `($${Math.abs(row.growth).toLocaleString()})`}</td>
                   <td className="p-1 text-blue-600">+${row.ssIncome.toLocaleString()}</td>
                   <td className="p-1 text-orange-600">-${row.distribution.toLocaleString()}</td>
                   {inputs.taxEnabled && <td className="p-1 text-red-600">-${(row.totalTax || 0).toLocaleString()}</td>}
@@ -1593,7 +1595,7 @@ export const ArchitectPage = ({
 
 // Sub-components for tabs
 const AllocationTab = ({
-  inputs, basePlan, assumptions, projectionData, clientInfo,
+  inputs, basePlan, assumptions, projectionData, monteCarloData, clientInfo,
   showCashFlowTable, onSetShowCashFlowTable, rebalanceFreq, onSetRebalanceFreq,
   useManualAllocation, manualAllocationMode, manualAllocations, manualPercentages,
   useManualForRebalance, onToggleManualAllocation, onToggleManualForRebalance,
@@ -1602,6 +1604,8 @@ const AllocationTab = ({
   onInputChange, onAccountSplitChange, onWithdrawalOverrideChange
 }) => {
   const [selectedTaxRow, setSelectedTaxRow] = useState(null);
+  const [showMonteCarlo, setShowMonteCarlo] = useState(false);
+  const [mcScenario, setMcScenario] = useState('median');
 
   // Compute tax detail when a row is selected
   const taxDetail = useMemo(() => {
@@ -1956,90 +1960,192 @@ const AllocationTab = ({
               <option value={6}>Every 6 Years</option>
             </select>
           </div>
+          <label className="flex items-center gap-2 bg-slate-50 px-3 py-1.5 rounded-lg border border-slate-200 cursor-pointer select-none">
+            <input
+              type="checkbox"
+              checked={showMonteCarlo}
+              onChange={(e) => setShowMonteCarlo(e.target.checked)}
+              className="accent-blue-600"
+            />
+            <span className="text-xs font-bold text-slate-600">Monte Carlo</span>
+          </label>
         </div>
       </div>
 
       {!showCashFlowTable ? (
         <>
-          <div className="h-80 w-full">
-            <ResponsiveContainer width="100%" height="100%">
-              <ComposedChart data={projectionData}>
-                <CartesianGrid strokeDasharray="3 3" vertical={false} />
-                <XAxis dataKey="year" />
-                <YAxis tickFormatter={(val) => val >= 2000000 ? `$${Math.round(val / 1000000)}M` : `$${Math.round(val / 1000)}k`} />
-                <YAxis yAxisId="right" orientation="right" tickFormatter={(val) => `${val.toFixed(1)}%`} domain={[0, 'auto']} />
-                <Tooltip
-                  formatter={(val, name) => {
-                    if (name === 'Distribution Rate') return `${val.toFixed(2)}%`;
-                    return `$${Math.round(val).toLocaleString()}`;
-                  }}
-                  labelFormatter={(l) => `Year ${l}`}
-                />
-                <Legend />
-                <Area type="monotone" dataKey="total" name="Miller Portfolio Architect Strategy" fill={COLORS.areaFill} stroke={COLORS.areaFill} fillOpacity={0.8} />
-                <Line type="monotone" dataKey="benchmark" name="Benchmark 60/40 (Annual Rebalance)" stroke={COLORS.benchmark} strokeDasharray="5 5" strokeWidth={2} dot={false} />
-                <Line yAxisId="right" type="monotone" dataKey="distRate" name="Distribution Rate" stroke={COLORS.distRate} strokeWidth={2} dot={false} />
-              </ComposedChart>
-            </ResponsiveContainer>
-          </div>
-          <div className="mt-4 p-3 bg-yellow-50 text-xs text-yellow-800 rounded border border-yellow-100 flex items-start gap-2">
-            <Activity className="w-4 h-4 mt-0.5" />
-            <p>
-              <strong>Grey Area:</strong> Miller Portfolio Architect Strategy - dynamic bucket allocation optimized for retirement income. <br />
-              <strong>Gold Line:</strong> Benchmark 60/40 with annual rebalance for comparison. <br />
-              <strong>Red Line:</strong> Distribution rate - annual withdrawal as % of portfolio.
-            </p>
-          </div>
+          {showMonteCarlo && monteCarloData ? (() => {
+            const mcChartData = (monteCarloData.data || []).map((mc, idx) => ({
+              year: mc.year,
+              p90: Math.round(mc.p90),
+              median: Math.round(mc.median),
+              p10: Math.round(mc.p10),
+              total: projectionData[idx]?.total || 0,
+              benchmark: projectionData[idx]?.benchmark || 0,
+            }));
+            return (
+              <>
+                <div className="flex items-center gap-4 mb-3">
+                  <div className="flex items-center gap-2 text-xs">
+                    <span className="font-bold text-slate-700">Success Rate:</span>
+                    <span className={`font-bold text-lg ${monteCarloData.successRate >= 90 ? 'text-emerald-600' : monteCarloData.successRate >= 75 ? 'text-yellow-600' : 'text-red-600'}`}>
+                      {monteCarloData.successRate?.toFixed(1)}%
+                    </span>
+                  </div>
+                  <div className="flex items-center gap-2 text-xs">
+                    <span className="font-bold text-slate-700">Median Legacy:</span>
+                    <span className="font-bold text-lg text-slate-800">${(monteCarloData.medianLegacy || 0).toLocaleString()}</span>
+                  </div>
+                </div>
+                <div className="h-80 w-full">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <ComposedChart data={mcChartData}>
+                      <CartesianGrid strokeDasharray="3 3" vertical={false} />
+                      <XAxis dataKey="year" />
+                      <YAxis tickFormatter={(val) => val >= 2000000 ? `$${Math.round(val / 1000000)}M` : `$${Math.round(val / 1000)}k`} />
+                      <Tooltip
+                        formatter={(val, name) => `$${Math.round(val).toLocaleString()}`}
+                        labelFormatter={(l) => `Year ${l}`}
+                      />
+                      <Legend />
+                      <Area type="monotone" dataKey="p90" name="90th Percentile (Optimistic)" fill="#d1fae5" stroke="#10b981" fillOpacity={0.4} />
+                      <Area type="monotone" dataKey="median" name="50th Percentile (Median)" fill="#bfdbfe" stroke="#3b82f6" fillOpacity={0.5} />
+                      <Area type="monotone" dataKey="p10" name="10th Percentile (Pessimistic)" fill="#fee2e2" stroke="#ef4444" fillOpacity={0.4} />
+                      <Line type="monotone" dataKey="total" name="Deterministic Projection" stroke={COLORS.areaFill} strokeWidth={2} dot={false} strokeDasharray="5 5" />
+                      <Line type="monotone" dataKey="benchmark" name="Benchmark 60/40" stroke={COLORS.benchmark} strokeDasharray="3 3" strokeWidth={1.5} dot={false} />
+                    </ComposedChart>
+                  </ResponsiveContainer>
+                </div>
+                <div className="mt-4 p-3 bg-blue-50 text-xs text-blue-800 rounded border border-blue-100 flex items-start gap-2">
+                  <Activity className="w-4 h-4 mt-0.5" />
+                  <p>
+                    <strong>Monte Carlo Simulation (1,000 iterations):</strong> Shows range of outcomes using randomized returns based on each bucket's expected return and standard deviation. <br />
+                    <strong>Green Area:</strong> 90th percentile (best 10% of outcomes). <strong>Blue Area:</strong> Median outcome. <strong>Red Area:</strong> 10th percentile (worst 10%). <br />
+                    <strong>Dashed Grey Line:</strong> Deterministic projection (fixed returns, no randomness).
+                  </p>
+                </div>
+              </>
+            );
+          })() : (
+            <>
+              <div className="h-80 w-full">
+                <ResponsiveContainer width="100%" height="100%">
+                  <ComposedChart data={projectionData}>
+                    <CartesianGrid strokeDasharray="3 3" vertical={false} />
+                    <XAxis dataKey="year" />
+                    <YAxis tickFormatter={(val) => val >= 2000000 ? `$${Math.round(val / 1000000)}M` : `$${Math.round(val / 1000)}k`} />
+                    <YAxis yAxisId="right" orientation="right" tickFormatter={(val) => `${val.toFixed(1)}%`} domain={[0, 'auto']} />
+                    <Tooltip
+                      formatter={(val, name) => {
+                        if (name === 'Distribution Rate') return `${val.toFixed(2)}%`;
+                        return `$${Math.round(val).toLocaleString()}`;
+                      }}
+                      labelFormatter={(l) => `Year ${l}`}
+                    />
+                    <Legend />
+                    <Area type="monotone" dataKey="total" name="Miller Portfolio Architect Strategy" fill={COLORS.areaFill} stroke={COLORS.areaFill} fillOpacity={0.8} />
+                    <Line type="monotone" dataKey="benchmark" name="Benchmark 60/40 (Annual Rebalance)" stroke={COLORS.benchmark} strokeDasharray="5 5" strokeWidth={2} dot={false} />
+                    <Line yAxisId="right" type="monotone" dataKey="distRate" name="Distribution Rate" stroke={COLORS.distRate} strokeWidth={2} dot={false} />
+                  </ComposedChart>
+                </ResponsiveContainer>
+              </div>
+              <div className="mt-4 p-3 bg-yellow-50 text-xs text-yellow-800 rounded border border-yellow-100 flex items-start gap-2">
+                <Activity className="w-4 h-4 mt-0.5" />
+                <p>
+                  <strong>Grey Area:</strong> Miller Portfolio Architect Strategy - dynamic bucket allocation optimized for retirement income. <br />
+                  <strong>Gold Line:</strong> Benchmark 60/40 with annual rebalance for comparison. <br />
+                  <strong>Red Line:</strong> Distribution rate - annual withdrawal as % of portfolio.
+                </p>
+              </div>
+            </>
+          )}
         </>
       ) : (
         <div className="overflow-x-auto">
-          <table className="w-full text-xs text-right border-collapse">
-            <thead>
-              <tr className="bg-slate-100 text-slate-600 font-bold border-b border-slate-200">
-                <th className="p-2 text-left">Age</th>
-                {clientInfo.isMarried && <th className="p-2 text-left">Partner Age</th>}
-                <th className="p-2">Start Balance</th>
-                <th className="p-2 text-emerald-600">Growth</th>
-                <th className="p-2 text-purple-600">Contribution</th>
-                <th className="p-2 text-blue-600">Income</th>
-                <th className="p-2 text-orange-600">Withdrawal</th>
-                {inputs.taxEnabled && <th className="p-2 text-red-600">Est. Tax</th>}
-                <th className="p-2 text-slate-800">{inputs.taxEnabled ? 'Gross Spend' : 'Total Spend'}</th>
-                {inputs.taxEnabled && <th className="p-2 text-slate-600">Net Spend</th>}
-                <th className="p-2 text-slate-900">End Balance</th>
-              </tr>
-            </thead>
-            <tbody>
-              {projectionData.map((row) => (
-                <tr key={row.year} className="border-b border-slate-50 hover:bg-slate-50 transition-colors">
-                  <td className="p-2 text-left font-bold text-slate-700">{row.age}</td>
-                  {clientInfo.isMarried && <td className="p-2 text-left text-slate-500">{Math.floor(row.partnerAge)}</td>}
-                  <td className="p-2 text-slate-500">${row.startBalance.toLocaleString()}</td>
-                  <td className="p-2 text-emerald-600">+${row.growth.toLocaleString()}</td>
-                  <td className="p-2 text-purple-600">{row.contribution > 0 ? `+$${row.contribution.toLocaleString()}` : '-'}</td>
-                  <td className="p-2 text-blue-600" title={`SS: $${(row.ssIncomeDetail || 0).toLocaleString()} | Pension: $${(row.pensionIncomeDetail || 0).toLocaleString()}${row.employmentIncomeDetail ? ` | Employment: $${row.employmentIncomeDetail.toLocaleString()}` : ''}${row.otherIncomeDetail ? ` | Other: $${row.otherIncomeDetail.toLocaleString()}` : ''}`}>
-                    +${row.ssIncome.toLocaleString()}
-                    {row.employmentIncomeDetail > 0 && <span className="text-teal-600 text-[10px] ml-0.5" title="Includes employment income">*</span>}
-                  </td>
-                  <td className="p-2 text-orange-600">-${row.distribution.toLocaleString()}</td>
-                  {inputs.taxEnabled && (
-                    <td
-                      className="p-2 text-red-600 cursor-pointer hover:bg-red-50 hover:underline transition-colors"
-                      title={`Federal: $${(row.federalTax || 0).toLocaleString()} | State: $${(row.stateTax || 0).toLocaleString()} | Eff: ${row.effectiveRate || '0'}% — Click for detail`}
-                      onClick={() => setSelectedTaxRow(row)}
-                    >
-                      -${(row.totalTax || 0).toLocaleString()}
-                    </td>
-                  )}
-                  <td className="p-2 font-medium text-slate-800">${row.expenses.toLocaleString()}</td>
-                  {inputs.taxEnabled && (
-                    <td className="p-2 text-slate-600">${Math.max(0, row.expenses - (row.totalTax || 0)).toLocaleString()}</td>
-                  )}
-                  <td className={`p-2 font-bold ${row.total > 0 ? 'text-slate-900' : 'text-red-500'}`}>${Math.round(row.total).toLocaleString()}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+          {showMonteCarlo && monteCarloData?.scenarios && (
+            <div className="flex items-center gap-2 mb-3">
+              <span className="text-xs font-bold text-slate-500 uppercase">Scenario:</span>
+              <div className="flex items-center bg-slate-100 p-1 rounded-lg">
+                <button
+                  onClick={() => setMcScenario('optimistic')}
+                  className={`px-3 py-1.5 text-xs font-bold rounded transition-all ${mcScenario === 'optimistic' ? 'bg-emerald-500 text-white shadow' : 'text-slate-500 hover:text-slate-700'}`}
+                >
+                  Optimistic
+                </button>
+                <button
+                  onClick={() => setMcScenario('median')}
+                  className={`px-3 py-1.5 text-xs font-bold rounded transition-all ${mcScenario === 'median' ? 'bg-blue-500 text-white shadow' : 'text-slate-500 hover:text-slate-700'}`}
+                >
+                  Median
+                </button>
+                <button
+                  onClick={() => setMcScenario('conservative')}
+                  className={`px-3 py-1.5 text-xs font-bold rounded transition-all ${mcScenario === 'conservative' ? 'bg-red-500 text-white shadow' : 'text-slate-500 hover:text-slate-700'}`}
+                >
+                  Conservative
+                </button>
+              </div>
+              <span className="text-xs text-slate-400 italic">
+                {mcScenario === 'optimistic' ? '90th percentile — better than 90% of simulated outcomes'
+                  : mcScenario === 'conservative' ? '10th percentile — worse than only 10% of simulated outcomes'
+                  : '50th percentile — the most likely outcome'}
+              </span>
+            </div>
+          )}
+          {(() => {
+            const tableData = (showMonteCarlo && monteCarloData?.scenarios)
+              ? (monteCarloData.scenarios[mcScenario] || [])
+              : projectionData;
+            return (
+              <table className="w-full text-xs text-right border-collapse">
+                <thead>
+                  <tr className="bg-slate-100 text-slate-600 font-bold border-b border-slate-200">
+                    <th className="p-2 text-left">Age</th>
+                    {clientInfo.isMarried && <th className="p-2 text-left">Partner Age</th>}
+                    <th className="p-2">Start Balance</th>
+                    <th className="p-2 text-emerald-600">Growth</th>
+                    <th className="p-2 text-purple-600">Contribution</th>
+                    <th className="p-2 text-blue-600">Income</th>
+                    <th className="p-2 text-orange-600">Withdrawal</th>
+                    {inputs.taxEnabled && <th className="p-2 text-red-600">Est. Tax</th>}
+                    <th className="p-2 text-slate-800">{inputs.taxEnabled ? 'Gross Spend' : 'Total Spend'}</th>
+                    {inputs.taxEnabled && <th className="p-2 text-slate-600">Net Spend</th>}
+                    <th className="p-2 text-slate-900">End Balance</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {tableData.map((row) => (
+                    <tr key={row.year} className="border-b border-slate-50 hover:bg-slate-50 transition-colors">
+                      <td className="p-2 text-left font-bold text-slate-700">{row.age}</td>
+                      {clientInfo.isMarried && <td className="p-2 text-left text-slate-500">{Math.floor(row.partnerAge || 0)}</td>}
+                      <td className="p-2 text-slate-500">${(row.startBalance || 0).toLocaleString()}</td>
+                      <td className={`p-2 ${(row.growth || 0) >= 0 ? 'text-emerald-600' : 'text-red-600'}`}>{(row.growth || 0) >= 0 ? `+$${(row.growth || 0).toLocaleString()}` : `($${Math.abs(row.growth || 0).toLocaleString()})`}</td>
+                      <td className="p-2 text-purple-600">{(row.contribution || 0) > 0 ? `+$${row.contribution.toLocaleString()}` : '-'}</td>
+                      <td className="p-2 text-blue-600" title={`SS: $${(row.ssIncomeDetail || 0).toLocaleString()} | Pension: $${(row.pensionIncomeDetail || 0).toLocaleString()}${row.employmentIncomeDetail ? ` | Employment: $${row.employmentIncomeDetail.toLocaleString()}` : ''}${row.otherIncomeDetail ? ` | Other: $${row.otherIncomeDetail.toLocaleString()}` : ''}`}>
+                        +${(row.ssIncome || 0).toLocaleString()}
+                        {(row.employmentIncomeDetail || 0) > 0 && <span className="text-teal-600 text-[10px] ml-0.5" title="Includes employment income">*</span>}
+                      </td>
+                      <td className="p-2 text-orange-600">-${(row.distribution || 0).toLocaleString()}</td>
+                      {inputs.taxEnabled && (
+                        <td
+                          className="p-2 text-red-600 cursor-pointer hover:bg-red-50 hover:underline transition-colors"
+                          title={`Federal: $${(row.federalTax || 0).toLocaleString()} | State: $${(row.stateTax || 0).toLocaleString()} | Eff: ${row.effectiveRate || '0'}% — Click for detail`}
+                          onClick={() => setSelectedTaxRow(row)}
+                        >
+                          -${(row.totalTax || 0).toLocaleString()}
+                        </td>
+                      )}
+                      <td className="p-2 font-medium text-slate-800">${(row.expenses || 0).toLocaleString()}</td>
+                      {inputs.taxEnabled && (
+                        <td className="p-2 text-slate-600">${Math.max(0, (row.expenses || 0) - (row.totalTax || 0)).toLocaleString()}</td>
+                      )}
+                      <td className={`p-2 font-bold ${(row.total || 0) > 0 ? 'text-slate-900' : 'text-red-500'}`}>${Math.round(row.total || 0).toLocaleString()}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            );
+          })()}
           {inputs.taxEnabled && (
             <div className="mt-3 p-2 bg-amber-50 text-xs text-amber-800 rounded border border-amber-100">
               <strong>Tax Note:</strong> Estimated taxes based on {inputs.filingStatus === 'married' ? 'Married Filing Jointly' : 'Single'} status, {inputs.traditionalPercent}% Trad / {inputs.rothPercent}% Roth / {inputs.nqPercent}% NQ, {inputs.stateRate}% state rate.{Object.keys(inputs.withdrawalOverrides || {}).length > 0 ? ` ${Object.keys(inputs.withdrawalOverrides).length} custom year override(s) applied.` : ''} Hover over tax amounts for breakdown. Click for detail.
