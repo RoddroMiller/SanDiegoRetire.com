@@ -8,6 +8,12 @@ const EARLY_REDUCTION_RATE_FIRST_3_YEARS = 0.0667;
 const EARLY_REDUCTION_RATE_AFTER_3_YEARS = 0.05;
 const DELAYED_CREDIT_RATE = 0.08;
 
+// Social Security Earnings Test (2026 base thresholds, indexed for inflation)
+const SS_EARNINGS_EXEMPT_UNDER_FRA = 24480;    // Annual exempt earnings before FRA year (2026)
+const SS_EARNINGS_EXEMPT_FRA_YEAR = 65160;     // Annual exempt earnings in year reaching FRA (2026)
+const SS_EARNINGS_REDUCTION_UNDER_FRA = 0.5;   // $1 withheld per $2 over limit
+const SS_EARNINGS_REDUCTION_FRA_YEAR = 1 / 3;  // $1 withheld per $3 over limit
+
 /**
  * Generate random number using Box-Muller transform for Monte Carlo simulations
  * @returns {number} Random number from standard normal distribution
@@ -36,6 +42,36 @@ export const getAdjustedSS = (pia, startAge) => {
     return pia * (1 + ((startAge - FULL_RETIREMENT_AGE) * DELAYED_CREDIT_RATE));
   }
   return pia;
+};
+
+/**
+ * Apply Social Security Earnings Test — reduces benefits when claiming before FRA while still working
+ * Before FRA: $1 withheld for every $2 earned above $24,480 (2026 base, indexed for inflation)
+ * In the year reaching FRA: $1 withheld for every $3 earned above $65,160 (2026 base, indexed)
+ * At or after FRA: no reduction
+ * @param {number} annualBenefit - Annual SS benefit before earnings test
+ * @param {number} earnedIncome - Annual earned income (wages/self-employment)
+ * @param {number} currentAge - Beneficiary's age (integer, start of year)
+ * @param {number} inflationFactor - Cumulative inflation factor from simulation start (default 1)
+ * @returns {number} Adjusted annual benefit after earnings test reduction
+ */
+export const applySSEarningsTest = (annualBenefit, earnedIncome, currentAge, inflationFactor = 1) => {
+  if (annualBenefit <= 0 || earnedIncome <= 0 || currentAge >= FULL_RETIREMENT_AGE) return annualBenefit;
+
+  let exempt, reductionRate;
+  if (currentAge === FULL_RETIREMENT_AGE - 1) {
+    // Year of reaching FRA — higher threshold, lower reduction
+    exempt = SS_EARNINGS_EXEMPT_FRA_YEAR * inflationFactor;
+    reductionRate = SS_EARNINGS_REDUCTION_FRA_YEAR;
+  } else {
+    // Under FRA
+    exempt = SS_EARNINGS_EXEMPT_UNDER_FRA * inflationFactor;
+    reductionRate = SS_EARNINGS_REDUCTION_UNDER_FRA;
+  }
+
+  const excessEarnings = Math.max(0, earnedIncome - exempt);
+  const reduction = excessEarnings * reductionRate;
+  return Math.max(0, annualBenefit - reduction);
 };
 
 /**
@@ -485,31 +521,42 @@ export const calculateBasePlan = (inputs, assumptions, clientInfo, vaEnabled = f
     let nonTaxableAdditionalIncome = 0;
     let vaIncome = 0;
 
-    // Social Security income
-    // Client's SS: stops at death, but surviving partner gets the higher of the two benefits
+    // Employment income — compute BEFORE SS so earnings test can be applied
+    let employmentIncome = 0;
+    const partnerAnnualIncome = clientInfo.partnerAnnualIncome || 0;
+    const partnerRetAge = clientInfo.partnerRetirementAge || clientInfo.retirementAge;
+    if (clientInfo.isMarried && partnerAlive && partnerAnnualIncome > 0 && currentPartnerAge < partnerRetAge) {
+      let partnerEmployment = partnerAnnualIncome;
+      if (inflationRate > 0) partnerEmployment *= incomeInflationFactor;
+      employmentIncome += partnerEmployment;
+    }
+
+    // Social Security income with Earnings Test
+    // Full (unreduced) annual benefits for survivor comparison
+    const clientSSFull = clientSS * 12 * incomeInflationFactor;
+    const partnerSSFull = clientInfo.isMarried ? partnerSS * 12 * incomeInflationFactor : 0;
+    // Apply earnings test: client (retired, no earned income) and partner (may still be working)
+    const clientSSAfterET = applySSEarningsTest(clientSSFull, 0, simAge, incomeInflationFactor);
+    const partnerSSAfterET = applySSEarningsTest(partnerSSFull, employmentIncome, currentPartnerAge, incomeInflationFactor);
+
     if (clientAlive && (clientInfo.currentAge >= 67 || simAge >= ssStartAge)) {
-      ssIncome += clientSS * 12 * incomeInflationFactor;
+      ssIncome += clientSSAfterET;
     }
     if (clientInfo.isMarried) {
       if (partnerAlive && (clientInfo.partnerAge >= 67 || currentPartnerAge >= partnerSSStartAge)) {
-        ssIncome += partnerSS * 12 * incomeInflationFactor;
+        ssIncome += partnerSSAfterET;
       }
-      // Survivor SS benefit: surviving spouse gets the higher of the two benefits (not both)
+      // Survivor SS benefit: surviving spouse gets the higher of the two FULL benefits (not both)
       if (!clientAlive && partnerAlive && (clientInfo.partnerAge >= 67 || currentPartnerAge >= partnerSSStartAge)) {
-        // Partner was already collecting; if client's benefit was higher, upgrade to client's benefit
-        const clientSSMonthly = clientSS * incomeInflationFactor;
-        const partnerSSMonthly = partnerSS * incomeInflationFactor;
-        if (clientSSMonthly > partnerSSMonthly) {
-          // Replace partner's benefit with client's (already added partner's above, so add the difference)
-          ssIncome += (clientSSMonthly - partnerSSMonthly) * 12;
+        if (clientSSFull > partnerSSFull) {
+          const survivorBenefit = applySSEarningsTest(clientSSFull, employmentIncome, currentPartnerAge, incomeInflationFactor);
+          ssIncome += (survivorBenefit - partnerSSAfterET);
         }
       }
       if (clientAlive && !partnerAlive && (clientInfo.currentAge >= 67 || simAge >= ssStartAge)) {
-        // Client was already collecting; if partner's benefit was higher, upgrade to partner's benefit
-        const clientSSMonthly = clientSS * incomeInflationFactor;
-        const partnerSSMonthly = partnerSS * incomeInflationFactor;
-        if (partnerSSMonthly > clientSSMonthly) {
-          ssIncome += (partnerSSMonthly - clientSSMonthly) * 12;
+        if (partnerSSFull > clientSSFull) {
+          const survivorBenefit = applySSEarningsTest(partnerSSFull, 0, simAge, incomeInflationFactor);
+          ssIncome += (survivorBenefit - clientSSAfterET);
         }
       }
     }
@@ -550,17 +597,6 @@ export const calculateBasePlan = (inputs, assumptions, clientInfo, vaEnabled = f
     // VA income is taxed as ordinary income
     if (vaEnabled && vaInputs && simAge >= vaIncomeStartAge) {
       vaIncome = vaAnnualIncome;
-    }
-
-    // Staggered retirement: partner's employment income during gap years
-    let employmentIncome = 0;
-    const partnerAnnualIncome = clientInfo.partnerAnnualIncome || 0;
-    const partnerRetAge = clientInfo.partnerRetirementAge || clientInfo.retirementAge;
-    if (clientInfo.isMarried && partnerAlive && partnerAnnualIncome > 0 && currentPartnerAge < partnerRetAge) {
-      // Partner still working after client retires
-      let partnerEmployment = partnerAnnualIncome;
-      if (inflationRate > 0) partnerEmployment *= incomeInflationFactor;
-      employmentIncome += partnerEmployment;
     }
 
     // Total income (includes non-taxable portion for gap calculation; only otherIncome is taxed)
@@ -1249,24 +1285,37 @@ export const runOptimizedSimulation = (allocation, assumptions, inputs, clientIn
     let pensionIncome = 0;
     let otherIncome = 0;
     let nonTaxableAdditionalIncome = 0;
-    let employmentIncome = 0;
 
-    // SS with survivor benefits
-    const clientSSAnnual = clientSS * 12 * incomeInflationFactor;
-    const partnerSSAnnual = partnerSS * 12 * incomeInflationFactor;
+    // Employment income — compute BEFORE SS so earnings test can be applied
+    let employmentIncome = 0;
+    const partnerAnnualIncome = clientInfo.partnerAnnualIncome || 0;
+    const partnerRetAge = clientInfo.partnerRetirementAge || clientInfo.retirementAge;
+    if (clientInfo.isMarried && partnerAlive && partnerAnnualIncome > 0 && currentPartnerAge < partnerRetAge) {
+      let partnerEmployment = partnerAnnualIncome;
+      if (inflationRate > 0) partnerEmployment *= incomeInflationFactor;
+      employmentIncome += partnerEmployment;
+    }
+
+    // SS with survivor benefits + Earnings Test
+    const clientSSFull = clientSS * 12 * incomeInflationFactor;
+    const partnerSSFull = partnerSS * 12 * incomeInflationFactor;
+    const clientSSAfterET = applySSEarningsTest(clientSSFull, 0, simAge, incomeInflationFactor);
+    const partnerSSAfterET = applySSEarningsTest(partnerSSFull, employmentIncome, currentPartnerAge, incomeInflationFactor);
 
     if (clientAlive && (clientInfo.currentAge >= 67 || simAge >= ssStartAge)) {
-      ssIncome += clientSSAnnual;
+      ssIncome += clientSSAfterET;
     }
     if (partnerAlive && (clientInfo.partnerAge >= 67 || currentPartnerAge >= partnerSSStartAge)) {
-      ssIncome += partnerSSAnnual;
+      ssIncome += partnerSSAfterET;
     }
     if (clientInfo.isMarried) {
-      if (!clientAlive && partnerAlive && (clientInfo.partnerAge >= 67 || currentPartnerAge >= partnerSSStartAge) && clientSSAnnual > partnerSSAnnual) {
-        ssIncome += (clientSSAnnual - partnerSSAnnual);
+      if (!clientAlive && partnerAlive && (clientInfo.partnerAge >= 67 || currentPartnerAge >= partnerSSStartAge) && clientSSFull > partnerSSFull) {
+        const survivorBenefit = applySSEarningsTest(clientSSFull, employmentIncome, currentPartnerAge, incomeInflationFactor);
+        ssIncome += (survivorBenefit - partnerSSAfterET);
       }
-      if (clientAlive && !partnerAlive && (clientInfo.currentAge >= 67 || simAge >= ssStartAge) && partnerSSAnnual > clientSSAnnual) {
-        ssIncome += (partnerSSAnnual - clientSSAnnual);
+      if (clientAlive && !partnerAlive && (clientInfo.currentAge >= 67 || simAge >= ssStartAge) && partnerSSFull > clientSSFull) {
+        const survivorBenefit = applySSEarningsTest(partnerSSFull, 0, simAge, incomeInflationFactor);
+        ssIncome += (survivorBenefit - clientSSAfterET);
       }
     }
 
@@ -1294,15 +1343,6 @@ export const runOptimizedSimulation = (allocation, assumptions, inputs, clientIn
         nonTaxableAdditionalIncome += streamAmount * (1 - taxablePct);
       }
     });
-
-    // Staggered retirement: partner's employment income during gap years
-    const partnerAnnualIncome = clientInfo.partnerAnnualIncome || 0;
-    const partnerRetAge = clientInfo.partnerRetirementAge || clientInfo.retirementAge;
-    if (clientInfo.isMarried && partnerAlive && partnerAnnualIncome > 0 && currentPartnerAge < partnerRetAge) {
-      let partnerEmployment = partnerAnnualIncome;
-      if (inflationRate > 0) partnerEmployment *= incomeInflationFactor;
-      employmentIncome += partnerEmployment;
-    }
 
     // One-time contributions - only if owner is alive
     let oneTimeContributions = 0;
@@ -1495,46 +1535,15 @@ export const runOptimizedSimulation = (allocation, assumptions, inputs, clientIn
         }
       }
 
-      // Rebalance if frequency is set and it's a rebalance year
-      // Use (i + 1) since i is 0-indexed but we want year 1, 2, 3...
+      // Rebalance to starting allocation percentages
       if (rebalanceFreq > 0 && (i + 1) % rebalanceFreq === 0) {
         const currentTotal = balances.b1 + balances.b2 + balances.b3 + balances.b4 + balances.b5;
         if (currentTotal > 0) {
-          // Dynamic rolling-window rebalancing (matches architect logic)
-          const calcPVGaps = (startYear, endYear, rate) => {
-            let totalPV = 0;
-            for (let yr = startYear; yr <= endYear; yr++) {
-              if (yr > years) break;
-              const futureDetails = getAnnualDetails(yr);
-              const yearsOut = yr - (i + 1); // Years from current rebalance point
-              const pvFactor = Math.pow(1 + (rate / 100), yearsOut);
-              totalPV += futureDetails.gap / pvFactor;
-            }
-            return totalPV;
-          };
-
-          const yearNum = i + 1; // 1-indexed year number
-          // B1: Next 3 years
-          const b1Target = calcPVGaps(yearNum + 1, yearNum + 3, assumptions.b1.return);
-          // B2: Years 4-6
-          const b2Target = calcPVGaps(yearNum + 4, yearNum + 6, assumptions.b2.return);
-          // B3: Years 7-15 with minimum 20%
-          const b3Calculated = calcPVGaps(yearNum + 7, yearNum + 15, assumptions.b3.return);
-          const b3Min = currentTotal * 0.20;
-          const b3Target = Math.max(b3Calculated, b3Min);
-          // B4: 10% of total
-          const b4Target = currentTotal * 0.10;
-
-          let availableFunds = currentTotal;
-          balances.b1 = Math.min(b1Target, availableFunds);
-          availableFunds -= balances.b1;
-          balances.b2 = Math.min(b2Target, Math.max(0, availableFunds));
-          availableFunds -= balances.b2;
-          balances.b3 = Math.min(b3Target, Math.max(0, availableFunds));
-          availableFunds -= balances.b3;
-          balances.b4 = Math.min(b4Target, Math.max(0, availableFunds));
-          availableFunds -= balances.b4;
-          balances.b5 = Math.max(0, availableFunds);
+          balances.b1 = currentTotal * targetPcts.b1;
+          balances.b2 = currentTotal * targetPcts.b2;
+          balances.b3 = currentTotal * targetPcts.b3;
+          balances.b4 = currentTotal * targetPcts.b4;
+          balances.b5 = currentTotal * targetPcts.b5;
         }
       }
 

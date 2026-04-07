@@ -52,6 +52,8 @@ export const ArchitectPage = ({
   onSetOptimizerRebalanceFreq,
   ssAnalysis,
   ssPartnerAnalysis,
+  ssSimResults,
+  ssPartnerSimResults,
   // SS Settings
   targetMaxPortfolioAge,
   onSetTargetMaxPortfolioAge,
@@ -102,6 +104,32 @@ export const ArchitectPage = ({
   const [showClientSelector, setShowClientSelector] = useState(false);
   const [selectedCommandCenterClient, setSelectedCommandCenterClient] = useState(null);
   const [selectedOwnerAdvisorId, setSelectedOwnerAdvisorId] = useState(null);
+
+  // Portfolio Sustainability chart mode (shared between Allocation tab and SS Optimizer)
+  const [showMonteCarlo, setShowMonteCarlo] = useState(false);
+
+  // SS Optimizer outcomes from actual simulation (deterministic) — used by both tab and print
+  const ssOutcomesForDisplay = useMemo(() => {
+    if (!ssSimResults || ssSimResults.length === 0) return ssAnalysis.outcomes;
+    return ssSimResults.map(r => ({ age: r.age, balance: r.deterministicBalance }));
+  }, [ssSimResults, ssAnalysis.outcomes]);
+
+  const ssWinnerForDisplay = useMemo(() =>
+    ssOutcomesForDisplay.reduce((prev, cur) => cur.balance > prev.balance ? cur : prev, ssOutcomesForDisplay[0]),
+    [ssOutcomesForDisplay]
+  );
+
+  const ssPartnerOutcomesForDisplay = useMemo(() => {
+    if (!ssPartnerSimResults || ssPartnerSimResults.length === 0) return ssPartnerAnalysis?.outcomes || [];
+    return ssPartnerSimResults.map(r => ({ age: r.age, balance: r.deterministicBalance }));
+  }, [ssPartnerSimResults, ssPartnerAnalysis]);
+
+  const ssPartnerWinnerForDisplay = useMemo(() =>
+    ssPartnerOutcomesForDisplay.length > 0
+      ? ssPartnerOutcomesForDisplay.reduce((prev, cur) => cur.balance > prev.balance ? cur : prev, ssPartnerOutcomesForDisplay[0])
+      : null,
+    [ssPartnerOutcomesForDisplay]
+  );
 
   // Withdrawal Override modal state
   const [showWithdrawalOverrides, setShowWithdrawalOverrides] = useState(false);
@@ -384,7 +412,16 @@ export const ArchitectPage = ({
 
       {/* ACTION BAR */}
       <div className="max-w-7xl mx-auto mb-4 sm:mb-6 md:mb-8 print:hidden no-print">
-        <div className="flex flex-wrap items-center justify-end gap-1.5 sm:gap-2">
+        <div className="flex flex-wrap items-center gap-1.5 sm:gap-2">
+            {clientInfo.name && (
+              <div className="flex items-center gap-2 mr-auto">
+                <User className="w-4 h-4 text-slate-400" />
+                <span className="font-bold text-slate-800 text-sm sm:text-base">{clientInfo.name}</span>
+                {clientInfo.isMarried && clientInfo.partnerName && (
+                  <span className="text-xs sm:text-sm text-slate-500">&amp; {clientInfo.partnerName}</span>
+                )}
+              </div>
+            )}
             {userRole !== 'client' && (
               <button
                 onClick={onSaveScenario}
@@ -709,6 +746,8 @@ export const ArchitectPage = ({
               onSetShowCashFlowTable={onSetShowCashFlowTable}
               rebalanceFreq={rebalanceFreq}
               onSetRebalanceFreq={onSetRebalanceFreq}
+              showMonteCarlo={showMonteCarlo}
+              onSetShowMonteCarlo={setShowMonteCarlo}
               useManualAllocation={useManualAllocation}
               manualAllocationMode={manualAllocationMode}
               manualAllocations={manualAllocations}
@@ -746,7 +785,10 @@ export const ArchitectPage = ({
               clientInfo={clientInfo}
               inputs={inputs}
               ssAnalysis={ssAnalysis}
-              ssPartnerAnalysis={ssPartnerAnalysis}
+              clientOutcomes={ssOutcomesForDisplay}
+              clientWinner={ssWinnerForDisplay}
+              partnerOutcomes={ssPartnerOutcomesForDisplay}
+              partnerWinner={ssPartnerWinnerForDisplay}
               targetMaxPortfolioAge={targetMaxPortfolioAge}
               onSetTargetMaxPortfolioAge={onSetTargetMaxPortfolioAge}
               onUpdateSSStartAge={onUpdateSSStartAge}
@@ -1028,7 +1070,7 @@ export const ArchitectPage = ({
                 </div>
               </div>
               <div className="border-2 border-slate-200 rounded-lg p-3 text-center">
-                <p className="text-xs text-slate-500 uppercase tracking-wide mb-1">Projected Legacy (Age 95)</p>
+                <p className="text-xs text-slate-500 uppercase tracking-wide mb-1">Projected Legacy (Age {finalProjectionAge})</p>
                 <div className="text-2xl font-bold text-indigo-600">
                   {fmtMoney(legacyAt95)}
                 </div>
@@ -1134,7 +1176,7 @@ export const ArchitectPage = ({
             <div>
               <p className="text-[13px] text-slate-400">Primary Client Recommendation</p>
               <p className="text-xl font-bold">
-                Claim at Age <span className="text-emerald-400">{ssAnalysis.winner.age}</span> to maximize portfolio at age {targetMaxPortfolioAge}
+                Claim at Age <span className="text-emerald-400">{ssWinnerForDisplay.age}</span> to maximize portfolio at age {targetMaxPortfolioAge}
               </p>
             </div>
           </div>
@@ -1142,10 +1184,10 @@ export const ArchitectPage = ({
 
         {/* Claiming Scenarios */}
         <div className="grid grid-cols-4 gap-3 mb-4">
-          {ssAnalysis.outcomes.map((outcome) => (
-            <div key={outcome.age} className={`p-3 rounded-lg border ${outcome.age === ssAnalysis.winner.age ? 'border-emerald-500 bg-emerald-50' : 'border-slate-200 bg-slate-50'}`}>
+          {ssOutcomesForDisplay.map((outcome) => (
+            <div key={outcome.age} className={`p-3 rounded-lg border ${outcome.age === ssWinnerForDisplay.age ? 'border-emerald-500 bg-emerald-50' : 'border-slate-200 bg-slate-50'}`}>
               <p className="text-xs font-bold text-slate-500">Claim at {outcome.age}</p>
-              <p className={`text-base font-bold ${outcome.age === ssAnalysis.winner.age ? 'text-emerald-700' : 'text-slate-700'}`}>
+              <p className={`text-base font-bold ${outcome.age === ssWinnerForDisplay.age ? 'text-emerald-700' : 'text-slate-700'}`}>
                 ${Math.round(outcome.balance).toLocaleString()}
               </p>
               <p className="text-[11px] text-slate-400">Portfolio @ Age {targetMaxPortfolioAge}</p>
@@ -1154,7 +1196,7 @@ export const ArchitectPage = ({
         </div>
 
         {/* Partner Section if married */}
-        {clientInfo.isMarried && ssPartnerAnalysis && (
+        {clientInfo.isMarried && ssPartnerOutcomesForDisplay.length > 0 && ssPartnerWinnerForDisplay && (
           <>
             <div className="bg-slate-800 text-white p-4 rounded-lg mb-4">
               <div className="flex items-center gap-3">
@@ -1162,16 +1204,16 @@ export const ArchitectPage = ({
                 <div>
                   <p className="text-[13px] text-slate-400">Partner Recommendation</p>
                   <p className="text-xl font-bold">
-                    Claim at Age <span className="text-yellow-500">{ssPartnerAnalysis.winner.age}</span>
+                    Claim at Age <span className="text-yellow-500">{ssPartnerWinnerForDisplay.age}</span>
                   </p>
                 </div>
               </div>
             </div>
             <div className="grid grid-cols-4 gap-3 mb-4">
-              {ssPartnerAnalysis.outcomes.map((outcome) => (
-                <div key={outcome.age} className={`p-3 rounded-lg border ${outcome.age === ssPartnerAnalysis.winner.age ? 'border-yellow-500 bg-yellow-50' : 'border-slate-200 bg-slate-50'}`}>
+              {ssPartnerOutcomesForDisplay.map((outcome) => (
+                <div key={outcome.age} className={`p-3 rounded-lg border ${outcome.age === ssPartnerWinnerForDisplay.age ? 'border-yellow-500 bg-yellow-50' : 'border-slate-200 bg-slate-50'}`}>
                   <p className="text-xs font-bold text-slate-500">Claim at {outcome.age}</p>
-                  <p className={`text-base font-bold ${outcome.age === ssPartnerAnalysis.winner.age ? 'text-yellow-700' : 'text-slate-700'}`}>
+                  <p className={`text-base font-bold ${outcome.age === ssPartnerWinnerForDisplay.age ? 'text-yellow-700' : 'text-slate-700'}`}>
                     ${Math.round(outcome.balance).toLocaleString()}
                   </p>
                 </div>
@@ -1246,7 +1288,7 @@ export const ArchitectPage = ({
                 <th className="p-1.5 text-center">B4</th>
                 <th className="p-1.5 text-center">B5</th>
                 <th className="p-1.5 text-center whitespace-nowrap">Success Rate</th>
-                <th className="p-1.5 text-center whitespace-nowrap">Legacy (Age 95)</th>
+                <th className="p-1.5 text-center whitespace-nowrap">Legacy (Age {finalProjectionAge})</th>
               </tr>
             </thead>
             <tbody>
@@ -1597,6 +1639,7 @@ export const ArchitectPage = ({
 const AllocationTab = ({
   inputs, basePlan, assumptions, projectionData, monteCarloData, clientInfo,
   showCashFlowTable, onSetShowCashFlowTable, rebalanceFreq, onSetRebalanceFreq,
+  showMonteCarlo, onSetShowMonteCarlo,
   useManualAllocation, manualAllocationMode, manualAllocations, manualPercentages,
   useManualForRebalance, onToggleManualAllocation, onToggleManualForRebalance,
   onManualAllocationChange, onManualAllocationModeChange,
@@ -1604,7 +1647,6 @@ const AllocationTab = ({
   onInputChange, onAccountSplitChange, onWithdrawalOverrideChange
 }) => {
   const [selectedTaxRow, setSelectedTaxRow] = useState(null);
-  const [showMonteCarlo, setShowMonteCarlo] = useState(false);
   const [mcScenario, setMcScenario] = useState('median');
 
   // Compute tax detail when a row is selected
@@ -1964,7 +2006,7 @@ const AllocationTab = ({
             <input
               type="checkbox"
               checked={showMonteCarlo}
-              onChange={(e) => setShowMonteCarlo(e.target.checked)}
+              onChange={(e) => onSetShowMonteCarlo(e.target.checked)}
               className="accent-blue-600"
             />
             <span className="text-xs font-bold text-slate-600">Monte Carlo</span>
@@ -2851,13 +2893,17 @@ const MonteCarloTab = ({ monteCarloData, rebalanceFreq, vaEnabled, vaInputs, onT
   );
 };
 
-const SSOptimizationTab = ({ clientInfo, inputs, ssAnalysis, ssPartnerAnalysis, targetMaxPortfolioAge, onSetTargetMaxPortfolioAge, onUpdateSSStartAge, onUpdatePartnerSSStartAge }) => (
+const SSOptimizationTab = ({ clientInfo, inputs, ssAnalysis, clientOutcomes, clientWinner, partnerOutcomes, partnerWinner, targetMaxPortfolioAge, onSetTargetMaxPortfolioAge, onUpdateSSStartAge, onUpdatePartnerSSStartAge }) => {
+  return (
   <div className="space-y-6 animate-in fade-in duration-300 mt-6">
     <Card className="p-6">
       <div className="flex flex-col md:flex-row justify-between items-start gap-4 mb-6">
         <div>
           <h3 className="font-bold text-lg text-slate-800">Optimization Analysis</h3>
           <p className="text-sm text-slate-500">Determine the optimal claiming strategy based on portfolio impact.</p>
+          <p className="text-xs text-slate-400 mt-1">
+            Data Source: <span className="font-bold text-slate-600">Deterministic Projection</span> (from Portfolio Sustainability table)
+          </p>
         </div>
         <div className="bg-yellow-50 p-3 rounded-lg border border-yellow-200">
           <label className="block text-[12px] font-bold text-yellow-800 uppercase mb-1">
@@ -2885,33 +2931,42 @@ const SSOptimizationTab = ({ clientInfo, inputs, ssAnalysis, ssPartnerAnalysis, 
           <div>
             <h4 className="text-lg font-bold">Primary Client Recommendation</h4>
             <p className="text-gray-400 text-sm mt-1">
-              Claim at Age <strong className="text-emerald-400 text-lg">{ssAnalysis.winner.age}</strong> to maximize portfolio balance at age {targetMaxPortfolioAge}.
+              Claim at Age <strong className="text-emerald-400 text-lg">{clientWinner.age}</strong> to maximize portfolio balance at age {targetMaxPortfolioAge}.
             </p>
           </div>
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-8">
-          {ssAnalysis.outcomes.map((outcome) => (
+          {clientOutcomes.map((outcome) => {
+            const isWinner = outcome.age === clientWinner.age;
+            const isSelected = outcome.age === inputs.ssStartAge;
+            return (
             <div
               onClick={() => onUpdateSSStartAge(outcome.age)}
               key={outcome.age}
-              className={`p-4 rounded-lg border cursor-pointer hover:shadow-md transition-all relative ${outcome.age === ssAnalysis.winner.age ? 'border-emerald-500 bg-emerald-50' : 'border-slate-200 bg-slate-50 hover:border-emerald-300'}`}
+              className={`p-4 rounded-lg border cursor-pointer hover:shadow-md transition-all relative ${isWinner ? 'border-emerald-500 bg-emerald-50' : isSelected ? 'border-blue-500 bg-blue-50' : 'border-slate-200 bg-slate-50 hover:border-emerald-300'}`}
             >
-              <div className="absolute top-2 right-2 opacity-50">
-                <MousePointerClick className="w-4 h-4 text-emerald-600" />
+              <div className="absolute top-2 right-2 flex items-center gap-1">
+                {isSelected && (
+                  <span className="bg-blue-600 text-white text-[10px] font-bold px-1.5 py-0.5 rounded">Selected</span>
+                )}
+                {!isSelected && (
+                  <MousePointerClick className="w-4 h-4 text-emerald-600 opacity-50" />
+                )}
               </div>
               <p className="text-xs font-bold text-slate-500 uppercase">Claim at {outcome.age}</p>
-              <p className={`text-xl font-bold ${outcome.age === ssAnalysis.winner.age ? 'text-emerald-700' : 'text-slate-700'}`}>
+              <p className={`text-xl font-bold ${isWinner ? 'text-emerald-700' : isSelected ? 'text-blue-700' : 'text-slate-700'}`}>
                 ${Math.round(outcome.balance).toLocaleString()}
               </p>
               <p className="text-[12px] text-slate-400">Projected Portfolio @ Age {targetMaxPortfolioAge}</p>
             </div>
-          ))}
+            );
+          })}
         </div>
       </div>
 
       {/* Partner Recommendation */}
-      {clientInfo.isMarried && ssPartnerAnalysis && (
+      {clientInfo.isMarried && partnerOutcomes.length > 0 && partnerWinner && (
         <div className="mb-12 border-t pt-8">
           <div className="bg-slate-800 text-white p-6 rounded-xl mb-6 flex items-center justify-between">
             <div className="flex items-center gap-4">
@@ -2919,35 +2974,44 @@ const SSOptimizationTab = ({ clientInfo, inputs, ssAnalysis, ssPartnerAnalysis, 
               <div>
                 <h4 className="text-lg font-bold">Partner Recommendation</h4>
                 <p className="text-gray-400 text-sm mt-1">
-                  Claim at Age <strong className="text-yellow-500 text-lg">{ssPartnerAnalysis.winner.age}</strong> to maximize portfolio balance at age {targetMaxPortfolioAge}.
+                  Claim at Age <strong className="text-yellow-500 text-lg">{partnerWinner.age}</strong> to maximize portfolio balance at age {targetMaxPortfolioAge}.
                 </p>
               </div>
             </div>
             <button
-              onClick={() => onUpdatePartnerSSStartAge(ssPartnerAnalysis.winner.age)}
+              onClick={() => onUpdatePartnerSSStartAge(partnerWinner.age)}
               className="px-4 py-2 bg-yellow-500 hover:bg-yellow-400 text-black font-bold rounded-lg transition-all flex items-center gap-2"
             >
-              <CheckCircle className="w-4 h-4" /> Apply Age {ssPartnerAnalysis.winner.age}
+              <CheckCircle className="w-4 h-4" /> Apply Age {partnerWinner.age}
             </button>
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-8">
-            {ssPartnerAnalysis.outcomes.map((outcome) => (
+            {partnerOutcomes.map((outcome) => {
+              const isWinner = outcome.age === partnerWinner.age;
+              const isSelected = outcome.age === inputs.partnerSSStartAge;
+              return (
               <div
                 onClick={() => onUpdatePartnerSSStartAge(outcome.age)}
                 key={outcome.age}
-                className={`p-4 rounded-lg border cursor-pointer hover:shadow-md transition-all relative ${outcome.age === ssPartnerAnalysis.winner.age ? 'border-yellow-500 bg-yellow-50' : 'border-slate-200 bg-slate-50 hover:border-yellow-300'}`}
+                className={`p-4 rounded-lg border cursor-pointer hover:shadow-md transition-all relative ${isWinner ? 'border-yellow-500 bg-yellow-50' : isSelected ? 'border-blue-500 bg-blue-50' : 'border-slate-200 bg-slate-50 hover:border-yellow-300'}`}
               >
-                <div className="absolute top-2 right-2 opacity-50">
-                  <MousePointerClick className="w-4 h-4 text-yellow-600" />
+                <div className="absolute top-2 right-2 flex items-center gap-1">
+                  {isSelected && (
+                    <span className="bg-blue-600 text-white text-[10px] font-bold px-1.5 py-0.5 rounded">Selected</span>
+                  )}
+                  {!isSelected && (
+                    <MousePointerClick className="w-4 h-4 text-yellow-600 opacity-50" />
+                  )}
                 </div>
                 <p className="text-xs font-bold text-slate-500 uppercase">Claim at {outcome.age}</p>
-                <p className={`text-xl font-bold ${outcome.age === ssPartnerAnalysis.winner.age ? 'text-yellow-700' : 'text-slate-700'}`}>
+                <p className={`text-xl font-bold ${isWinner ? 'text-yellow-700' : isSelected ? 'text-blue-700' : 'text-slate-700'}`}>
                   ${Math.round(outcome.balance).toLocaleString()}
                 </p>
                 <p className="text-[12px] text-slate-400">Projected Portfolio @ Age {targetMaxPortfolioAge}</p>
               </div>
-            ))}
+              );
+            })}
           </div>
         </div>
       )}
@@ -2975,7 +3039,8 @@ const SSOptimizationTab = ({ clientInfo, inputs, ssAnalysis, ssPartnerAnalysis, 
       </div>
     </Card>
   </div>
-);
+  );
+};
 
 // Improve Outcome Tab - Advisory Only
 const ImproveOutcomeTab = ({ clientInfo, inputs, monteCarloData, projectionData, onInputChange }) => {
@@ -3271,6 +3336,7 @@ const ArchitectureTab = ({ inputs, basePlan, assumptions, projectionData }) => {
 const OptimizerTab = ({ optimizerData, inputs, basePlan, monteCarloData, projectionData, optimizerRebalanceFreq, onSetOptimizerRebalanceFreq, clientInfo, assumptions, vaEnabled, vaInputs, vaOptimizerData }) => {
   const [selectedIPSStrategy, setSelectedIPSStrategy] = useState(null);
   const [selectedIPSRebalanceFreq, setSelectedIPSRebalanceFreq] = useState(optimizerRebalanceFreq);
+  const optimizerFinalAge = projectionData[projectionData.length - 1]?.age || inputs.expectedDeathAge || 95;
   const [showVaResults, setShowVaResults] = useState(false);
 
   // Use VA optimizer data when VA is enabled and toggle is on
@@ -3307,13 +3373,17 @@ const OptimizerTab = ({ optimizerData, inputs, basePlan, monteCarloData, project
     };
   };
 
+  // Use actual projection data for Current Model so it matches the Portfolio Sustainability table
+  const currentModelLegacy = monteCarloData?.medianLegacy || projectionData[projectionData.length - 1]?.total || 0;
+  const currentModelSuccessRate = monteCarloData?.successRate || 0;
+
   // Build strategies array - runOptimizedSimulation returns { successRate, medianLegacy, allocation }
   const strategies = [
     {
       key: 'strategy3',
       name: 'Current Model',
-      successRate: activeOptimizerData?.strategy3?.successRate || 0,
-      medianLegacy: activeOptimizerData?.strategy3?.medianLegacy || 0,
+      successRate: currentModelSuccessRate,
+      medianLegacy: currentModelLegacy,
       allocation: activeOptimizerData?.strategy3?.allocation || {},
       isCurrent: true
     },
@@ -3411,7 +3481,7 @@ const OptimizerTab = ({ optimizerData, inputs, basePlan, monteCarloData, project
 
         {/* Projected Legacy */}
         <div className="mb-4 p-3 bg-slate-100 rounded-lg">
-          <p className="text-xs text-slate-500">Projected Legacy (Age 95)</p>
+          <p className="text-xs text-slate-500">Projected Legacy (Age {optimizerFinalAge})</p>
           <p className="font-bold text-lg text-slate-800">${Math.round(legacy).toLocaleString()}</p>
         </div>
 

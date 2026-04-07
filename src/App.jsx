@@ -448,6 +448,51 @@ export default function BucketPortfolioBuilder() {
 
   const di = debouncedCalcInputs;
 
+  // SS Optimizer: deterministic simulations for each claiming age (no MC — too much variation)
+  const ssSimResults = useMemo(() => {
+    const { inputs: dInputs, assumptions: dAssumptions, clientInfo: dClientInfo, rebalanceTargets: dRebTargets } = di;
+
+    let strategies = [62, 67, 70];
+    if (dClientInfo.retirementAge > 62 && dClientInfo.retirementAge < 67) {
+      strategies.push(dClientInfo.retirementAge);
+    }
+    strategies = [...new Set(strategies)].sort((a, b) => a - b);
+
+    return strategies.map(age => {
+      const modInputs = { ...dInputs, ssStartAge: age };
+      let plan = calculateBasePlan(modInputs, dAssumptions, dClientInfo);
+      if (useManualAllocation) {
+        plan = { ...plan, b1Val: manualAllocations.b1, b2Val: manualAllocations.b2, b3Val: manualAllocations.b3, b4Val: manualAllocations.b4, b5Val: manualAllocations.b5 };
+      }
+      const proj = runSimulation(plan, dAssumptions, modInputs, rebalanceFreq, false, null, dRebTargets);
+      const targetRow = proj.find(r => r.age === targetMaxPortfolioAge);
+      return { age, deterministicBalance: targetRow?.total || 0 };
+    });
+  }, [di, rebalanceFreq, targetMaxPortfolioAge, useManualAllocation, manualAllocations]);
+
+  // Partner SS Optimizer: deterministic simulations for each partner claiming age
+  const ssPartnerSimResults = useMemo(() => {
+    const { inputs: dInputs, assumptions: dAssumptions, clientInfo: dClientInfo, rebalanceTargets: dRebTargets } = di;
+    if (!dClientInfo.isMarried) return null;
+
+    let strategies = [62, 67, 70];
+    if (dClientInfo.partnerRetirementAge > 62 && dClientInfo.partnerRetirementAge < 67) {
+      strategies.push(dClientInfo.partnerRetirementAge);
+    }
+    strategies = [...new Set(strategies)].sort((a, b) => a - b);
+
+    return strategies.map(age => {
+      const modInputs = { ...dInputs, partnerSSStartAge: age };
+      let plan = calculateBasePlan(modInputs, dAssumptions, dClientInfo);
+      if (useManualAllocation) {
+        plan = { ...plan, b1Val: manualAllocations.b1, b2Val: manualAllocations.b2, b3Val: manualAllocations.b3, b4Val: manualAllocations.b4, b5Val: manualAllocations.b5 };
+      }
+      const proj = runSimulation(plan, dAssumptions, modInputs, rebalanceFreq, false, null, dRebTargets);
+      const targetRow = proj.find(r => r.age === targetMaxPortfolioAge);
+      return { age, deterministicBalance: targetRow?.total || 0 };
+    });
+  }, [di, rebalanceFreq, targetMaxPortfolioAge, useManualAllocation, manualAllocations]);
+
   // Projection uses immediate values for snappy chart updates (single run, fast)
   const projectionData = useMemo(() => runSimulation(basePlan, assumptions, inputs, rebalanceFreq, false, null, rebalanceTargets), [basePlan, assumptions, inputs, rebalanceFreq, rebalanceTargets]);
 
@@ -1076,6 +1121,8 @@ export default function BucketPortfolioBuilder() {
       onSetOptimizerRebalanceFreq={setOptimizerRebalanceFreq}
       ssAnalysis={ssAnalysis}
       ssPartnerAnalysis={ssPartnerAnalysis}
+      ssSimResults={ssSimResults}
+      ssPartnerSimResults={ssPartnerSimResults}
       targetMaxPortfolioAge={targetMaxPortfolioAge}
       onSetTargetMaxPortfolioAge={setTargetMaxPortfolioAge}
       onUpdateSSStartAge={updateSSStartAge}
