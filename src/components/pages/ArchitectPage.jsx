@@ -12,7 +12,7 @@ import {
 } from 'lucide-react';
 
 import { COLORS, LOGO_URL } from '../../constants';
-import { getAdjustedSS, generateAndDownloadIPS, calculateAnnualTax, calculateTaxableSS, calculateFederalTax } from '../../utils';
+import { getAdjustedSS, generateAndDownloadIPS, calculateAnnualTax, calculateTaxableSS, calculateFederalTax, getInflationAdjustedBrackets, getInflationAdjustedDeduction, STATE_TAX_DATA } from '../../utils';
 import { Card, StatBox, AllocationRow, FormattedNumberInput, Disclaimer } from '../ui';
 
 /**
@@ -305,6 +305,8 @@ export const ArchitectPage = ({
     const hasOther = projectionData.some(r => r.otherIncomeDetail > 0);
     const hasContributions = projectionData.some(r => r.contribution > 0);
     const hasNqData = inputs.taxEnabled && projectionData.some(r => r.nqWithdrawal > 0);
+    const hasRMD = inputs.taxEnabled && projectionData.some(r => r.rmdAmount > 0);
+    const hasRMDExcess = hasRMD && projectionData.some(r => r.rmdExcess > 0);
 
     const rows = [
       { label: 'Plan Year', cls: 'font-bold text-slate-800 bg-slate-100', getValue: (r) => r.year },
@@ -330,6 +332,12 @@ export const ArchitectPage = ({
       { label: 'Total Spending', cls: 'font-bold text-slate-800', getValue: (r) => fmt(r.expenses) },
       { label: 'Portfolio Withdrawal', cls: 'text-orange-700', getValue: (r) => fmt(r.distribution) },
     );
+    if (hasRMD) {
+      rows.push({ label: 'RMD Floor', cls: 'text-orange-600', getValue: (r) => r.rmdAmount > 0 ? fmt(r.rmdAmount) : '-' });
+      if (hasRMDExcess) {
+        rows.push({ label: 'RMD Excess → NQ', cls: 'text-teal-600', getValue: (r) => r.rmdExcess > 0 ? `+${fmt(r.rmdExcess)}` : '-' });
+      }
+    }
     if (inputs.taxEnabled) {
       rows.push(
         { label: '', cls: 'bg-slate-200', getValue: () => '', isSeparator: true },
@@ -345,8 +353,7 @@ export const ArchitectPage = ({
         { label: 'Traditional Withdrawal', cls: 'text-blue-600', getValue: (r) => fmt(r.distribution * (r.traditionalPctUsed || 0) / 100) },
         { label: 'Roth Withdrawal', cls: 'text-emerald-600', getValue: (r) => fmt(r.distribution * (r.rothPctUsed || 0) / 100) },
         { label: 'NQ Withdrawal', cls: 'text-amber-600', getValue: (r) => fmt(r.nqWithdrawal || 0) },
-        { label: '  Cost Basis', cls: 'text-slate-500 pl-4', getValue: (r) => fmt(r.nqCostBasis || 0) },
-        { label: '  Capital Gain', cls: 'text-red-500 pl-4', getValue: (r) => fmt(r.nqTaxableGain || 0) },
+        { label: '  Realized Cap Gains', cls: 'text-red-500 pl-4', getValue: (r) => fmt(r.nqTaxableGain || 0) },
         { label: 'Qualified Dividends', cls: 'text-purple-600', getValue: (r) => fmt(r.nqQualifiedDividends || 0) },
         { label: 'Ordinary Dividends', cls: 'text-pink-600', getValue: (r) => fmt(r.nqOrdinaryDividends || 0) },
       );
@@ -725,6 +732,12 @@ export const ArchitectPage = ({
                 <Target className="w-3 h-3 sm:w-4 sm:h-4" /> Optimizer
               </button>
               <button
+                onClick={() => onSetActiveTab('taxmap')}
+                className={`${activeTab === 'taxmap' ? 'border-emerald-500 text-emerald-700' : 'border-transparent text-slate-500 hover:text-slate-700 hover:border-slate-300'} whitespace-nowrap py-3 sm:py-4 px-1 border-b-2 font-medium text-xs sm:text-sm flex items-center gap-1 sm:gap-2`}
+              >
+                <DollarSign className="w-3 h-3 sm:w-4 sm:h-4" /> Tax Map
+              </button>
+              <button
                 onClick={() => onSetActiveTab('cashflows')}
                 className={`${activeTab === 'cashflows' ? 'border-emerald-500 text-emerald-700' : 'border-transparent text-slate-500 hover:text-slate-700 hover:border-slate-300'} whitespace-nowrap py-3 sm:py-4 px-1 border-b-2 font-medium text-xs sm:text-sm flex items-center gap-1 sm:gap-2`}
               >
@@ -829,6 +842,15 @@ export const ArchitectPage = ({
               vaEnabled={vaEnabled}
               vaInputs={vaInputs}
               vaOptimizerData={vaOptimizerData}
+            />
+          )}
+
+          {activeTab === 'taxmap' && (
+            <TaxMapTab
+              projectionData={projectionData}
+              inputs={inputs}
+              clientInfo={clientInfo}
+              basePlan={basePlan}
             />
           )}
 
@@ -1955,10 +1977,10 @@ const AllocationTab = ({
           />
           <AllocationRow
             color={COLORS.income} name="4. Income & Growth"
-            amount={basePlan.b4Val} percent="10.0"
+            amount={basePlan.b4Val} percent={((basePlan.b4Val / (inputs.totalPortfolio || 1)) * 100).toFixed(1)}
             returnRate={assumptions.b4.return} stdDev={assumptions.b4.stdDev}
             historicalReturn={assumptions.b4.historical}
-            description="Fixed 10% allocation for dividends/yield."
+            description={basePlan.b4Val > 0 ? "Income & dividends/yield allocation." : "No allocation — portfolio prioritized for spending needs."}
           />
           <AllocationRow
             color={COLORS.longTerm} name="5. Long Term"
@@ -2190,7 +2212,7 @@ const AllocationTab = ({
           })()}
           {inputs.taxEnabled && (
             <div className="mt-3 p-2 bg-amber-50 text-xs text-amber-800 rounded border border-amber-100">
-              <strong>Tax Note:</strong> Estimated taxes based on {inputs.filingStatus === 'married' ? 'Married Filing Jointly' : 'Single'} status, {inputs.traditionalPercent}% Trad / {inputs.rothPercent}% Roth / {inputs.nqPercent}% NQ, {inputs.stateRate}% state rate.{Object.keys(inputs.withdrawalOverrides || {}).length > 0 ? ` ${Object.keys(inputs.withdrawalOverrides).length} custom year override(s) applied.` : ''} Hover over tax amounts for breakdown. Click for detail.
+              <strong>Tax Note:</strong> Estimated taxes based on {inputs.filingStatus === 'married' ? 'Married Filing Jointly' : 'Single'} status, {inputs.traditionalPercent}% Trad / {inputs.rothPercent}% Roth / {inputs.nqPercent}% NQ, {inputs.stateCode && STATE_TAX_DATA[inputs.stateCode] ? `${STATE_TAX_DATA[inputs.stateCode].name} (${STATE_TAX_DATA[inputs.stateCode].rate}%${STATE_TAX_DATA[inputs.stateCode].ssTaxable ? ', taxes SS' : ', SS exempt'})` : `${inputs.stateRate}% state rate`}.{Object.keys(inputs.withdrawalOverrides || {}).length > 0 ? ` ${Object.keys(inputs.withdrawalOverrides).length} custom year override(s) applied.` : ''} Hover over tax amounts for breakdown. Click for detail.
             </div>
           )}
         </div>
@@ -2247,11 +2269,7 @@ const AllocationTab = ({
                         <td className="py-1 text-right text-xs">${Math.round(taxDetail.nqWithdrawal).toLocaleString()}</td>
                       </tr>
                       <tr className="border-b border-slate-100">
-                        <td className="py-1 pl-8 text-slate-400 text-[11px]">Cost Basis (tax-free)</td>
-                        <td className="py-1 text-right text-[11px] text-emerald-600">${Math.round(taxDetail.nqCostBasis).toLocaleString()}</td>
-                      </tr>
-                      <tr className="border-b border-slate-100">
-                        <td className="py-1 pl-8 text-slate-400 text-[11px]">Capital Gain (LTCG)</td>
+                        <td className="py-1 pl-8 text-slate-400 text-[11px]">Realized Cap Gains (LTCG)</td>
                         <td className="py-1 text-right text-[11px] text-red-500">${Math.round(taxDetail.nqTaxableGain).toLocaleString()}</td>
                       </tr>
                     </>
@@ -3280,11 +3298,11 @@ const ArchitectureTab = ({ inputs, basePlan, assumptions, projectionData }) => {
               <div className="flex justify-between items-center">
                 <div>
                   <p className="font-bold text-slate-800">Bucket 4: Income & Growth</p>
-                  <p className="text-xs text-slate-500">Fixed 10% • Dividends/yield</p>
+                  <p className="text-xs text-slate-500">{basePlan.b4Val > 0 ? 'Income & dividends/yield' : 'No allocation'}</p>
                 </div>
                 <div className="text-right">
                   <p className="font-bold text-lg">${basePlan.b4Val.toLocaleString()}</p>
-                  <p className="text-xs text-slate-500">10.0% • {assumptions.b4.return}% return</p>
+                  <p className="text-xs text-slate-500">{((basePlan.b4Val / (inputs.totalPortfolio || 1)) * 100).toFixed(1)}% • {assumptions.b4.return}% return</p>
                 </div>
               </div>
             </div>
@@ -3743,6 +3761,231 @@ const OptimizerTab = ({ optimizerData, inputs, basePlan, monteCarloData, project
 };
 
 // ============================================
+// Tax Map Tab - Taxable income vs bracket thresholds over time
+// ============================================
+const TAX_BRACKET_BASE_YEAR = 2026;
+const BRACKET_COLORS = ['#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#ec4899'];
+const BRACKET_LABELS = ['12%', '22%', '24%', '32%', '35%'];
+
+const TaxMapTab = ({ projectionData, inputs, clientInfo, basePlan }) => {
+  const fmt = (val) => `$${Math.round(val).toLocaleString()}`;
+
+  const chartData = useMemo(() => {
+    if (!projectionData || projectionData.length === 0) return [];
+    const startAge = basePlan?.simulationStartAge || projectionData[0]?.age || 65;
+    const inflationRate = inputs.inflationRate || 2.5;
+    const filingStatus = inputs.filingStatus || 'married';
+
+    return projectionData.map((row, idx) => {
+      const yearsFromBase = (startAge + idx) - (clientInfo.currentAge || 65);
+      const yearsFromTaxBase = Math.max(0, yearsFromBase);
+      const brackets = getInflationAdjustedBrackets(filingStatus, yearsFromTaxBase, inflationRate);
+      const deduction = getInflationAdjustedDeduction(filingStatus, yearsFromTaxBase, inflationRate, row.age >= 65);
+
+      // Taxable income components
+      const tradWithdrawal = row.distribution * (row.traditionalPctUsed || 0) / 100;
+      const taxableSS = row.taxableSS || 0;
+      const pension = row.pensionIncomeDetail || 0;
+      const nqGains = (row.nqTaxableGain || 0) + (row.nqOrdinaryDividends || 0);
+      const otherEmployment = (row.otherIncomeDetail || 0) + (row.employmentIncomeDetail || 0);
+      const rmd = row.rmdAmount || 0;
+
+      // Total ordinary taxable income (before deduction, for bracket comparison)
+      const totalOrdinaryIncome = taxableSS + pension + tradWithdrawal + nqGains + otherEmployment;
+
+      // Bracket thresholds (add deduction so they represent gross income thresholds)
+      const bracket12Top = brackets.length > 1 ? brackets[1].max + deduction : 0;
+      const bracket22Top = brackets.length > 2 ? brackets[2].max + deduction : 0;
+      const bracket24Top = brackets.length > 3 ? brackets[3].max + deduction : 0;
+      const bracket32Top = brackets.length > 4 ? brackets[4].max + deduction : 0;
+
+      // Which bracket is the taxpayer in?
+      const taxableAfterDeduction = Math.max(0, totalOrdinaryIncome - deduction);
+      let currentBracket = '10%';
+      let headroom = 0;
+      for (let b = 0; b < brackets.length; b++) {
+        if (taxableAfterDeduction <= brackets[b].max) {
+          currentBracket = `${Math.round(brackets[b].rate * 100)}%`;
+          headroom = brackets[b].max - taxableAfterDeduction;
+          break;
+        }
+      }
+
+      return {
+        age: row.age,
+        taxableSS,
+        pension,
+        tradWithdrawal: Math.round(tradWithdrawal),
+        nqGains: Math.round(nqGains),
+        otherEmployment: Math.round(otherEmployment),
+        totalOrdinaryIncome: Math.round(totalOrdinaryIncome),
+        rmd: Math.round(rmd),
+        bracket12Top,
+        bracket22Top,
+        bracket24Top,
+        bracket32Top,
+        deduction,
+        currentBracket,
+        headroom: Math.round(headroom),
+        taxableAfterDeduction: Math.round(taxableAfterDeduction),
+        totalTax: row.totalTax || 0,
+        effectiveRate: row.effectiveRate || '0.0'
+      };
+    });
+  }, [projectionData, inputs, clientInfo, basePlan]);
+
+  // Identify pre-RMD window and Roth conversion opportunities
+  const insights = useMemo(() => {
+    if (chartData.length === 0) return { preRMDYears: [], rothOpportunity: 0 };
+    const currentYear = new Date().getFullYear();
+    const birthYear = currentYear - (clientInfo.currentAge || 65);
+    const rmdStartAge = birthYear <= 1950 ? 72 : birthYear <= 1959 ? 73 : 75;
+    const retAge = basePlan?.simulationStartAge || 65;
+
+    const preRMDYears = chartData.filter(d => d.age >= retAge && d.age < rmdStartAge);
+    let rothOpportunity12 = 0;
+    let rothOpportunity22 = 0;
+    preRMDYears.forEach(d => {
+      if (d.currentBracket === '10%' || d.currentBracket === '12%') {
+        rothOpportunity12 += d.headroom;
+      } else if (d.currentBracket === '22%') {
+        rothOpportunity22 += d.headroom;
+      }
+    });
+
+    return { preRMDYears, rothOpportunity12, rothOpportunity22, rmdStartAge };
+  }, [chartData, clientInfo, basePlan]);
+
+  if (!inputs.taxEnabled) {
+    return (
+      <Card>
+        <div className="text-center py-12 text-slate-500">
+          <DollarSign className="w-12 h-12 mx-auto mb-3 text-slate-300" />
+          <p className="font-medium">Enable Tax Impact Analysis in Inputs to use the Tax Map.</p>
+        </div>
+      </Card>
+    );
+  }
+
+  return (
+    <div className="space-y-6">
+      {/* Main Chart */}
+      <Card>
+        <h3 className="font-semibold text-slate-800 text-lg mb-1 flex items-center gap-2">
+          <DollarSign className="w-5 h-5" /> Tax Map — Taxable Income vs. Bracket Thresholds
+        </h3>
+        <p className="text-sm text-slate-500 mb-4">
+          Bars show taxable income by source. Dashed lines show inflation-adjusted federal tax bracket thresholds (gross income, after standard deduction).
+        </p>
+
+        <div className="h-[420px]">
+          <ResponsiveContainer width="100%" height="100%">
+            <ComposedChart data={chartData} margin={{ top: 10, right: 10, left: 10, bottom: 5 }}>
+              <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
+              <XAxis dataKey="age" tick={{ fontSize: 11 }} label={{ value: 'Age', position: 'insideBottom', offset: -3, fontSize: 12 }} />
+              <YAxis tick={{ fontSize: 11 }} tickFormatter={(v) => v >= 1000000 ? `$${(v / 1000000).toFixed(1)}M` : `$${Math.round(v / 1000)}k`} />
+              <Tooltip
+                formatter={(value, name) => [fmt(value), name]}
+                labelFormatter={(label) => `Age ${label}`}
+                contentStyle={{ fontSize: 12 }}
+              />
+              <Legend wrapperStyle={{ fontSize: 11 }} />
+              {/* Stacked bars for taxable income components */}
+              <Bar dataKey="taxableSS" stackId="income" fill="#60a5fa" name="Taxable SS" />
+              <Bar dataKey="pension" stackId="income" fill="#34d399" name="Pension" />
+              <Bar dataKey="tradWithdrawal" stackId="income" fill="#f97316" name="Traditional" />
+              <Bar dataKey="nqGains" stackId="income" fill="#a78bfa" name="NQ Gains/Divs" />
+              <Bar dataKey="otherEmployment" stackId="income" fill="#94a3b8" name="Other/Employment" />
+              {/* Bracket threshold lines */}
+              <Line dataKey="bracket12Top" stroke="#10b981" strokeDasharray="5 5" name="Top of 12%" dot={false} strokeWidth={2} />
+              <Line dataKey="bracket22Top" stroke="#f59e0b" strokeDasharray="5 5" name="Top of 22%" dot={false} strokeWidth={2} />
+              <Line dataKey="bracket24Top" stroke="#ef4444" strokeDasharray="5 5" name="Top of 24%" dot={false} strokeWidth={2} />
+            </ComposedChart>
+          </ResponsiveContainer>
+        </div>
+      </Card>
+
+      {/* Insights Cards */}
+      {insights.preRMDYears.length > 0 && (
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          <Card>
+            <div className="text-center">
+              <p className="text-xs text-slate-500 uppercase font-semibold mb-1">Pre-RMD Window</p>
+              <p className="text-2xl font-bold text-emerald-700">{insights.preRMDYears.length} years</p>
+              <p className="text-xs text-slate-500 mt-1">
+                Ages {insights.preRMDYears[0]?.age}–{insights.preRMDYears[insights.preRMDYears.length - 1]?.age} before RMDs begin at {insights.rmdStartAge}
+              </p>
+            </div>
+          </Card>
+          <Card>
+            <div className="text-center">
+              <p className="text-xs text-slate-500 uppercase font-semibold mb-1">Roth Conversion Room (12% bracket)</p>
+              <p className="text-2xl font-bold text-blue-700">{fmt(insights.rothOpportunity12)}</p>
+              <p className="text-xs text-slate-500 mt-1">Cumulative headroom at 12% rate during pre-RMD years</p>
+            </div>
+          </Card>
+          <Card>
+            <div className="text-center">
+              <p className="text-xs text-slate-500 uppercase font-semibold mb-1">Roth Conversion Room (22% bracket)</p>
+              <p className="text-2xl font-bold text-amber-700">{fmt(insights.rothOpportunity22)}</p>
+              <p className="text-xs text-slate-500 mt-1">Cumulative headroom at 22% rate during pre-RMD years</p>
+            </div>
+          </Card>
+        </div>
+      )}
+
+      {/* Bracket Headroom Table */}
+      <Card>
+        <h3 className="font-semibold text-slate-800 text-base mb-3 flex items-center gap-2">
+          <TableIcon className="w-4 h-4" /> Bracket Analysis by Year
+        </h3>
+        <div className="overflow-x-auto">
+          <table className="w-full text-xs border-collapse">
+            <thead>
+              <tr className="bg-slate-100 text-slate-600 font-bold border-b border-slate-200">
+                <th className="p-2 text-left">Age</th>
+                <th className="p-2 text-right">Taxable Income</th>
+                <th className="p-2 text-right">Deduction</th>
+                <th className="p-2 text-right">After Deduction</th>
+                <th className="p-2 text-center">Bracket</th>
+                <th className="p-2 text-right">Headroom</th>
+                <th className="p-2 text-right">RMD</th>
+                <th className="p-2 text-right">Total Tax</th>
+                <th className="p-2 text-right">Eff. Rate</th>
+              </tr>
+            </thead>
+            <tbody>
+              {chartData.map((row) => {
+                const bracketNum = parseFloat(row.currentBracket);
+                const bracketColor = bracketNum <= 12 ? 'bg-emerald-100 text-emerald-800'
+                  : bracketNum <= 22 ? 'bg-amber-100 text-amber-800'
+                  : bracketNum <= 24 ? 'bg-orange-100 text-orange-800'
+                  : 'bg-red-100 text-red-800';
+                return (
+                  <tr key={row.age} className="border-b border-slate-50 hover:bg-slate-50">
+                    <td className="p-2 text-left font-bold text-slate-700">{row.age}</td>
+                    <td className="p-2 text-right text-blue-600">{fmt(row.totalOrdinaryIncome)}</td>
+                    <td className="p-2 text-right text-slate-500">{fmt(row.deduction)}</td>
+                    <td className="p-2 text-right text-slate-700">{fmt(row.taxableAfterDeduction)}</td>
+                    <td className="p-2 text-center">
+                      <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${bracketColor}`}>{row.currentBracket}</span>
+                    </td>
+                    <td className="p-2 text-right text-emerald-600">{fmt(row.headroom)}</td>
+                    <td className="p-2 text-right text-orange-600">{row.rmd > 0 ? fmt(row.rmd) : '-'}</td>
+                    <td className="p-2 text-right text-red-600">{fmt(row.totalTax)}</td>
+                    <td className="p-2 text-right text-amber-700">{row.effectiveRate}%</td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      </Card>
+    </div>
+  );
+};
+
+// ============================================
 // Cash Flows Tab - Transposed: metrics on Y-axis, years on X-axis
 // ============================================
 const CashFlowsTab = ({ projectionData, inputs, clientInfo }) => {
@@ -3753,6 +3996,8 @@ const CashFlowsTab = ({ projectionData, inputs, clientInfo }) => {
   const hasOther = projectionData.some(r => r.otherIncomeDetail > 0);
   const hasContributions = projectionData.some(r => r.contribution > 0);
   const hasNqData = inputs.taxEnabled && projectionData.some(r => r.nqWithdrawal > 0);
+  const hasRMD = inputs.taxEnabled && projectionData.some(r => r.rmdAmount > 0);
+  const hasRMDExcess = hasRMD && projectionData.some(r => r.rmdExcess > 0);
 
   // Build row definitions for the transposed table
   const buildRows = () => {
@@ -3780,6 +4025,12 @@ const CashFlowsTab = ({ projectionData, inputs, clientInfo }) => {
       { label: 'Total Spending', cls: 'font-bold text-slate-800', getValue: (r) => fmt(r.expenses) },
       { label: 'Portfolio Withdrawal', cls: 'text-orange-700', getValue: (r) => fmt(r.distribution) },
     );
+    if (hasRMD) {
+      rows.push({ label: 'RMD Floor', cls: 'text-orange-600', getValue: (r) => r.rmdAmount > 0 ? fmt(r.rmdAmount) : '-' });
+      if (hasRMDExcess) {
+        rows.push({ label: 'RMD Excess → NQ', cls: 'text-teal-600', getValue: (r) => r.rmdExcess > 0 ? `+${fmt(r.rmdExcess)}` : '-' });
+      }
+    }
     if (inputs.taxEnabled) {
       rows.push(
         { label: '', cls: 'bg-slate-200', getValue: () => '', isSeparator: true },
@@ -3795,8 +4046,7 @@ const CashFlowsTab = ({ projectionData, inputs, clientInfo }) => {
         { label: 'Traditional Withdrawal', cls: 'text-blue-600', getValue: (r) => fmt(r.distribution * (r.traditionalPctUsed || 0) / 100) },
         { label: 'Roth Withdrawal', cls: 'text-emerald-600', getValue: (r) => fmt(r.distribution * (r.rothPctUsed || 0) / 100) },
         { label: 'NQ Withdrawal', cls: 'text-amber-600', getValue: (r) => fmt(r.nqWithdrawal || 0) },
-        { label: '  Cost Basis', cls: 'text-slate-500 pl-4', getValue: (r) => fmt(r.nqCostBasis || 0) },
-        { label: '  Capital Gain', cls: 'text-red-500 pl-4', getValue: (r) => fmt(r.nqTaxableGain || 0) },
+        { label: '  Realized Cap Gains', cls: 'text-red-500 pl-4', getValue: (r) => fmt(r.nqTaxableGain || 0) },
         { label: 'Qualified Dividends', cls: 'text-purple-600', getValue: (r) => fmt(r.nqQualifiedDividends || 0) },
         { label: 'Ordinary Dividends', cls: 'text-pink-600', getValue: (r) => fmt(r.nqOrdinaryDividends || 0) },
       );
@@ -3806,6 +4056,14 @@ const CashFlowsTab = ({ projectionData, inputs, clientInfo }) => {
       { label: 'Distribution Rate', cls: 'text-red-600', getValue: (r) => `${r.distRate?.toFixed(1) || '0'}%` },
       { label: 'Ending Balance', cls: 'font-bold text-slate-900 bg-emerald-50 text-base', getValue: (r) => fmt(Math.max(0, r.total)) },
     );
+    if (inputs.taxEnabled && projectionData.some(r => r.traditionalBalanceDetail > 0)) {
+      rows.push(
+        { label: '', cls: 'bg-slate-200', getValue: () => '', isSeparator: true },
+        { label: 'Traditional Balance', cls: 'text-blue-600', getValue: (r) => fmt(r.traditionalBalanceDetail || 0) },
+        { label: 'Roth Balance', cls: 'text-emerald-600', getValue: (r) => fmt(r.rothBalanceDetail || 0) },
+        { label: 'NQ Balance', cls: 'text-amber-600', getValue: (r) => fmt(r.nqBalanceDetail || 0) },
+      );
+    }
     return rows;
   };
 
@@ -3853,7 +4111,7 @@ const CashFlowsTab = ({ projectionData, inputs, clientInfo }) => {
 
         {inputs.taxEnabled && (
           <div className="mt-3 p-2 bg-amber-50 text-xs text-amber-800 rounded border border-amber-100">
-            <strong>Tax Note:</strong> Estimated taxes based on {inputs.filingStatus === 'married' ? 'Married Filing Jointly' : 'Single'} status, {inputs.traditionalPercent}% Trad / {inputs.rothPercent}% Roth / {inputs.nqPercent}% NQ, {inputs.stateRate}% state rate.{Object.keys(inputs.withdrawalOverrides || {}).length > 0 ? ` ${Object.keys(inputs.withdrawalOverrides).length} custom year override(s) applied.` : ''}
+            <strong>Tax Note:</strong> Estimated taxes based on {inputs.filingStatus === 'married' ? 'Married Filing Jointly' : 'Single'} status, {inputs.traditionalPercent}% Trad / {inputs.rothPercent}% Roth / {inputs.nqPercent}% NQ, {inputs.stateCode && STATE_TAX_DATA[inputs.stateCode] ? `${STATE_TAX_DATA[inputs.stateCode].name} (${STATE_TAX_DATA[inputs.stateCode].rate}%${STATE_TAX_DATA[inputs.stateCode].ssTaxable ? ', taxes SS' : ', SS exempt'})` : `${inputs.stateRate}% state rate`}.{Object.keys(inputs.withdrawalOverrides || {}).length > 0 ? ` ${Object.keys(inputs.withdrawalOverrides).length} custom year override(s) applied.` : ''}
           </div>
         )}
       </Card>

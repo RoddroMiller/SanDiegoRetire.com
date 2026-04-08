@@ -102,48 +102,300 @@ export const estimatePIAFromIncome = (annualIncome) => {
 // TAX CALCULATION UTILITIES
 // ============================================
 
-// 2024 Federal Tax Brackets
+// Tax bracket base year — all brackets are 2026 values
+const TAX_BRACKET_BASE_YEAR = 2026;
+
+// 2026 Federal Tax Brackets (IRS Rev. Proc. 2025-XX, inflation-adjusted)
 const FEDERAL_BRACKETS = {
   single: [
-    { min: 0, max: 11600, rate: 0.10 },
-    { min: 11600, max: 47150, rate: 0.12 },
-    { min: 47150, max: 100525, rate: 0.22 },
-    { min: 100525, max: 191950, rate: 0.24 },
-    { min: 191950, max: 243725, rate: 0.32 },
-    { min: 243725, max: 609350, rate: 0.35 },
-    { min: 609350, max: Infinity, rate: 0.37 }
+    { min: 0, max: 11925, rate: 0.10 },
+    { min: 11925, max: 48475, rate: 0.12 },
+    { min: 48475, max: 103350, rate: 0.22 },
+    { min: 103350, max: 197300, rate: 0.24 },
+    { min: 197300, max: 250525, rate: 0.32 },
+    { min: 250525, max: 626350, rate: 0.35 },
+    { min: 626350, max: Infinity, rate: 0.37 }
   ],
   married: [
-    { min: 0, max: 23200, rate: 0.10 },
-    { min: 23200, max: 94300, rate: 0.12 },
-    { min: 94300, max: 201050, rate: 0.22 },
-    { min: 201050, max: 383900, rate: 0.24 },
-    { min: 383900, max: 487450, rate: 0.32 },
-    { min: 487450, max: 731200, rate: 0.35 },
-    { min: 731200, max: Infinity, rate: 0.37 }
+    { min: 0, max: 23850, rate: 0.10 },
+    { min: 23850, max: 96950, rate: 0.12 },
+    { min: 96950, max: 206700, rate: 0.22 },
+    { min: 206700, max: 394600, rate: 0.24 },
+    { min: 394600, max: 501050, rate: 0.32 },
+    { min: 501050, max: 752800, rate: 0.35 },
+    { min: 752800, max: Infinity, rate: 0.37 }
   ]
 };
 
-// 2024 Qualified Dividend / LTCG Brackets
+// 2026 Qualified Dividend / LTCG Brackets
 const QDIV_BRACKETS = {
   single: [
-    { min: 0, max: 47025, rate: 0 },
-    { min: 47025, max: 518900, rate: 0.15 },
-    { min: 518900, max: Infinity, rate: 0.20 }
+    { min: 0, max: 48350, rate: 0 },
+    { min: 48350, max: 533400, rate: 0.15 },
+    { min: 533400, max: Infinity, rate: 0.20 }
   ],
   married: [
-    { min: 0, max: 94050, rate: 0 },
-    { min: 94050, max: 583750, rate: 0.15 },
-    { min: 583750, max: Infinity, rate: 0.20 }
+    { min: 0, max: 96700, rate: 0 },
+    { min: 96700, max: 600050, rate: 0.15 },
+    { min: 600050, max: Infinity, rate: 0.20 }
   ]
 };
 
-// Standard deduction (2024)
+// Standard deduction (2026)
 const STANDARD_DEDUCTION = {
-  single: 14600,
-  married: 29200,
+  single: 15000,
+  married: 30000,
   // Additional deduction for 65+
-  seniorBonus: { single: 1950, married: 1550 }
+  seniorBonus: { single: 2000, married: 1600 }
+};
+
+// ============================================
+// STATE TAX DATA
+// ============================================
+
+// State tax rules: effective income tax rate and Social Security taxability
+// Rates are effective/flat approximations for retirement income in the moderate bracket.
+// States with progressive brackets use a representative rate for $50k-$150k income range.
+// ssTaxable: false = state fully exempts SS, true = state taxes SS (may have partial exemptions)
+// State tax data: flat rate OR marginal brackets for each state
+// brackets: if present, used for marginal calculation (array for single/married or single array for all filers)
+// rate: flat rate (used when no brackets defined, or as display summary)
+// ssTaxable: whether state taxes Social Security benefits
+export const STATE_TAX_DATA = {
+  'AL': { name: 'Alabama', rate: 5.0, ssTaxable: false, brackets: {
+    single:  [{ min: 0, max: 500, rate: 2 }, { min: 500, max: 3000, rate: 4 }, { min: 3000, max: Infinity, rate: 5 }],
+    married: [{ min: 0, max: 1000, rate: 2 }, { min: 1000, max: 6000, rate: 4 }, { min: 6000, max: Infinity, rate: 5 }]
+  }},
+  'AK': { name: 'Alaska', rate: 0, ssTaxable: false },
+  'AZ': { name: 'Arizona', rate: 2.5, ssTaxable: false },
+  'AR': { name: 'Arkansas', rate: 3.9, ssTaxable: false, brackets: {
+    single: [{ min: 0, max: 5500, rate: 0 }, { min: 5500, max: 10900, rate: 2 }, { min: 10900, max: 15600, rate: 3 }, { min: 15600, max: 25700, rate: 3.4 }, { min: 25700, max: Infinity, rate: 3.9 }]
+  }},
+  'CA': { name: 'California', rate: 9.3, ssTaxable: false, brackets: {
+    single:  [{ min: 0, max: 11079, rate: 1 }, { min: 11079, max: 26264, rate: 2 }, { min: 26264, max: 41452, rate: 4 }, { min: 41452, max: 57542, rate: 6 }, { min: 57542, max: 72724, rate: 8 }, { min: 72724, max: 371479, rate: 9.3 }, { min: 371479, max: 445771, rate: 10.3 }, { min: 445771, max: 742953, rate: 11.3 }, { min: 742953, max: Infinity, rate: 12.3 }],
+    married: [{ min: 0, max: 22158, rate: 1 }, { min: 22158, max: 52528, rate: 2 }, { min: 52528, max: 82904, rate: 4 }, { min: 82904, max: 115084, rate: 6 }, { min: 115084, max: 145448, rate: 8 }, { min: 145448, max: 742958, rate: 9.3 }, { min: 742958, max: 891542, rate: 10.3 }, { min: 891542, max: 1485906, rate: 11.3 }, { min: 1485906, max: Infinity, rate: 12.3 }]
+  }},
+  'CO': { name: 'Colorado', rate: 4.4, ssTaxable: true },
+  'CT': { name: 'Connecticut', rate: 6.99, ssTaxable: true, brackets: {
+    single:  [{ min: 0, max: 10000, rate: 2 }, { min: 10000, max: 50000, rate: 4.5 }, { min: 50000, max: 100000, rate: 5.5 }, { min: 100000, max: 200000, rate: 6 }, { min: 200000, max: 250000, rate: 6.5 }, { min: 250000, max: 500000, rate: 6.9 }, { min: 500000, max: Infinity, rate: 6.99 }],
+    married: [{ min: 0, max: 20000, rate: 2 }, { min: 20000, max: 100000, rate: 4.5 }, { min: 100000, max: 200000, rate: 5.5 }, { min: 200000, max: 400000, rate: 6 }, { min: 400000, max: 500000, rate: 6.5 }, { min: 500000, max: 1000000, rate: 6.9 }, { min: 1000000, max: Infinity, rate: 6.99 }]
+  }},
+  'DE': { name: 'Delaware', rate: 6.6, ssTaxable: false, brackets: {
+    single: [{ min: 0, max: 2000, rate: 0 }, { min: 2000, max: 5000, rate: 2.2 }, { min: 5000, max: 10000, rate: 3.9 }, { min: 10000, max: 20000, rate: 4.8 }, { min: 20000, max: 25000, rate: 5.2 }, { min: 25000, max: 60000, rate: 5.55 }, { min: 60000, max: Infinity, rate: 6.6 }]
+  }},
+  'DC': { name: 'District of Columbia', rate: 10.75, ssTaxable: false, brackets: {
+    single: [{ min: 0, max: 10000, rate: 4 }, { min: 10000, max: 40000, rate: 6 }, { min: 40000, max: 60000, rate: 6.5 }, { min: 60000, max: 250000, rate: 8.5 }, { min: 250000, max: 500000, rate: 9.25 }, { min: 500000, max: 1000000, rate: 9.75 }, { min: 1000000, max: Infinity, rate: 10.75 }]
+  }},
+  'FL': { name: 'Florida', rate: 0, ssTaxable: false },
+  'GA': { name: 'Georgia', rate: 5.49, ssTaxable: false },
+  'HI': { name: 'Hawaii', rate: 11.0, ssTaxable: false, brackets: {
+    single:  [{ min: 0, max: 9600, rate: 1.4 }, { min: 9600, max: 14400, rate: 3.2 }, { min: 14400, max: 19200, rate: 5.5 }, { min: 19200, max: 24000, rate: 6.4 }, { min: 24000, max: 36000, rate: 6.8 }, { min: 36000, max: 48000, rate: 7.2 }, { min: 48000, max: 125000, rate: 7.6 }, { min: 125000, max: 175000, rate: 7.9 }, { min: 175000, max: 225000, rate: 8.25 }, { min: 225000, max: 275000, rate: 9 }, { min: 275000, max: 325000, rate: 10 }, { min: 325000, max: Infinity, rate: 11 }],
+    married: [{ min: 0, max: 19200, rate: 1.4 }, { min: 19200, max: 28800, rate: 3.2 }, { min: 28800, max: 38400, rate: 5.5 }, { min: 38400, max: 48000, rate: 6.4 }, { min: 48000, max: 72000, rate: 6.8 }, { min: 72000, max: 96000, rate: 7.2 }, { min: 96000, max: 250000, rate: 7.6 }, { min: 250000, max: 350000, rate: 7.9 }, { min: 350000, max: 450000, rate: 8.25 }, { min: 450000, max: 550000, rate: 9 }, { min: 550000, max: 650000, rate: 10 }, { min: 650000, max: Infinity, rate: 11 }]
+  }},
+  'ID': { name: 'Idaho', rate: 5.695, ssTaxable: false },
+  'IL': { name: 'Illinois', rate: 4.95, ssTaxable: false },
+  'IN': { name: 'Indiana', rate: 3.05, ssTaxable: false },
+  'IA': { name: 'Iowa', rate: 3.8, ssTaxable: false },
+  'KS': { name: 'Kansas', rate: 5.7, ssTaxable: true, brackets: {
+    single:  [{ min: 0, max: 15000, rate: 3.1 }, { min: 15000, max: 30000, rate: 5.25 }, { min: 30000, max: Infinity, rate: 5.7 }],
+    married: [{ min: 0, max: 30000, rate: 3.1 }, { min: 30000, max: 60000, rate: 5.25 }, { min: 60000, max: Infinity, rate: 5.7 }]
+  }},
+  'KY': { name: 'Kentucky', rate: 4.0, ssTaxable: false },
+  'LA': { name: 'Louisiana', rate: 3.0, ssTaxable: false },
+  'ME': { name: 'Maine', rate: 7.15, ssTaxable: false, brackets: {
+    single:  [{ min: 0, max: 26800, rate: 5.8 }, { min: 26800, max: 63450, rate: 6.75 }, { min: 63450, max: Infinity, rate: 7.15 }],
+    married: [{ min: 0, max: 53600, rate: 5.8 }, { min: 53600, max: 126900, rate: 6.75 }, { min: 126900, max: Infinity, rate: 7.15 }]
+  }},
+  'MD': { name: 'Maryland', rate: 5.75, ssTaxable: false, brackets: {
+    single:  [{ min: 0, max: 1000, rate: 2 }, { min: 1000, max: 2000, rate: 3 }, { min: 2000, max: 3000, rate: 4 }, { min: 3000, max: 100000, rate: 4.75 }, { min: 100000, max: 125000, rate: 5 }, { min: 125000, max: 150000, rate: 5.25 }, { min: 150000, max: 250000, rate: 5.5 }, { min: 250000, max: 500000, rate: 5.75 }, { min: 500000, max: 1000000, rate: 6.25 }, { min: 1000000, max: Infinity, rate: 6.5 }],
+    married: [{ min: 0, max: 1000, rate: 2 }, { min: 1000, max: 2000, rate: 3 }, { min: 2000, max: 3000, rate: 4 }, { min: 3000, max: 150000, rate: 4.75 }, { min: 150000, max: 175000, rate: 5 }, { min: 175000, max: 225000, rate: 5.25 }, { min: 225000, max: 300000, rate: 5.5 }, { min: 300000, max: 600000, rate: 5.75 }, { min: 600000, max: 1200000, rate: 6.25 }, { min: 1200000, max: Infinity, rate: 6.5 }]
+  }},
+  'MA': { name: 'Massachusetts', rate: 5.0, ssTaxable: false },
+  'MI': { name: 'Michigan', rate: 4.25, ssTaxable: false },
+  'MN': { name: 'Minnesota', rate: 9.85, ssTaxable: true, brackets: {
+    single:  [{ min: 0, max: 32570, rate: 5.35 }, { min: 32570, max: 106990, rate: 6.8 }, { min: 106990, max: 198630, rate: 7.85 }, { min: 198630, max: Infinity, rate: 9.85 }],
+    married: [{ min: 0, max: 47620, rate: 5.35 }, { min: 47620, max: 189180, rate: 6.8 }, { min: 189180, max: 330410, rate: 7.85 }, { min: 330410, max: Infinity, rate: 9.85 }]
+  }},
+  'MS': { name: 'Mississippi', rate: 5.0, ssTaxable: false },
+  'MO': { name: 'Missouri', rate: 4.7, ssTaxable: true, brackets: {
+    single: [{ min: 0, max: 1313, rate: 0 }, { min: 1313, max: 2626, rate: 2 }, { min: 2626, max: 3939, rate: 2.5 }, { min: 3939, max: 5252, rate: 3 }, { min: 5252, max: 6565, rate: 3.5 }, { min: 6565, max: 7878, rate: 4 }, { min: 7878, max: 9191, rate: 4.5 }, { min: 9191, max: Infinity, rate: 4.7 }]
+  }},
+  'MT': { name: 'Montana', rate: 5.9, ssTaxable: true, brackets: {
+    single:  [{ min: 0, max: 21100, rate: 4.7 }, { min: 21100, max: Infinity, rate: 5.9 }],
+    married: [{ min: 0, max: 42200, rate: 4.7 }, { min: 42200, max: Infinity, rate: 5.9 }]
+  }},
+  'NE': { name: 'Nebraska', rate: 5.2, ssTaxable: true, brackets: {
+    single:  [{ min: 0, max: 4030, rate: 2.46 }, { min: 4030, max: 24120, rate: 3.51 }, { min: 24120, max: 38870, rate: 5.01 }, { min: 38870, max: Infinity, rate: 5.2 }],
+    married: [{ min: 0, max: 8040, rate: 2.46 }, { min: 8040, max: 48250, rate: 3.51 }, { min: 48250, max: 77730, rate: 5.01 }, { min: 77730, max: Infinity, rate: 5.2 }]
+  }},
+  'NV': { name: 'Nevada', rate: 0, ssTaxable: false },
+  'NH': { name: 'New Hampshire', rate: 0, ssTaxable: false },
+  'NJ': { name: 'New Jersey', rate: 6.37, ssTaxable: false, brackets: {
+    single:  [{ min: 0, max: 20000, rate: 1.4 }, { min: 20000, max: 35000, rate: 1.75 }, { min: 35000, max: 40000, rate: 3.5 }, { min: 40000, max: 75000, rate: 5.525 }, { min: 75000, max: 500000, rate: 6.37 }, { min: 500000, max: 1000000, rate: 8.97 }, { min: 1000000, max: Infinity, rate: 10.75 }],
+    married: [{ min: 0, max: 20000, rate: 1.4 }, { min: 20000, max: 50000, rate: 1.75 }, { min: 50000, max: 70000, rate: 2.45 }, { min: 70000, max: 80000, rate: 3.5 }, { min: 80000, max: 150000, rate: 5.525 }, { min: 150000, max: 500000, rate: 6.37 }, { min: 500000, max: 1000000, rate: 8.97 }, { min: 1000000, max: Infinity, rate: 10.75 }]
+  }},
+  'NM': { name: 'New Mexico', rate: 5.9, ssTaxable: true, brackets: {
+    single:  [{ min: 0, max: 5500, rate: 1.5 }, { min: 5500, max: 16500, rate: 3.2 }, { min: 16500, max: 33500, rate: 4.3 }, { min: 33500, max: 66500, rate: 4.7 }, { min: 66500, max: 210000, rate: 4.9 }, { min: 210000, max: Infinity, rate: 5.9 }],
+    married: [{ min: 0, max: 8000, rate: 1.5 }, { min: 8000, max: 25000, rate: 3.2 }, { min: 25000, max: 50000, rate: 4.3 }, { min: 50000, max: 100000, rate: 4.7 }, { min: 100000, max: 315000, rate: 4.9 }, { min: 315000, max: Infinity, rate: 5.9 }]
+  }},
+  'NY': { name: 'New York', rate: 6.85, ssTaxable: false, brackets: {
+    single:  [{ min: 0, max: 8500, rate: 4 }, { min: 8500, max: 11700, rate: 4.5 }, { min: 11700, max: 13900, rate: 5.25 }, { min: 13900, max: 80650, rate: 5.5 }, { min: 80650, max: 215400, rate: 6 }, { min: 215400, max: 1077550, rate: 6.85 }, { min: 1077550, max: 5000000, rate: 9.65 }, { min: 5000000, max: 25000000, rate: 10.3 }, { min: 25000000, max: Infinity, rate: 10.9 }],
+    married: [{ min: 0, max: 17150, rate: 4 }, { min: 17150, max: 23600, rate: 4.5 }, { min: 23600, max: 27900, rate: 5.25 }, { min: 27900, max: 161550, rate: 5.5 }, { min: 161550, max: 323200, rate: 6 }, { min: 323200, max: 2155350, rate: 6.85 }, { min: 2155350, max: 5000000, rate: 9.65 }, { min: 5000000, max: 25000000, rate: 10.3 }, { min: 25000000, max: Infinity, rate: 10.9 }]
+  }},
+  'NC': { name: 'North Carolina', rate: 4.5, ssTaxable: false },
+  'ND': { name: 'North Dakota', rate: 1.95, ssTaxable: false, brackets: {
+    single:  [{ min: 0, max: 48475, rate: 0 }, { min: 48475, max: 244825, rate: 1.95 }, { min: 244825, max: Infinity, rate: 2.5 }],
+    married: [{ min: 0, max: 80975, rate: 0 }, { min: 80975, max: 298075, rate: 1.95 }, { min: 298075, max: Infinity, rate: 2.5 }]
+  }},
+  'OH': { name: 'Ohio', rate: 2.75, ssTaxable: false },
+  'OK': { name: 'Oklahoma', rate: 4.75, ssTaxable: false, brackets: {
+    single:  [{ min: 0, max: 1000, rate: 0.25 }, { min: 1000, max: 2500, rate: 0.75 }, { min: 2500, max: 3750, rate: 1.75 }, { min: 3750, max: 4900, rate: 2.75 }, { min: 4900, max: 7200, rate: 3.75 }, { min: 7200, max: Infinity, rate: 4.75 }],
+    married: [{ min: 0, max: 2000, rate: 0.25 }, { min: 2000, max: 5000, rate: 0.75 }, { min: 5000, max: 7500, rate: 1.75 }, { min: 7500, max: 9800, rate: 2.75 }, { min: 9800, max: 14400, rate: 3.75 }, { min: 14400, max: Infinity, rate: 4.75 }]
+  }},
+  'OR': { name: 'Oregon', rate: 9.9, ssTaxable: false, brackets: {
+    single:  [{ min: 0, max: 4400, rate: 4.75 }, { min: 4400, max: 11050, rate: 6.75 }, { min: 11050, max: 125000, rate: 8.75 }, { min: 125000, max: Infinity, rate: 9.9 }],
+    married: [{ min: 0, max: 8800, rate: 4.75 }, { min: 8800, max: 22100, rate: 6.75 }, { min: 22100, max: 250000, rate: 8.75 }, { min: 250000, max: Infinity, rate: 9.9 }]
+  }},
+  'PA': { name: 'Pennsylvania', rate: 3.07, ssTaxable: false },
+  'RI': { name: 'Rhode Island', rate: 5.99, ssTaxable: true, brackets: {
+    single: [{ min: 0, max: 79900, rate: 3.75 }, { min: 79900, max: 181650, rate: 4.75 }, { min: 181650, max: Infinity, rate: 5.99 }]
+  }},
+  'SC': { name: 'South Carolina', rate: 6.2, ssTaxable: false, brackets: {
+    single: [{ min: 0, max: 3560, rate: 0 }, { min: 3560, max: 17830, rate: 3 }, { min: 17830, max: Infinity, rate: 6.2 }]
+  }},
+  'SD': { name: 'South Dakota', rate: 0, ssTaxable: false },
+  'TN': { name: 'Tennessee', rate: 0, ssTaxable: false },
+  'TX': { name: 'Texas', rate: 0, ssTaxable: false },
+  'UT': { name: 'Utah', rate: 4.65, ssTaxable: true },
+  'VT': { name: 'Vermont', rate: 8.75, ssTaxable: true, brackets: {
+    single:  [{ min: 0, max: 3825, rate: 0 }, { min: 3825, max: 53225, rate: 3.35 }, { min: 53225, max: 123525, rate: 6.6 }, { min: 123525, max: 253525, rate: 7.6 }, { min: 253525, max: Infinity, rate: 8.75 }],
+    married: [{ min: 0, max: 11475, rate: 0 }, { min: 11475, max: 93975, rate: 3.35 }, { min: 93975, max: 210925, rate: 6.6 }, { min: 210925, max: 315475, rate: 7.6 }, { min: 315475, max: Infinity, rate: 8.75 }]
+  }},
+  'VA': { name: 'Virginia', rate: 5.75, ssTaxable: false, brackets: {
+    single: [{ min: 0, max: 3000, rate: 2 }, { min: 3000, max: 5000, rate: 3 }, { min: 5000, max: 17000, rate: 5 }, { min: 17000, max: Infinity, rate: 5.75 }]
+  }},
+  'WA': { name: 'Washington', rate: 0, ssTaxable: false },
+  'WV': { name: 'West Virginia', rate: 4.82, ssTaxable: true, brackets: {
+    single: [{ min: 0, max: 10000, rate: 2.22 }, { min: 10000, max: 25000, rate: 2.96 }, { min: 25000, max: 40000, rate: 3.33 }, { min: 40000, max: 60000, rate: 4.44 }, { min: 60000, max: Infinity, rate: 4.82 }]
+  }},
+  'WI': { name: 'Wisconsin', rate: 5.3, ssTaxable: false, brackets: {
+    single:  [{ min: 0, max: 14680, rate: 3.5 }, { min: 14680, max: 29370, rate: 4.4 }, { min: 29370, max: 323290, rate: 5.3 }, { min: 323290, max: Infinity, rate: 7.65 }],
+    married: [{ min: 0, max: 19580, rate: 3.5 }, { min: 19580, max: 39150, rate: 4.4 }, { min: 39150, max: 431060, rate: 5.3 }, { min: 431060, max: Infinity, rate: 7.65 }]
+  }},
+  'WY': { name: 'Wyoming', rate: 0, ssTaxable: false }
+};
+
+/**
+ * Calculate state income tax using marginal brackets (when available) or flat rate
+ * @param {number} taxableIncome - State taxable income
+ * @param {string} stateCode - State abbreviation
+ * @param {string} filingStatus - 'single' or 'married'
+ * @returns {number} State tax amount
+ */
+const calculateStateTax = (taxableIncome, stateCode, filingStatus) => {
+  if (taxableIncome <= 0 || !stateCode) return 0;
+  const stateData = STATE_TAX_DATA[stateCode];
+  if (!stateData) return 0;
+
+  // Use marginal brackets if available
+  if (stateData.brackets) {
+    // Some states use the same brackets for all filers (only 'single' key)
+    const brackets = stateData.brackets[filingStatus] || stateData.brackets.single || [];
+    if (brackets.length === 0) return taxableIncome * (stateData.rate / 100);
+
+    let tax = 0;
+    let remaining = taxableIncome;
+    for (const bracket of brackets) {
+      if (remaining <= 0) break;
+      const taxableInBracket = Math.min(remaining, (bracket.max === Infinity ? remaining : bracket.max - bracket.min));
+      tax += taxableInBracket * (bracket.rate / 100);
+      remaining -= taxableInBracket;
+    }
+    return tax;
+  }
+
+  // Flat rate fallback
+  return taxableIncome * (stateData.rate / 100);
+};
+
+/**
+ * Get inflation-adjusted federal tax brackets for a future year
+ * @param {string} filingStatus - 'single' or 'married'
+ * @param {number} yearsFromBase - Years from TAX_BRACKET_BASE_YEAR (can be 0 for base year)
+ * @param {number} inflationRate - Annual inflation rate as percentage (e.g. 2.5)
+ * @returns {Array} Brackets with inflation-adjusted min/max thresholds
+ */
+export const getInflationAdjustedBrackets = (filingStatus, yearsFromBase, inflationRate) => {
+  const brackets = FEDERAL_BRACKETS[filingStatus] || FEDERAL_BRACKETS.married;
+  if (yearsFromBase <= 0) return brackets;
+  const factor = Math.pow(1 + inflationRate / 100, yearsFromBase);
+  return brackets.map(b => ({
+    ...b,
+    min: b.min === 0 ? 0 : Math.round(b.min * factor),
+    max: b.max === Infinity ? Infinity : Math.round(b.max * factor)
+  }));
+};
+
+/**
+ * Get inflation-adjusted standard deduction for a future year
+ * @param {string} filingStatus - 'single' or 'married'
+ * @param {number} yearsFromBase - Years from TAX_BRACKET_BASE_YEAR
+ * @param {number} inflationRate - Annual inflation rate as percentage
+ * @param {boolean} isSenior - Whether taxpayer is 65+
+ * @returns {number} Inflation-adjusted standard deduction
+ */
+export const getInflationAdjustedDeduction = (filingStatus, yearsFromBase, inflationRate, isSenior = true) => {
+  const factor = yearsFromBase > 0 ? Math.pow(1 + inflationRate / 100, yearsFromBase) : 1;
+  let deduction = (STANDARD_DEDUCTION[filingStatus] || STANDARD_DEDUCTION.married) * factor;
+  if (isSenior) {
+    const seniorBonus = (STANDARD_DEDUCTION.seniorBonus[filingStatus] || STANDARD_DEDUCTION.seniorBonus.married) * factor;
+    deduction += filingStatus === 'married' ? seniorBonus * 2 : seniorBonus;
+  }
+  return Math.round(deduction);
+};
+
+// ============================================
+// RMD (REQUIRED MINIMUM DISTRIBUTION) UTILITIES
+// ============================================
+
+// IRS Uniform Lifetime Table (age -> distribution period)
+// Source: IRS Publication 590-B, Table III
+const UNIFORM_LIFETIME_TABLE = {
+  72: 27.4, 73: 26.5, 74: 25.5, 75: 24.6, 76: 23.7, 77: 22.9,
+  78: 22.0, 79: 21.1, 80: 20.2, 81: 19.4, 82: 18.5, 83: 17.7,
+  84: 16.8, 85: 16.0, 86: 15.2, 87: 14.4, 88: 13.7, 89: 12.9,
+  90: 12.2, 91: 11.5, 92: 10.8, 93: 10.1, 94: 9.5, 95: 8.9,
+  96: 8.4, 97: 7.8, 98: 7.3, 99: 6.8, 100: 6.4,
+  101: 6.0, 102: 5.6, 103: 5.2, 104: 4.9, 105: 4.6,
+  106: 4.3, 107: 4.1, 108: 3.9, 109: 3.7, 110: 3.5,
+  111: 3.4, 112: 3.3, 113: 3.1, 114: 3.0, 115: 2.9,
+  116: 2.8, 117: 2.7, 118: 2.5, 119: 2.3, 120: 2.0
+};
+
+/**
+ * Get RMD starting age based on birth year (SECURE Act 2.0)
+ * @param {number} birthYear - Owner's birth year
+ * @returns {number} Age at which RMDs must begin
+ */
+export const getRMDStartAge = (birthYear) => {
+  if (birthYear <= 1950) return 72;
+  if (birthYear <= 1959) return 73;
+  return 75; // born 1960+
+};
+
+/**
+ * Calculate Required Minimum Distribution for a given year
+ * @param {number} priorYearEndBalance - Traditional account balance at end of prior year
+ * @param {number} ownerAge - Owner's age in the current distribution year
+ * @param {number} birthYear - Owner's birth year (determines RMD start age)
+ * @returns {number} RMD amount (0 if below RMD age)
+ */
+export const calculateRMD = (priorYearEndBalance, ownerAge, birthYear) => {
+  if (priorYearEndBalance <= 0) return 0;
+  const rmdStartAge = getRMDStartAge(birthYear);
+  if (ownerAge < rmdStartAge) return 0;
+  const distributionPeriod = UNIFORM_LIFETIME_TABLE[Math.min(ownerAge, 120)] || 2.0;
+  return priorYearEndBalance / distributionPeriod;
 };
 
 /**
@@ -259,7 +511,12 @@ export const calculateAnnualTax = (incomeBreakdown, taxSettings, isSenior = true
     employmentIncome = 0         // Spouse employment income during gap years
   } = incomeBreakdown;
 
-  const { filingStatus = 'married', stateRate = 0 } = taxSettings;
+  const { filingStatus = 'married', stateRate = 0, stateCode = '' } = taxSettings;
+
+  // Resolve state tax rules
+  const stateData = stateCode ? STATE_TAX_DATA[stateCode] : null;
+  const effectiveStateRate = stateData ? stateData.rate : stateRate;
+  const stateTaxesSS = stateData ? stateData.ssTaxable : true; // Default: tax SS at state level
 
   // Calculate taxable SS (NQ ordinary dividends count as ordinary income)
   const ordinaryIncomeBeforeSS = pensionIncome + traditionalWithdrawal + nqOrdinaryDividends + otherIncome + employmentIncome;
@@ -291,9 +548,14 @@ export const calculateAnnualTax = (incomeBreakdown, taxSettings, isSenior = true
   // Total federal tax
   const federalTax = federalOrdinaryTax + qdivTax;
 
-  // State tax (simplified: flat rate on all taxable income including preferential)
-  const stateTaxableIncome = taxableOrdinaryIncome + totalPreferentialIncome;
-  const stateTax = stateTaxableIncome * (stateRate / 100);
+  // State tax — exclude SS from state taxable income if state exempts it
+  const stateSSIncome = stateTaxesSS ? taxableSS : 0;
+  const stateOrdinaryIncome = stateSSIncome + pensionIncome + traditionalWithdrawal + nqOrdinaryDividends + otherIncome + employmentIncome;
+  const stateTaxableIncome = Math.max(0, stateOrdinaryIncome - deduction) + totalPreferentialIncome;
+  // Use marginal brackets when state has them, flat rate otherwise
+  const stateTax = stateCode
+    ? calculateStateTax(stateTaxableIncome, stateCode, filingStatus)
+    : stateTaxableIncome * (effectiveStateRate / 100);
 
   // Total tax
   const totalTax = federalTax + stateTax;
@@ -317,8 +579,8 @@ export const calculateAnnualTax = (incomeBreakdown, taxSettings, isSenior = true
 // TAX-IMPLIED SPENDING CALCULATOR
 // ============================================
 
-// 2024 Social Security wage base
-const SS_WAGE_BASE = 168600;
+// 2026 Social Security wage base
+const SS_WAGE_BASE = 176100;
 const SS_TAX_RATE = 0.062;
 const MEDICARE_TAX_RATE = 0.0145;
 const MEDICARE_ADDITIONAL_RATE = 0.009;
@@ -675,27 +937,34 @@ export const calculateBasePlan = (inputs, assumptions, clientInfo, vaEnabled = f
     return totalPV;
   };
 
-  const b1Val = Math.round(calculateBucketNeed(1, 3, assumptions.b1.return) / 1000) * 1000;
-  const b2Val = Math.round(calculateBucketNeed(4, 6, assumptions.b2.return) / 1000) * 1000;
+  // Calculate raw bucket targets from spending needs
+  const b1Target = Math.round(calculateBucketNeed(1, 3, assumptions.b1.return) / 1000) * 1000;
+  const b2Target = Math.round(calculateBucketNeed(4, 6, assumptions.b2.return) / 1000) * 1000;
   // B3 covers years 7-15 with minimum 20% and maximum 25% allocation
   const b3Calculated = Math.round(calculateBucketNeed(7, 15, assumptions.b3.return) / 1000) * 1000;
-  const b3Min = Math.round((bucketPortfolio * 0.20) / 1000) * 1000;
-  const b3Max = Math.round((bucketPortfolio * 0.25) / 1000) * 1000;
-  const b3Val = Math.min(Math.max(b3Calculated, b3Min), b3Max);
+  // Only apply B3 min/max floors when portfolio can cover B1+B2 spending needs
+  const spendingDriven = b1Target + b2Target;
+  const hasSpendingSurplus = bucketPortfolio > spendingDriven;
+  const b3Min = hasSpendingSurplus ? Math.round((bucketPortfolio * 0.20) / 1000) * 1000 : 0;
+  const b3Max = hasSpendingSurplus ? Math.round((bucketPortfolio * 0.25) / 1000) * 1000 : Infinity;
+  const b3Target = Math.min(Math.max(b3Calculated, b3Min), b3Max);
+  // B4 target is 10% of portfolio, but only when portfolio can cover spending needs
+  const b4FullTarget = hasSpendingSurplus ? Math.round((bucketPortfolio * 0.10) / 1000) * 1000 : 0;
 
-  // B4 is 10% but may be reduced to ensure B5 >= 2x B4
-  // B5 = bucketPortfolio - b1 - b2 - b3 - b4
-  // Constraint: B5 >= 2 * B4
-  // So: bucketPortfolio - b1 - b2 - b3 - b4 >= 2 * b4
-  // bucketPortfolio - b1 - b2 - b3 >= 3 * b4
-  // b4 <= (bucketPortfolio - b1 - b2 - b3) / 3
-  const remainingAfterB3 = bucketPortfolio - b1Val - b2Val - b3Val;
-  const b4Target = Math.round((bucketPortfolio * 0.10) / 1000) * 1000;
-  const b4MaxForB5Constraint = Math.round((remainingAfterB3 / 3) / 1000) * 1000;
-  const b4Val = Math.min(b4Target, Math.max(0, b4MaxForB5Constraint));
-
-  const allocatedSoFar = b1Val + b2Val + b3Val + b4Val;
-  const b5Val = bucketPortfolio - allocatedSoFar;
+  // Sequential fill: B1 first, then B2, B3 — these are spending-driven
+  // B4 and B5 split whatever remains, with B5 >= 2x B4 constraint
+  let remaining = bucketPortfolio;
+  const b1Val = Math.min(b1Target, Math.max(0, remaining));
+  remaining -= b1Val;
+  const b2Val = Math.min(b2Target, Math.max(0, remaining));
+  remaining -= b2Val;
+  const b3Val = Math.min(b3Target, Math.max(0, remaining));
+  remaining -= b3Val;
+  // B4: capped at 10% target AND must leave B5 >= 2x B4 (so B4 <= remaining/3)
+  const b4MaxForB5 = remaining > 0 ? Math.round((remaining / 3) / 1000) * 1000 : 0;
+  const b4Val = Math.min(b4FullTarget, b4MaxForB5, Math.max(0, remaining));
+  remaining -= b4Val;
+  const b5Val = Math.max(0, remaining);
 
   return {
     b1Val,
@@ -703,7 +972,7 @@ export const calculateBasePlan = (inputs, assumptions, clientInfo, vaEnabled = f
     b3Val,
     b4Val,
     b5Val,
-    isDeficit: b5Val < 0,
+    isDeficit: b5Val === 0 && bucketPortfolio < (b1Target + b2Target + b3Target + b4FullTarget),
     getAnnualGap,
     getAnnualDetails,
     simulationStartAge,
@@ -757,6 +1026,27 @@ export const runSimulation = (basePlan, assumptions, inputs, rebalanceFreq, isMo
     }
   }
 
+  // --- RMD setup: derive birth years and per-owner traditional balances ---
+  const currentYear = new Date().getFullYear();
+  const clientBirthYear = currentYear - (clientInfo?.currentAge || 65);
+  const partnerBirthYear = clientInfo?.isMarried ? currentYear - (clientInfo?.partnerAge || 65) : null;
+
+  // Compute per-owner traditional balance from accounts array (if provided)
+  let clientTraditionalShare = 1; // default: client owns all traditional
+  let partnerTraditionalShare = 0;
+  if (inputs.accounts && inputs.accounts.length > 0) {
+    const totalTrad = inputs.accounts.filter(a => a.type === 'traditional').reduce((s, a) => s + (a.balance || 0), 0);
+    if (totalTrad > 0) {
+      const clientTrad = inputs.accounts.filter(a => a.type === 'traditional' && a.owner === 'client').reduce((s, a) => s + (a.balance || 0), 0);
+      clientTraditionalShare = clientTrad / totalTrad;
+      partnerTraditionalShare = 1 - clientTraditionalShare;
+    }
+  } else if (clientInfo?.isMarried) {
+    // Without accounts, split traditional 50/50 for married couples
+    clientTraditionalShare = 0.5;
+    partnerTraditionalShare = 0.5;
+  }
+
   for (let iter = 0; iter < iterations; iter++) {
     // Start with base bucket allocations
     let balances = { b1: b1Val, b2: b2Val, b3: b3Val, b4: b4Val, b5: b5Val };
@@ -780,6 +1070,14 @@ export const runSimulation = (basePlan, assumptions, inputs, rebalanceFreq, isMo
       vaBenefitBase = vaAllocationAmount;
       vaHighWaterMark = vaAllocationAmount;
     }
+
+    // Track account-type balances for RMD calculations
+    const initTradPct = (inputs.traditionalPercent ?? 60) / 100;
+    const initRothPct = (inputs.rothPercent ?? 25) / 100;
+    const initNqPct = (inputs.nqPercent ?? 15) / 100;
+    let traditionalBalance = inputs.totalPortfolio * initTradPct;
+    let rothBalance = inputs.totalPortfolio * initRothPct;
+    let nqAccountBalance = inputs.totalPortfolio * initNqPct;
 
     let benchmarkBalance = inputs.totalPortfolio;
     let history = [];
@@ -862,10 +1160,45 @@ export const runSimulation = (basePlan, assumptions, inputs, rebalanceFreq, isMo
       // Adjust gap by VA guaranteed income - this is what the buckets need to cover
       const adjustedGap = vaInputs ? Math.max(0, gap - vaGuaranteedIncome) : gap;
 
+      // --- Grow account-type balances at blended portfolio rate ---
+      const blendedRate = startTotal > 0
+        ? (postGrowthTotal - startTotal - oneTimeContributions) / startTotal
+        : 0;
+      traditionalBalance *= (1 + blendedRate);
+      rothBalance *= (1 + blendedRate);
+      nqAccountBalance *= (1 + blendedRate);
+      if (oneTimeContributions > 0) nqAccountBalance += oneTimeContributions;
+
+      // --- RMD calculation (per-owner) ---
+      const clientAlive = simAge < (inputs.expectedDeathAge || 95);
+      const partnerAlive = clientInfo?.isMarried && currentPartnerAge < (inputs.partnerExpectedDeathAge || 95);
+      let clientRMD = 0;
+      let partnerRMD = 0;
+      if (inputs.taxEnabled && traditionalBalance > 0) {
+        // On spouse death, surviving spouse inherits the deceased's traditional balance
+        if (clientInfo?.isMarried && !clientAlive && partnerAlive && clientTraditionalShare > 0) {
+          // Client died — partner inherits client's share (recalculate as 100% partner)
+          // This is handled by using full traditionalBalance for partner RMD
+          partnerRMD = calculateRMD(traditionalBalance, currentPartnerAge, partnerBirthYear);
+        } else if (clientInfo?.isMarried && clientAlive && !partnerAlive && partnerTraditionalShare > 0) {
+          // Partner died — client inherits partner's share
+          clientRMD = calculateRMD(traditionalBalance, simAge, clientBirthYear);
+        } else {
+          // Both alive (or single) — calculate per-owner
+          clientRMD = calculateRMD(traditionalBalance * clientTraditionalShare, simAge, clientBirthYear);
+          if (partnerBirthYear && partnerAlive) {
+            partnerRMD = calculateRMD(traditionalBalance * partnerTraditionalShare, currentPartnerAge, partnerBirthYear);
+          }
+        }
+      }
+      const totalRMD = clientRMD + partnerRMD;
+
       // --- Tax-inclusive withdrawal calculation ---
       let totalWithdrawal = adjustedGap;
       let taxData = { federalTax: 0, stateTax: 0, totalTax: 0, effectiveRate: '0.0', qdivTax: 0, taxableSS: 0, deduction: 0 };
       let nqTaxDetail = {};
+      let rmdAmount = totalRMD;
+      let rmdExcess = 0;
 
       if (inputs.taxEnabled) {
         // Resolve per-age override or use defaults
@@ -877,39 +1210,60 @@ export const runSimulation = (basePlan, assumptions, inputs, rebalanceFreq, isMo
         // NQ assumptions
         const nqDividendYield = (inputs.nqDividendYield ?? 2.0) / 100;
         const nqQualifiedDividendPct = (inputs.nqQualifiedDividendPercent ?? 80) / 100;
-        const nqCapitalGainRate = (inputs.nqCapitalGainRate ?? 50) / 100;
+        // Annual realized capital gain rate as % of NQ balance (fund distributions, rebalancing, etc.)
+        const nqAnnualCapGainRate = (inputs.nqCapitalGainRate ?? 4) / 100;
 
-        // Estimate NQ balance for dividend calculation
-        const nqBalance = startTotal * nqPct;
-        const nqTotalDividends = nqBalance * nqDividendYield;
+        // Use tracked NQ balance for dividend and cap gain calculations
+        const nqBalanceForTax = nqAccountBalance > 0 ? nqAccountBalance : startTotal * nqPct;
+        const nqTotalDividends = nqBalanceForTax * nqDividendYield;
         const nqQualifiedDividends = nqTotalDividends * nqQualifiedDividendPct;
         const nqOrdinaryDividends = nqTotalDividends - nqQualifiedDividends;
+        // Annual realized capital gains from NQ balance (independent of withdrawals)
+        const nqAnnualCapGains = nqBalanceForTax * nqAnnualCapGainRate;
 
         const isSenior = simAge >= 65;
         // Switch to single filing after first spouse dies
-        const clientAliveForTax = simAge < (inputs.expectedDeathAge || 95);
-        const partnerAliveForTax = clientInfo?.isMarried && currentPartnerAge < (inputs.partnerExpectedDeathAge || 95);
+        const clientAliveForTax = clientAlive;
+        const partnerAliveForTax = partnerAlive;
         const bothAliveForTax = clientAliveForTax && partnerAliveForTax;
         const filingStatus = (inputs.filingStatus === 'married' && !bothAliveForTax) ? 'single' : (inputs.filingStatus || 'married');
         const stateRate = inputs.stateRate || 0;
 
         // Iterate to convergence (tax depends on withdrawal, withdrawal depends on tax)
         let withdrawal = adjustedGap;
-        for (let iter = 0; iter < 5; iter++) {
-          const nqWithdrawal = withdrawal * nqPct;
-          const nqTaxableGain = nqWithdrawal * nqCapitalGainRate;
+        for (let taxIter = 0; taxIter < 5; taxIter++) {
+          // Compute traditional withdrawal — enforce RMD floor
+          let tradWithdrawal = withdrawal * traditionalPct;
+          let rothWithdrawal = withdrawal * rothPct;
+          let nqWithdrawalAmt = withdrawal * nqPct;
+
+          if (totalRMD > tradWithdrawal) {
+            // RMD forces a higher traditional withdrawal
+            const rmdForce = totalRMD - tradWithdrawal;
+            tradWithdrawal = totalRMD;
+            // Reduce Roth and NQ proportionally to compensate
+            const nonTradTotal = rothWithdrawal + nqWithdrawalAmt;
+            if (nonTradTotal > rmdForce) {
+              const reductionRatio = (nonTradTotal - rmdForce) / nonTradTotal;
+              rothWithdrawal *= reductionRatio;
+              nqWithdrawalAmt *= reductionRatio;
+            } else {
+              rothWithdrawal = 0;
+              nqWithdrawalAmt = 0;
+            }
+          }
 
           taxData = calculateAnnualTax({
             ssIncome,
             pensionIncome: pensionIncome + (vaIncome || 0),
-            traditionalWithdrawal: withdrawal * traditionalPct,
-            rothWithdrawal: withdrawal * rothPct,
-            nqTaxableGain,
+            traditionalWithdrawal: tradWithdrawal,
+            rothWithdrawal: rothWithdrawal,
+            nqTaxableGain: nqAnnualCapGains,
             nqQualifiedDividends,
             nqOrdinaryDividends,
             otherIncome,
             employmentIncome
-          }, { filingStatus, stateRate }, isSenior);
+          }, { filingStatus, stateRate, stateCode: inputs.stateCode || '' }, isSenior);
 
           const newWithdrawal = adjustedGap + taxData.totalTax;
           if (Math.abs(newWithdrawal - withdrawal) < 1) break;
@@ -917,18 +1271,62 @@ export const runSimulation = (basePlan, assumptions, inputs, rebalanceFreq, isMo
         }
         totalWithdrawal = withdrawal;
 
-        // Store NQ detail for history
-        const finalNqWithdrawal = withdrawal * nqPct;
+        // Final withdrawal split with RMD enforcement
+        let finalTradWithdrawal = withdrawal * traditionalPct;
+        let finalRothWithdrawal = withdrawal * rothPct;
+        let finalNqWithdrawal = withdrawal * nqPct;
+
+        if (totalRMD > finalTradWithdrawal) {
+          const rmdForce = totalRMD - finalTradWithdrawal;
+          finalTradWithdrawal = totalRMD;
+          const nonTrad = finalRothWithdrawal + finalNqWithdrawal;
+          if (nonTrad > rmdForce) {
+            const ratio = (nonTrad - rmdForce) / nonTrad;
+            finalRothWithdrawal *= ratio;
+            finalNqWithdrawal *= ratio;
+          } else {
+            finalRothWithdrawal = 0;
+            finalNqWithdrawal = 0;
+          }
+          // If RMD exceeds total spending need + tax, excess goes to NQ
+          const totalNeeded = adjustedGap + taxData.totalTax;
+          if (totalRMD > totalNeeded && totalNeeded > 0) {
+            rmdExcess = totalRMD - totalNeeded;
+            // The full RMD is withdrawn from traditional but excess reinvested to NQ
+            totalWithdrawal = totalRMD; // We withdraw the full RMD
+          }
+        }
+
+        // Compute effective percentages used
+        const totalFinalWithdrawal = finalTradWithdrawal + finalRothWithdrawal + finalNqWithdrawal;
+        const effTradPct = totalFinalWithdrawal > 0 ? Math.round((finalTradWithdrawal / totalFinalWithdrawal) * 100) : 0;
+        const effRothPct = totalFinalWithdrawal > 0 ? Math.round((finalRothWithdrawal / totalFinalWithdrawal) * 100) : 0;
+        const effNqPct = totalFinalWithdrawal > 0 ? 100 - effTradPct - effRothPct : 0;
+
         nqTaxDetail = {
           nqWithdrawal: Math.round(finalNqWithdrawal),
-          nqCostBasis: Math.round(finalNqWithdrawal * (1 - nqCapitalGainRate)),
-          nqTaxableGain: Math.round(finalNqWithdrawal * nqCapitalGainRate),
+          nqTaxableGain: Math.round(nqAnnualCapGains),
           nqQualifiedDividends: Math.round(nqQualifiedDividends),
           nqOrdinaryDividends: Math.round(nqOrdinaryDividends),
-          traditionalPctUsed: Math.round(traditionalPct * 100),
-          rothPctUsed: Math.round(rothPct * 100),
-          nqPctUsed: Math.round(nqPct * 100)
+          nqBalanceForTax: Math.round(nqBalanceForTax),
+          traditionalPctUsed: effTradPct,
+          rothPctUsed: effRothPct,
+          nqPctUsed: effNqPct
         };
+
+        // Update account-type balances based on actual withdrawals
+        traditionalBalance = Math.max(0, traditionalBalance - finalTradWithdrawal);
+        rothBalance = Math.max(0, rothBalance - finalRothWithdrawal);
+        nqAccountBalance = Math.max(0, nqAccountBalance - finalNqWithdrawal + rmdExcess);
+      } else {
+        // Tax not enabled — still track balances proportionally
+        const tradPct = (inputs.traditionalPercent ?? 60) / 100;
+        const rothPctVal = (inputs.rothPercent ?? 25) / 100;
+        const nqPctVal = (inputs.nqPercent ?? 15) / 100;
+        traditionalBalance = Math.max(0, traditionalBalance - totalWithdrawal * tradPct);
+        rothBalance = Math.max(0, rothBalance - totalWithdrawal * rothPctVal);
+        nqAccountBalance = Math.max(0, nqAccountBalance - totalWithdrawal * nqPctVal);
+        rmdAmount = 0;
       }
 
       let withdrawalAmount = totalWithdrawal;
@@ -1069,12 +1467,19 @@ export const runSimulation = (basePlan, assumptions, inputs, rebalanceFreq, isMo
         effectiveRate: taxData.effectiveRate,
         // NQ tax detail
         ...nqTaxDetail,
+        // RMD data
+        rmdAmount: Math.round(rmdAmount),
+        rmdExcess: Math.round(rmdExcess),
+        traditionalBalanceDetail: Math.round(traditionalBalance),
+        rothBalanceDetail: Math.round(rothBalance),
+        nqBalanceDetail: Math.round(nqAccountBalance),
         // Income breakdown (for detailed views)
         ssIncomeDetail: Math.round(ssIncome),
         pensionIncomeDetail: Math.round(pensionIncome),
         otherIncomeDetail: Math.round(otherIncome),
         vaIncomeDetail: Math.round(vaIncome || 0),
-        employmentIncomeDetail: Math.round(employmentIncome || 0)
+        employmentIncomeDetail: Math.round(employmentIncome || 0),
+        taxableSS: Math.round(taxData.taxableSS || 0)
       });
     }
 
@@ -1487,13 +1892,14 @@ export const runOptimizedSimulation = (allocation, assumptions, inputs, clientIn
 
         const nqDividendYield = (inputs.nqDividendYield ?? 2.0) / 100;
         const nqQualifiedDividendPct = (inputs.nqQualifiedDividendPercent ?? 80) / 100;
-        const nqCapitalGainRate = (inputs.nqCapitalGainRate ?? 50) / 100;
+        const nqAnnualCapGainRate = (inputs.nqCapitalGainRate ?? 4) / 100;
 
         const startTotal = balances.b1 + balances.b2 + balances.b3 + balances.b4 + balances.b5;
         const nqBalance = startTotal * nqPct;
         const nqTotalDividends = nqBalance * nqDividendYield;
         const nqQualifiedDividends = nqTotalDividends * nqQualifiedDividendPct;
         const nqOrdinaryDividends = nqTotalDividends - nqQualifiedDividends;
+        const nqAnnualCapGains = nqBalance * nqAnnualCapGainRate;
 
         const isSenior = details.simAge >= 65;
         const bothAliveForTax = details.clientAlive && details.partnerAlive;
@@ -1502,20 +1908,17 @@ export const runOptimizedSimulation = (allocation, assumptions, inputs, clientIn
 
         let withdrawal = adjustedGap;
         for (let taxIter = 0; taxIter < 5; taxIter++) {
-          const nqWithdrawal = withdrawal * nqPct;
-          const nqTaxableGain = nqWithdrawal * nqCapitalGainRate;
-
           const taxData = calculateAnnualTax({
             ssIncome: details.ssIncome,
             pensionIncome: details.pensionIncome,
             traditionalWithdrawal: withdrawal * traditionalPct,
             rothWithdrawal: withdrawal * rothPct,
-            nqTaxableGain,
+            nqTaxableGain: nqAnnualCapGains,
             nqQualifiedDividends,
             nqOrdinaryDividends,
             otherIncome: details.otherIncome,
             employmentIncome: details.employmentIncome
-          }, { filingStatus, stateRate }, isSenior);
+          }, { filingStatus, stateRate, stateCode: inputs.stateCode || '' }, isSenior);
 
           const newWithdrawal = adjustedGap + taxData.totalTax;
           if (Math.abs(newWithdrawal - withdrawal) < 1) break;

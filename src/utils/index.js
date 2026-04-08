@@ -12,7 +12,11 @@ export {
   calculateTaxableSS,
   calculateFederalTax,
   calculateImpliedSpending,
-  estimatePIAFromIncome
+  estimatePIAFromIncome,
+  getInflationAdjustedBrackets,
+  getInflationAdjustedDeduction,
+  calculateRMD,
+  STATE_TAX_DATA
 } from './calculations';
 export {
   calculateSSAnalysis,

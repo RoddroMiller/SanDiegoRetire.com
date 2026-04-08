@@ -205,14 +205,16 @@ export default function BucketPortfolioBuilder() {
     // Tax Settings
     taxEnabled: false,
     filingStatus: 'married', // 'single' or 'married'
-    stateRate: 4.5, // State tax rate %
+    stateCode: '', // State abbreviation (e.g. 'FL', 'CA') — drives rate and SS taxability
+    stateRate: 4.5, // State tax rate % (legacy fallback when stateCode is empty)
     traditionalPercent: 60, // % of portfolio in traditional (pre-tax) accounts
     rothPercent: 25, // % of portfolio in Roth accounts
     nqPercent: 15, // % of portfolio in non-qualified (brokerage) accounts
     nqDividendYield: 2.0, // Annual dividend yield on NQ holdings %
     nqQualifiedDividendPercent: 80, // % of NQ dividends that are qualified
-    nqCapitalGainRate: 50, // % of NQ withdrawal that is capital gain (vs cost basis)
-    withdrawalOverrides: {} // Per-age overrides: { [age]: { traditionalPercent, rothPercent, nqPercent } }
+    nqCapitalGainRate: 4, // Annual % of NQ balance realized as capital gains (fund distributions, rebalancing)
+    withdrawalOverrides: {}, // Per-age overrides: { [age]: { traditionalPercent, rothPercent, nqPercent } }
+    accounts: [] // Array of { id, label, owner: 'client'|'partner', type: 'traditional'|'roth'|'nq', subtype: 'ira'|'401k'|'brokerage', balance }
   });
 
   // Return Assumptions
@@ -272,8 +274,10 @@ export default function BucketPortfolioBuilder() {
         nqPercent: s.inputs.nqPercent ?? 0,
         nqDividendYield: s.inputs.nqDividendYield ?? 2.0,
         nqQualifiedDividendPercent: s.inputs.nqQualifiedDividendPercent ?? 80,
-        nqCapitalGainRate: s.inputs.nqCapitalGainRate ?? 50,
+        nqCapitalGainRate: s.inputs.nqCapitalGainRate > 10 ? 4 : (s.inputs.nqCapitalGainRate ?? 4),
         withdrawalOverrides: s.inputs.withdrawalOverrides || {},
+        accounts: s.inputs.accounts || [],
+        stateCode: s.inputs.stateCode || '',
         // Migration defaults for life expectancy & survivor benefits
         expectedDeathAge: s.inputs.expectedDeathAge ?? 95,
         partnerExpectedDeathAge: s.inputs.partnerExpectedDeathAge ?? 95,
@@ -569,6 +573,8 @@ export default function BucketPortfolioBuilder() {
   useEffect(() => {
     if (finalAccumulationBalance > 0) {
       setInputs(prev => {
+        // Don't override totalPortfolio when accounts are defined — accounts are the source of truth
+        if (prev.accounts && prev.accounts.length > 0) return prev;
         if (prev.totalPortfolio !== finalAccumulationBalance) {
           return { ...prev, totalPortfolio: finalAccumulationBalance };
         }
@@ -615,8 +621,14 @@ export default function BucketPortfolioBuilder() {
 
   const handleInputChange = (e) => {
     const { name, value, type, checked } = e.target;
+    // When accounts are defined, they are the source of truth for portfolio and percentages
+    const accountDerivedFields = ['totalPortfolio', 'traditionalPercent', 'rothPercent', 'nqPercent'];
+    if (accountDerivedFields.includes(name)) {
+      // Block manual edits to these fields when accounts exist
+      if (inputs.accounts && inputs.accounts.length > 0) return;
+    }
     // Handle string fields that shouldn't be converted to numbers
-    const stringFields = ['filingStatus'];
+    const stringFields = ['filingStatus', 'stateCode'];
     let val;
     if (type === 'checkbox') {
       val = checked;
@@ -648,6 +660,70 @@ export default function BucketPortfolioBuilder() {
       return { ...prev, [field]: clamped, [otherFields[0]]: val1, [otherFields[1]]: val2 };
     });
   };
+
+  // Account CRUD handlers — grow balances to retirement, derive totalPortfolio and percentages
+  const recomputeFromAccounts = (accounts) => {
+    const yearsToRetirement = Math.max(0, (clientInfo.retirementAge || 65) - (clientInfo.currentAge || 65));
+    const growthRate = (clientInfo.expectedReturn || 0) / 100;
+
+    const totals = { traditional: 0, roth: 0, nq: 0 };
+    const currentTotals = { traditional: 0, roth: 0, nq: 0 };
+    accounts.forEach(a => {
+      const currentBal = a.balance || 0;
+      const projectedBal = yearsToRetirement > 0 ? currentBal * Math.pow(1 + growthRate, yearsToRetirement) : currentBal;
+      totals[a.type] = (totals[a.type] || 0) + projectedBal;
+      currentTotals[a.type] = (currentTotals[a.type] || 0) + currentBal;
+    });
+    const total = totals.traditional + totals.roth + totals.nq;
+    if (total === 0) return { totalPortfolio: 0, traditionalPercent: 0, rothPercent: 0, nqPercent: 0 };
+    const tradPct = Math.round((totals.traditional / total) * 100);
+    const rothPct = Math.round((totals.roth / total) * 100);
+    return { totalPortfolio: Math.round(total), traditionalPercent: tradPct, rothPercent: rothPct, nqPercent: 100 - tradPct - rothPct };
+  };
+
+  const handleAddAccount = () => {
+    setInputs(prev => {
+      const newAccounts = [...prev.accounts, {
+        id: crypto.randomUUID(),
+        label: '',
+        owner: 'client',
+        type: 'traditional',
+        subtype: 'ira',
+        balance: 0
+      }];
+      return { ...prev, accounts: newAccounts, ...recomputeFromAccounts(newAccounts) };
+    });
+  };
+
+  const handleUpdateAccount = (id, field, value) => {
+    setInputs(prev => {
+      const newAccounts = prev.accounts.map(a => {
+        if (a.id !== id) return a;
+        const updated = { ...a, [field]: value };
+        // When type changes, auto-set subtype
+        if (field === 'type') {
+          updated.subtype = value === 'nq' ? 'brokerage' : 'ira';
+        }
+        return updated;
+      });
+      return { ...prev, accounts: newAccounts, ...recomputeFromAccounts(newAccounts) };
+    });
+  };
+
+  const handleRemoveAccount = (id) => {
+    setInputs(prev => {
+      const newAccounts = prev.accounts.filter(a => a.id !== id);
+      return { ...prev, accounts: newAccounts, ...recomputeFromAccounts(newAccounts) };
+    });
+  };
+
+  // Recompute projected portfolio when retirement age, current age, or expected return changes
+  useEffect(() => {
+    setInputs(prev => {
+      if (!prev.accounts || prev.accounts.length === 0) return prev;
+      return { ...prev, ...recomputeFromAccounts(prev.accounts) };
+    });
+  }, [clientInfo.currentAge, clientInfo.retirementAge, clientInfo.expectedReturn]);
 
   // Withdrawal Override Handler (per-age overrides)
   const handleWithdrawalOverrideChange = (age, overrideData) => {
@@ -1059,6 +1135,9 @@ export default function BucketPortfolioBuilder() {
         onRemoveCashFlowAdjustment={removeCashFlowAdjustment}
         onAccountSplitChange={handleAccountSplitChange}
         onWithdrawalOverrideChange={handleWithdrawalOverrideChange}
+        onAddAccount={handleAddAccount}
+        onUpdateAccount={handleUpdateAccount}
+        onRemoveAccount={handleRemoveAccount}
         onSetActiveTab={(tab) => {
           setActiveTab(tab);
           setAdvisorView('planning');

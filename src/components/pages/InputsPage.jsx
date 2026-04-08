@@ -4,7 +4,7 @@ import {
   TrendingUp, Settings, Table as TableIcon, Heart
 } from 'lucide-react';
 
-import { estimatePIAFromIncome } from '../../utils';
+import { estimatePIAFromIncome, STATE_TAX_DATA } from '../../utils';
 import { Card, FormattedNumberInput } from '../ui';
 
 /**
@@ -41,6 +41,10 @@ export const InputsPage = ({
   // 3-Way Account Split
   onAccountSplitChange,
   onWithdrawalOverrideChange,
+  // Account CRUD
+  onAddAccount,
+  onUpdateAccount,
+  onRemoveAccount,
   // Navigation
   onSetActiveTab,
   // Projection data (for withdrawal strategy button)
@@ -72,11 +76,27 @@ export const InputsPage = ({
             <label className="text-xs font-bold text-slate-500 uppercase flex items-center gap-1">
               Starting Portfolio <Info className="w-3 h-3 text-slate-400" />
             </label>
-            <div className="text-xs text-slate-400 mb-1">(From Accumulation Phase)</div>
-            <div className="absolute left-0 top-0 mt-[-40px] hidden group-hover:block w-64 bg-slate-800 text-white text-xs p-2 rounded shadow-lg z-10">
-              Your projected portfolio value at retirement from the accumulation phase.
-            </div>
-            <FormattedNumberInput name="totalPortfolio" value={inputs.totalPortfolio} onChange={onInputChange} className="w-full px-3 py-2 border rounded-md text-sm font-bold text-emerald-700 bg-emerald-50" />
+            {inputs.accounts && inputs.accounts.length > 0 ? (
+              <>
+                <div className="text-xs text-slate-400 mb-1">(Projected at retirement from accounts)</div>
+                <div className="w-full px-3 py-2 border rounded-md text-sm font-bold text-emerald-700 bg-emerald-50 cursor-not-allowed">
+                  ${inputs.totalPortfolio.toLocaleString()}
+                </div>
+                {clientInfo.retirementAge > clientInfo.currentAge && (
+                  <div className="text-[10px] text-slate-400 mt-0.5">
+                    Today: ${inputs.accounts.reduce((s, a) => s + (a.balance || 0), 0).toLocaleString()} &rarr; grown {clientInfo.retirementAge - clientInfo.currentAge}yr at {clientInfo.expectedReturn}%
+                  </div>
+                )}
+              </>
+            ) : (
+              <>
+                <div className="text-xs text-slate-400 mb-1">(From Accumulation Phase)</div>
+                <div className="absolute left-0 top-0 mt-[-40px] hidden group-hover:block w-64 bg-slate-800 text-white text-xs p-2 rounded shadow-lg z-10">
+                  Your projected portfolio value at retirement from the accumulation phase.
+                </div>
+                <FormattedNumberInput name="totalPortfolio" value={inputs.totalPortfolio} onChange={onInputChange} className="w-full px-3 py-2 border rounded-md text-sm font-bold text-emerald-700 bg-emerald-50" />
+              </>
+            )}
           </div>
 
           <div className="relative group">
@@ -168,74 +188,186 @@ export const InputsPage = ({
                       </div>
                       <div className="relative group">
                         <label className="text-xs text-slate-500 uppercase flex items-center gap-1">
-                          State Tax Rate % <Info className="w-3 h-3 text-slate-400" />
+                          State <Info className="w-3 h-3 text-slate-400" />
                         </label>
-                        <div className="absolute left-0 bottom-full mb-1 hidden group-hover:block w-48 bg-slate-800 text-white text-xs p-2 rounded shadow-lg z-10">
-                          Your state income tax rate (0 for states with no income tax).
+                        <div className="absolute left-0 bottom-full mb-1 hidden group-hover:block w-56 bg-slate-800 text-white text-xs p-2 rounded shadow-lg z-10">
+                          Retirement state. Sets tax rate and Social Security taxability automatically.
                         </div>
-                        <input
-                          type="number"
-                          step="0.1"
-                          name="stateRate"
-                          value={inputs.stateRate}
-                          onChange={onInputChange}
-                          min="0"
-                          max="15"
-                          className="w-full px-3 py-2 text-sm border rounded-md"
-                        />
+                        <select
+                          name="stateCode"
+                          value={inputs.stateCode || ''}
+                          onChange={(e) => {
+                            const code = e.target.value;
+                            const data = STATE_TAX_DATA[code];
+                            onInputChange({ target: { name: 'stateCode', value: code, type: 'text' } });
+                            if (data) {
+                              onInputChange({ target: { name: 'stateRate', value: data.rate, type: 'number' } });
+                            }
+                          }}
+                          className="w-full px-3 py-2 text-sm border rounded-md bg-white"
+                        >
+                          <option value="">Select state...</option>
+                          {Object.entries(STATE_TAX_DATA)
+                            .sort((a, b) => a[1].name.localeCompare(b[1].name))
+                            .map(([code, data]) => (
+                              <option key={code} value={code}>
+                                {data.name} ({data.rate === 0 ? 'No tax' : data.brackets ? `up to ${data.rate}%` : `${data.rate}% flat`})
+                              </option>
+                            ))}
+                        </select>
+                        {inputs.stateCode && STATE_TAX_DATA[inputs.stateCode] && (
+                          <div className="text-[10px] mt-0.5 text-slate-500">
+                            {STATE_TAX_DATA[inputs.stateCode].brackets
+                              ? `Marginal brackets (top ${STATE_TAX_DATA[inputs.stateCode].rate}%)`
+                              : `${STATE_TAX_DATA[inputs.stateCode].rate}% flat rate`}
+                            {STATE_TAX_DATA[inputs.stateCode].ssTaxable
+                              ? ' • Taxes Social Security'
+                              : ' • SS exempt'}
+                          </div>
+                        )}
                       </div>
                     </div>
 
-                    {/* Account Type Mix */}
+                    {/* Portfolio Accounts */}
                     <div>
-                      <label className="text-xs text-slate-400 uppercase font-semibold">Account Type Mix</label>
-                      <div className="grid grid-cols-3 gap-3 mt-1">
-                        <div className="relative group">
-                          <label className="text-xs text-slate-500 uppercase flex items-center gap-1">
-                            Traditional % <Info className="w-3 h-3 text-slate-400" />
-                          </label>
-                          <div className="absolute left-0 bottom-full mb-1 hidden group-hover:block w-52 bg-slate-800 text-white text-xs p-2 rounded shadow-lg z-10">
-                            Traditional (pre-tax) accounts: 401k, Traditional IRA. Withdrawals taxed as ordinary income.
-                          </div>
-                          <input
-                            type="number" step="5" min="0" max="100"
-                            value={inputs.traditionalPercent}
-                            onChange={(e) => onAccountSplitChange('traditionalPercent', parseFloat(e.target.value) || 0)}
-                            className="w-full px-3 py-2 text-sm border rounded-md"
-                          />
-                        </div>
-                        <div className="relative group">
-                          <label className="text-xs text-slate-500 uppercase flex items-center gap-1">
-                            Roth % <Info className="w-3 h-3 text-slate-400" />
-                          </label>
-                          <div className="absolute left-0 bottom-full mb-1 hidden group-hover:block w-52 bg-slate-800 text-white text-xs p-2 rounded shadow-lg z-10">
-                            Roth accounts: Roth IRA, Roth 401k. Withdrawals are tax-free.
-                          </div>
-                          <input
-                            type="number" step="5" min="0" max="100"
-                            value={inputs.rothPercent}
-                            onChange={(e) => onAccountSplitChange('rothPercent', parseFloat(e.target.value) || 0)}
-                            className="w-full px-3 py-2 text-sm border rounded-md"
-                          />
-                        </div>
-                        <div className="relative group">
-                          <label className="text-xs text-slate-500 uppercase flex items-center gap-1">
-                            NQ % <Info className="w-3 h-3 text-slate-400" />
-                          </label>
-                          <div className="absolute left-0 bottom-full mb-1 hidden group-hover:block w-52 bg-slate-800 text-white text-xs p-2 rounded shadow-lg z-10">
-                            Non-qualified (brokerage). Only capital gains taxed at LTCG rates; dividends taxed annually.
-                          </div>
-                          <input
-                            type="number" step="5" min="0" max="100"
-                            value={inputs.nqPercent}
-                            onChange={(e) => onAccountSplitChange('nqPercent', parseFloat(e.target.value) || 0)}
-                            className="w-full px-3 py-2 text-sm border rounded-md"
-                          />
-                        </div>
+                      <div className="flex items-center justify-between mb-1">
+                        <label className="text-xs text-slate-400 uppercase font-semibold">Portfolio Accounts</label>
+                        <button
+                          type="button"
+                          onClick={onAddAccount}
+                          className="flex items-center gap-1 text-xs text-emerald-600 hover:text-emerald-700 font-medium"
+                        >
+                          <Plus className="w-3 h-3" /> Add Account
+                        </button>
                       </div>
-                      <div className={`text-xs mt-1 font-medium ${inputs.traditionalPercent + inputs.rothPercent + inputs.nqPercent === 100 ? 'text-emerald-600' : 'text-red-500'}`}>
-                        Sum: {inputs.traditionalPercent + inputs.rothPercent + inputs.nqPercent}%{inputs.traditionalPercent + inputs.rothPercent + inputs.nqPercent !== 100 ? ' (must equal 100%)' : ''}
-                      </div>
+
+                      {inputs.accounts && inputs.accounts.length > 0 ? (
+                        <div className="space-y-2">
+                          {inputs.accounts.map((acct) => (
+                            <div key={acct.id} className="grid grid-cols-12 gap-2 items-end p-2 bg-slate-50 rounded border border-slate-200">
+                              <div className="col-span-3">
+                                <label className="text-[10px] text-slate-500 uppercase">Label</label>
+                                <input
+                                  type="text"
+                                  value={acct.label}
+                                  onChange={(e) => onUpdateAccount(acct.id, 'label', e.target.value)}
+                                  placeholder="e.g. Client 401k"
+                                  className="w-full px-2 py-1.5 text-xs border rounded"
+                                />
+                              </div>
+                              <div className="col-span-2">
+                                <label className="text-[10px] text-slate-500 uppercase">Owner</label>
+                                <select
+                                  value={acct.owner}
+                                  onChange={(e) => onUpdateAccount(acct.id, 'owner', e.target.value)}
+                                  className="w-full px-2 py-1.5 text-xs border rounded bg-white"
+                                >
+                                  <option value="client">{clientInfo.name || 'Client'}</option>
+                                  {clientInfo.isMarried && <option value="partner">{clientInfo.partnerName || 'Partner'}</option>}
+                                </select>
+                              </div>
+                              <div className="col-span-3">
+                                <label className="text-[10px] text-slate-500 uppercase">Type</label>
+                                <select
+                                  value={`${acct.type}-${acct.subtype}`}
+                                  onChange={(e) => {
+                                    const [type, subtype] = e.target.value.split('-');
+                                    onUpdateAccount(acct.id, 'type', type);
+                                    onUpdateAccount(acct.id, 'subtype', subtype);
+                                  }}
+                                  className="w-full px-2 py-1.5 text-xs border rounded bg-white"
+                                >
+                                  <option value="traditional-ira">Traditional IRA</option>
+                                  <option value="traditional-401k">Traditional 401k</option>
+                                  <option value="roth-ira">Roth IRA</option>
+                                  <option value="roth-401k">Roth 401k</option>
+                                  <option value="nq-brokerage">NQ Brokerage</option>
+                                </select>
+                              </div>
+                              <div className="col-span-3">
+                                <label className="text-[10px] text-slate-500 uppercase">Balance</label>
+                                <FormattedNumberInput
+                                  value={acct.balance}
+                                  onChange={(e) => onUpdateAccount(acct.id, 'balance', parseFloat(e.target.value) || 0)}
+                                  className="w-full px-2 py-1.5 text-xs border rounded"
+                                />
+                              </div>
+                              <div className="col-span-1 flex justify-center">
+                                <button
+                                  type="button"
+                                  onClick={() => onRemoveAccount(acct.id)}
+                                  className="text-red-400 hover:text-red-600 p-1"
+                                >
+                                  <Trash2 className="w-3.5 h-3.5" />
+                                </button>
+                              </div>
+                            </div>
+                          ))}
+                          {/* Summary row */}
+                          <div className="flex items-center justify-between px-2 py-1.5 bg-emerald-50 rounded border border-emerald-200 text-xs font-medium">
+                            <span className="text-emerald-800">
+                              Today: ${inputs.accounts.reduce((s, a) => s + (a.balance || 0), 0).toLocaleString()}
+                              {clientInfo.retirementAge > clientInfo.currentAge && (
+                                <span className="text-emerald-600 ml-1"> &rarr; ${inputs.totalPortfolio.toLocaleString()} at retirement</span>
+                              )}
+                            </span>
+                            <span className="text-slate-600">
+                              Trad {inputs.traditionalPercent}% | Roth {inputs.rothPercent}% | NQ {inputs.nqPercent}%
+                            </span>
+                          </div>
+                        </div>
+                      ) : (
+                        /* Legacy: manual percentage inputs when no accounts defined */
+                        <div>
+                          <div className="grid grid-cols-3 gap-3 mt-1">
+                            <div className="relative group">
+                              <label className="text-xs text-slate-500 uppercase flex items-center gap-1">
+                                Traditional % <Info className="w-3 h-3 text-slate-400" />
+                              </label>
+                              <div className="absolute left-0 bottom-full mb-1 hidden group-hover:block w-52 bg-slate-800 text-white text-xs p-2 rounded shadow-lg z-10">
+                                Traditional (pre-tax) accounts: 401k, Traditional IRA. Withdrawals taxed as ordinary income.
+                              </div>
+                              <input
+                                type="number" step="5" min="0" max="100"
+                                value={inputs.traditionalPercent}
+                                onChange={(e) => onAccountSplitChange('traditionalPercent', parseFloat(e.target.value) || 0)}
+                                className="w-full px-3 py-2 text-sm border rounded-md"
+                              />
+                            </div>
+                            <div className="relative group">
+                              <label className="text-xs text-slate-500 uppercase flex items-center gap-1">
+                                Roth % <Info className="w-3 h-3 text-slate-400" />
+                              </label>
+                              <div className="absolute left-0 bottom-full mb-1 hidden group-hover:block w-52 bg-slate-800 text-white text-xs p-2 rounded shadow-lg z-10">
+                                Roth accounts: Roth IRA, Roth 401k. Withdrawals are tax-free.
+                              </div>
+                              <input
+                                type="number" step="5" min="0" max="100"
+                                value={inputs.rothPercent}
+                                onChange={(e) => onAccountSplitChange('rothPercent', parseFloat(e.target.value) || 0)}
+                                className="w-full px-3 py-2 text-sm border rounded-md"
+                              />
+                            </div>
+                            <div className="relative group">
+                              <label className="text-xs text-slate-500 uppercase flex items-center gap-1">
+                                NQ % <Info className="w-3 h-3 text-slate-400" />
+                              </label>
+                              <div className="absolute left-0 bottom-full mb-1 hidden group-hover:block w-52 bg-slate-800 text-white text-xs p-2 rounded shadow-lg z-10">
+                                Non-qualified (brokerage). Only capital gains taxed at LTCG rates; dividends taxed annually.
+                              </div>
+                              <input
+                                type="number" step="5" min="0" max="100"
+                                value={inputs.nqPercent}
+                                onChange={(e) => onAccountSplitChange('nqPercent', parseFloat(e.target.value) || 0)}
+                                className="w-full px-3 py-2 text-sm border rounded-md"
+                              />
+                            </div>
+                          </div>
+                          <div className={`text-xs mt-1 font-medium ${inputs.traditionalPercent + inputs.rothPercent + inputs.nqPercent === 100 ? 'text-emerald-600' : 'text-red-500'}`}>
+                            Sum: {inputs.traditionalPercent + inputs.rothPercent + inputs.nqPercent}%{inputs.traditionalPercent + inputs.rothPercent + inputs.nqPercent !== 100 ? ' (must equal 100%)' : ''}
+                          </div>
+                        </div>
+                      )}
                     </div>
 
                     {/* NQ Assumptions (only when NQ > 0) */}
@@ -275,13 +407,13 @@ export const InputsPage = ({
                           </div>
                           <div className="relative group">
                             <label className="text-xs text-slate-500 uppercase flex items-center gap-1">
-                              Gain Rate % <Info className="w-3 h-3 text-slate-400" />
+                              Ann. CG % <Info className="w-3 h-3 text-slate-400" />
                             </label>
                             <div className="absolute left-0 bottom-full mb-1 hidden group-hover:block w-52 bg-slate-800 text-white text-xs p-2 rounded shadow-lg z-10">
-                              Estimated % of NQ withdrawal that is capital gain (vs. cost basis return). Higher = more taxable.
+                              Annual % of NQ balance realized as capital gains (fund distributions, rebalancing, turnover). Typical: 2-6%.
                             </div>
                             <input
-                              type="number" step="5" min="0" max="100"
+                              type="number" step="0.5" min="0" max="20"
                               name="nqCapitalGainRate"
                               value={inputs.nqCapitalGainRate}
                               onChange={onInputChange}
