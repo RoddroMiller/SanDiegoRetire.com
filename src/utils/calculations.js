@@ -75,6 +75,24 @@ export const applySSEarningsTest = (annualBenefit, earnedIncome, currentAge, inf
 };
 
 /**
+ * Calculate deemed-filing SS benefit with spousal top-up (post-2015 Bipartisan Budget Act).
+ * When someone files for SS, they are deemed to have filed for both own and spousal benefits.
+ * They receive whichever is larger. Spousal benefit = 50% of the higher earner's PIA,
+ * but is only available once the higher earner has also filed.
+ *
+ * @param {number} ownMonthlyBenefit - Claimant's own SS benefit (already adjusted for claiming age)
+ * @param {number} spousePIA - Spouse's PIA (monthly, at FRA — NOT adjusted for their claiming age)
+ * @param {boolean} spouseHasFiled - Whether the spouse has started receiving SS benefits
+ * @returns {number} Monthly benefit after deemed filing (own + spousal top-up if applicable)
+ */
+export const applyDeemedFiling = (ownMonthlyBenefit, spousePIA, spouseHasFiled) => {
+  if (!spouseHasFiled || !spousePIA) return ownMonthlyBenefit;
+  const spousalBenefit = spousePIA * 0.5;
+  // Spousal top-up: if 50% of spouse's PIA exceeds own benefit, get the difference
+  return Math.max(ownMonthlyBenefit, spousalBenefit);
+};
+
+/**
  * Estimate PIA (Primary Insurance Amount) from current annual income
  * Uses 2025 SSA bend-point formula. Assumes ~35 years of similar earnings.
  * @param {number} annualIncome - Current annual income
@@ -805,8 +823,20 @@ export const calculateBasePlan = (inputs, assumptions, clientInfo, vaEnabled = f
   // Portfolio available for bucket allocation (excluding VA allocation)
   const bucketPortfolio = totalPortfolio - vaAllocationAmount;
 
-  // If already retired (currentAge > retirementAge), start simulation from currentAge
-  const simulationStartAge = Math.max(clientInfo.currentAge, clientInfo.retirementAge);
+  // Start simulation from the earliest relevant age:
+  // - Client's current age or retirement age (whichever is later)
+  // - OR when a retired partner turns 62 (to capture their early SS income)
+  let simulationStartAge = Math.max(clientInfo.currentAge, clientInfo.retirementAge);
+  if (clientInfo.isMarried) {
+    const partnerRetAge = clientInfo.partnerRetirementAge || clientInfo.retirementAge;
+    const partnerIsAlreadyRetired = clientInfo.partnerIsRetired || partnerRetAge <= clientInfo.partnerAge;
+    if (partnerIsAlreadyRetired) {
+      // Partner is retired — start when the earliest person can claim SS (age 62)
+      const partnerTurns62InClientAge = 62 + (clientInfo.currentAge - clientInfo.partnerAge);
+      const earliestSSAge = Math.max(clientInfo.currentAge, Math.min(simulationStartAge, partnerTurns62InClientAge));
+      simulationStartAge = Math.min(simulationStartAge, earliestSSAge);
+    }
+  }
 
   // For clients over FRA who entered current SS benefit, use the value directly (no adjustment)
   // For clients under FRA, apply the standard adjustment based on claiming age
@@ -843,42 +873,51 @@ export const calculateBasePlan = (inputs, assumptions, clientInfo, vaEnabled = f
     let vaIncome = 0;
 
     // Employment income — compute BEFORE SS so earnings test can be applied
-    let employmentIncome = 0;
+    let clientEmploymentIncome = 0;
+    const clientAnnualIncome_ = clientInfo.annualIncome || 0;
+    if (clientAlive && clientAnnualIncome_ > 0 && simAge < clientInfo.retirementAge) {
+      clientEmploymentIncome = clientAnnualIncome_ * (inflationRate > 0 ? incomeInflationFactor : 1);
+    }
+    let partnerEmploymentIncome = 0;
     const partnerAnnualIncome = clientInfo.partnerAnnualIncome || 0;
     const partnerRetAge = clientInfo.partnerRetirementAge || clientInfo.retirementAge;
     if (clientInfo.isMarried && partnerAlive && partnerAnnualIncome > 0 && currentPartnerAge < partnerRetAge) {
-      let partnerEmployment = partnerAnnualIncome;
-      if (inflationRate > 0) partnerEmployment *= incomeInflationFactor;
-      employmentIncome += partnerEmployment;
+      partnerEmploymentIncome = partnerAnnualIncome * (inflationRate > 0 ? incomeInflationFactor : 1);
     }
+    const employmentIncome = clientEmploymentIncome + partnerEmploymentIncome;
 
-    // Social Security income with Earnings Test
-    // Full (unreduced) annual benefits for survivor comparison
-    const clientSSFull = clientSS * 12 * incomeInflationFactor;
-    const partnerSSFull = clientInfo.isMarried ? partnerSS * 12 * incomeInflationFactor : 0;
-    // Apply earnings test: client (retired, no earned income) and partner (may still be working)
-    const clientSSAfterET = applySSEarningsTest(clientSSFull, 0, simAge, incomeInflationFactor);
-    const partnerSSAfterET = applySSEarningsTest(partnerSSFull, employmentIncome, currentPartnerAge, incomeInflationFactor);
+    // Social Security income with Deemed Filing and Earnings Test
+    const clientHasFiled = clientAlive && simAge >= ssStartAge;
+    const partnerHasFiled = clientInfo.isMarried && partnerAlive && currentPartnerAge >= partnerSSStartAge;
 
-    if (clientAlive && (clientInfo.currentAge >= 67 || simAge >= ssStartAge)) {
+    // Deemed filing: each person gets max(own benefit, 50% of spouse's PIA) once spouse has filed
+    const clientMonthly = clientInfo.isMarried
+      ? applyDeemedFiling(clientSS, partnerSSPIA, partnerHasFiled)
+      : clientSS;
+    const partnerMonthly = clientInfo.isMarried
+      ? applyDeemedFiling(partnerSS, ssPIA, clientHasFiled)
+      : 0;
+
+    const clientSSFull = clientMonthly * 12 * incomeInflationFactor;
+    const partnerSSFull = partnerMonthly * 12 * incomeInflationFactor;
+    const clientSSAfterET = applySSEarningsTest(clientSSFull, clientEmploymentIncome, simAge, incomeInflationFactor);
+    const partnerSSAfterET = applySSEarningsTest(partnerSSFull, partnerEmploymentIncome, currentPartnerAge, incomeInflationFactor);
+
+    if (clientHasFiled) {
       ssIncome += clientSSAfterET;
     }
+    if (partnerHasFiled) {
+      ssIncome += partnerSSAfterET;
+    }
+    // Survivor SS benefit: surviving spouse gets the higher of the two benefits
     if (clientInfo.isMarried) {
-      if (partnerAlive && (clientInfo.partnerAge >= 67 || currentPartnerAge >= partnerSSStartAge)) {
-        ssIncome += partnerSSAfterET;
+      if (!clientAlive && partnerHasFiled && clientSSFull > partnerSSFull) {
+        const survivorBenefit = applySSEarningsTest(clientSSFull, employmentIncome, currentPartnerAge, incomeInflationFactor);
+        ssIncome += (survivorBenefit - partnerSSAfterET);
       }
-      // Survivor SS benefit: surviving spouse gets the higher of the two FULL benefits (not both)
-      if (!clientAlive && partnerAlive && (clientInfo.partnerAge >= 67 || currentPartnerAge >= partnerSSStartAge)) {
-        if (clientSSFull > partnerSSFull) {
-          const survivorBenefit = applySSEarningsTest(clientSSFull, employmentIncome, currentPartnerAge, incomeInflationFactor);
-          ssIncome += (survivorBenefit - partnerSSAfterET);
-        }
-      }
-      if (clientAlive && !partnerAlive && (clientInfo.currentAge >= 67 || simAge >= ssStartAge)) {
-        if (partnerSSFull > clientSSFull) {
-          const survivorBenefit = applySSEarningsTest(partnerSSFull, 0, simAge, incomeInflationFactor);
-          ssIncome += (survivorBenefit - clientSSAfterET);
-        }
+      if (clientAlive && !partnerAlive && clientHasFiled && partnerSSFull > clientSSFull) {
+        const survivorBenefit = applySSEarningsTest(partnerSSFull, 0, simAge, incomeInflationFactor);
+        ssIncome += (survivorBenefit - clientSSAfterET);
       }
     }
 
@@ -1057,7 +1096,7 @@ export const calculateBasePlan = (inputs, assumptions, clientInfo, vaEnabled = f
 export const runSimulation = (basePlan, assumptions, inputs, rebalanceFreq, isMonteCarlo = false, vaInputs = null, rebalanceTargets = null) => {
   const { b1Val, b2Val, b3Val, b4Val, b5Val, getAnnualGap, getAnnualDetails, simulationStartAge, clientInfo } = basePlan;
 
-  // Run until the later-dying spouse's expected death age, capped at 30 years
+  // Run until the later-dying spouse's expected death age, capped at 40 years
   const startAge = simulationStartAge || 65;
   const clientDeathAge = inputs.expectedDeathAge || 95;
   const yearsToClientDeath = clientDeathAge - startAge;
@@ -1069,7 +1108,7 @@ export const runSimulation = (basePlan, assumptions, inputs, rebalanceFreq, isMo
     const partnerDeathInClientAge = partnerDeathAge + ageDiff;
     yearsToLastDeath = Math.max(yearsToClientDeath, partnerDeathInClientAge - startAge);
   }
-  const years = Math.min(30, Math.max(1, yearsToLastDeath));
+  const years = Math.min(40, Math.max(1, yearsToLastDeath));
   let results = [];
   let failureCount = 0;
   const iterations = isMonteCarlo ? 1000 : 1;
@@ -1556,10 +1595,9 @@ export const runSimulation = (basePlan, assumptions, inputs, rebalanceFreq, isMo
       });
     }
 
-    // Calculate median legacy (final year balance from successful iterations)
+    // Calculate median legacy (final year balance — includes all iterations for consistency with chart)
     const finalBalances = results
       .map(r => r[years - 1]?.total || 0)
-      .filter(val => val > 0)
       .sort((a, b) => a - b);
     const medianLegacy = finalBalances.length > 0
       ? finalBalances[Math.floor(finalBalances.length / 2)]
@@ -1685,9 +1723,19 @@ export const runOptimizedSimulation = (allocation, assumptions, inputs, clientIn
     expectedDeathAge, partnerExpectedDeathAge, spendingReductionAtFirstDeath,
     inflationRate, personalInflationRate, additionalIncomes, cashFlowAdjustments } = inputs;
 
-  const simulationStartAge = Math.max(clientInfo.currentAge, clientInfo.retirementAge);
+  // Start simulation at the earliest relevant age (same logic as calculateBasePlan)
+  let simulationStartAge = Math.max(clientInfo.currentAge, clientInfo.retirementAge);
+  if (clientInfo.isMarried) {
+    const partnerRetAge = clientInfo.partnerRetirementAge || clientInfo.retirementAge;
+    const partnerIsAlreadyRetired = clientInfo.partnerIsRetired || partnerRetAge <= clientInfo.partnerAge;
+    if (partnerIsAlreadyRetired) {
+      const partnerTurns62InClientAge = 62 + (clientInfo.currentAge - clientInfo.partnerAge);
+      const earliestSSAge = Math.max(clientInfo.currentAge, Math.min(simulationStartAge, partnerTurns62InClientAge));
+      simulationStartAge = Math.min(simulationStartAge, earliestSSAge);
+    }
+  }
 
-  // Run until the later-dying spouse's expected death age, capped at 30 years
+  // Run until the later-dying spouse's expected death age, capped at 40 years
   const clientDeathAge = expectedDeathAge || 95;
   const yearsToClientDeath = clientDeathAge - simulationStartAge;
   let yearsToLastDeath = yearsToClientDeath;
@@ -1697,7 +1745,7 @@ export const runOptimizedSimulation = (allocation, assumptions, inputs, clientIn
     const partnerDeathInClientAge = partnerDeathAge_ + ageDiff;
     yearsToLastDeath = Math.max(yearsToClientDeath, partnerDeathInClientAge - simulationStartAge);
   }
-  const years = Math.min(30, Math.max(1, yearsToLastDeath));
+  const years = Math.min(40, Math.max(1, yearsToLastDeath));
   const iterations = 1000;
 
   // Calculate VA allocation if enabled
@@ -1749,33 +1797,47 @@ export const runOptimizedSimulation = (allocation, assumptions, inputs, clientIn
     let nonTaxableAdditionalIncome = 0;
 
     // Employment income — compute BEFORE SS so earnings test can be applied
-    let employmentIncome = 0;
+    let clientEmploymentIncome = 0;
+    const clientAnnualIncome_ = clientInfo.annualIncome || 0;
+    if (clientAlive && clientAnnualIncome_ > 0 && simAge < clientInfo.retirementAge) {
+      clientEmploymentIncome = clientAnnualIncome_ * (inflationRate > 0 ? incomeInflationFactor : 1);
+    }
+    let partnerEmploymentIncome = 0;
     const partnerAnnualIncome = clientInfo.partnerAnnualIncome || 0;
     const partnerRetAge = clientInfo.partnerRetirementAge || clientInfo.retirementAge;
     if (clientInfo.isMarried && partnerAlive && partnerAnnualIncome > 0 && currentPartnerAge < partnerRetAge) {
-      let partnerEmployment = partnerAnnualIncome;
-      if (inflationRate > 0) partnerEmployment *= incomeInflationFactor;
-      employmentIncome += partnerEmployment;
+      partnerEmploymentIncome = partnerAnnualIncome * (inflationRate > 0 ? incomeInflationFactor : 1);
     }
+    const employmentIncome = clientEmploymentIncome + partnerEmploymentIncome;
 
-    // SS with survivor benefits + Earnings Test
-    const clientSSFull = clientSS * 12 * incomeInflationFactor;
-    const partnerSSFull = partnerSS * 12 * incomeInflationFactor;
-    const clientSSAfterET = applySSEarningsTest(clientSSFull, 0, simAge, incomeInflationFactor);
-    const partnerSSAfterET = applySSEarningsTest(partnerSSFull, employmentIncome, currentPartnerAge, incomeInflationFactor);
+    // Social Security with Deemed Filing and Earnings Test
+    const clientHasFiled = clientAlive && simAge >= ssStartAge;
+    const partnerHasFiled = clientInfo.isMarried && partnerAlive && currentPartnerAge >= partnerSSStartAge;
 
-    if (clientAlive && (clientInfo.currentAge >= 67 || simAge >= ssStartAge)) {
+    const clientMonthly = clientInfo.isMarried
+      ? applyDeemedFiling(clientSS, partnerSSPIA, partnerHasFiled)
+      : clientSS;
+    const partnerMonthly = clientInfo.isMarried
+      ? applyDeemedFiling(partnerSS, ssPIA, clientHasFiled)
+      : 0;
+
+    const clientSSFull = clientMonthly * 12 * incomeInflationFactor;
+    const partnerSSFull = partnerMonthly * 12 * incomeInflationFactor;
+    const clientSSAfterET = applySSEarningsTest(clientSSFull, clientEmploymentIncome, simAge, incomeInflationFactor);
+    const partnerSSAfterET = applySSEarningsTest(partnerSSFull, partnerEmploymentIncome, currentPartnerAge, incomeInflationFactor);
+
+    if (clientHasFiled) {
       ssIncome += clientSSAfterET;
     }
-    if (partnerAlive && (clientInfo.partnerAge >= 67 || currentPartnerAge >= partnerSSStartAge)) {
+    if (partnerHasFiled) {
       ssIncome += partnerSSAfterET;
     }
     if (clientInfo.isMarried) {
-      if (!clientAlive && partnerAlive && (clientInfo.partnerAge >= 67 || currentPartnerAge >= partnerSSStartAge) && clientSSFull > partnerSSFull) {
+      if (!clientAlive && partnerHasFiled && clientSSFull > partnerSSFull) {
         const survivorBenefit = applySSEarningsTest(clientSSFull, employmentIncome, currentPartnerAge, incomeInflationFactor);
         ssIncome += (survivorBenefit - partnerSSAfterET);
       }
-      if (clientAlive && !partnerAlive && (clientInfo.currentAge >= 67 || simAge >= ssStartAge) && partnerSSFull > clientSSFull) {
+      if (clientAlive && !partnerAlive && clientHasFiled && partnerSSFull > clientSSFull) {
         const survivorBenefit = applySSEarningsTest(partnerSSFull, 0, simAge, incomeInflationFactor);
         ssIncome += (survivorBenefit - clientSSAfterET);
       }
@@ -2018,12 +2080,10 @@ export const runOptimizedSimulation = (allocation, assumptions, inputs, clientIn
 
     const bucketFinal = balances.b1 + balances.b2 + balances.b3 + balances.b4 + balances.b5;
     const finalTotal = bucketFinal + (vaInputs ? vaAccountValue : 0);
-    if (finalTotal > 0) {
-      finalBalances.push(finalTotal);
-    }
+    finalBalances.push(Math.max(0, finalTotal));
   }
 
-  // Calculate median legacy from successful iterations
+  // Calculate median legacy (includes all iterations for consistency with chart)
   finalBalances.sort((a, b) => a - b);
   const medianLegacy = finalBalances.length > 0
     ? finalBalances[Math.floor(finalBalances.length / 2)]

@@ -1,7 +1,7 @@
 import React, { useState, useMemo, useEffect, useCallback, useRef } from 'react';
 
 // --- Local Imports ---
-import { formatPhoneNumber, calculateAccumulation, calculateBasePlan, runSimulation, calculateSSAnalysis, calculateSSPartnerAnalysis, getAdjustedSS, calculateAlternativeAllocations, runOptimizedSimulation } from './utils';
+import { formatPhoneNumber, calculateAccumulation, calculateBasePlan, runSimulation, calculateSSAnalysis, calculateSSPartnerAnalysis, calculateWealthBreakeven, calculateBreakevenMatrix, getAdjustedSS, calculateAlternativeAllocations, runOptimizedSimulation } from './utils';
 import { GateScreen, LoginScreen, ClientLoginScreen, AccumulationPage, ArchitectPage, ClientWizard, PlanManagement, InputsPage } from './components';
 import { MfaVerifyModal, MfaEnrollModal } from './components/auth/MfaModals';
 import { PasswordExpiryModal } from './components/auth/PasswordExpiryModal';
@@ -214,7 +214,10 @@ export default function BucketPortfolioBuilder() {
     nqQualifiedDividendPercent: 80, // % of NQ dividends that are qualified
     nqCapitalGainRate: 4, // Annual % of NQ balance realized as capital gains (fund distributions, rebalancing)
     withdrawalOverrides: {}, // Per-age overrides: { [age]: { traditionalPercent, rothPercent, nqPercent } }
-    accounts: [] // Array of { id, label, owner: 'client'|'partner', type: 'traditional'|'roth'|'nq', subtype: 'ira'|'401k'|'brokerage', balance }
+    accounts: [], // Array of { id, label, owner: 'client'|'partner', type: 'traditional'|'roth'|'nq', subtype: 'ira'|'401k'|'brokerage', balance }
+    // SS Breakeven Analysis Settings
+    ssBridgeNqPercent: 50, // % of bridge-year withdrawals from NQ (non-qualified) accounts
+    ssMarginalTaxRate: 22  // Marginal tax bracket for bridge-year gross-up calculation
   });
 
   // Return Assumptions
@@ -431,6 +434,35 @@ export default function BucketPortfolioBuilder() {
     clientSSWinner: ssAnalysis.winner
   }), [inputs, clientInfo, targetMaxPortfolioAge, assumptions, ssAnalysis.winner]);
 
+  const ssBreakevenResults = useMemo(() => {
+    const common = {
+      pia: inputs.ssPIA,
+      growthRate: inputs.ssReinvestRate,
+      colaRate: inputs.inflationRate,
+      nqPercent: inputs.ssBridgeNqPercent,
+      marginalTaxRate: inputs.ssMarginalTaxRate,
+      annualExpense: inputs.monthlySpending * 12 || 60000,
+      startingPortfolio: inputs.totalPortfolio || 1000000,
+      spousePIA: clientInfo.isMarried ? inputs.partnerSSPIA : 0,
+      spouseClaimAge: inputs.partnerSSStartAge || 67,
+    };
+    return {
+      vs67: calculateWealthBreakeven({ ...common, earlyAge: 62, delayedAge: 67 }),
+      vs70: calculateWealthBreakeven({ ...common, earlyAge: 62, delayedAge: 70 }),
+      matrix67: calculateBreakevenMatrix({
+        earlyAge: 62, delayedAge: 67,
+        growthRate: inputs.ssReinvestRate, colaRate: inputs.inflationRate
+      }),
+      matrix70: calculateBreakevenMatrix({
+        earlyAge: 62, delayedAge: 70,
+        growthRate: inputs.ssReinvestRate, colaRate: inputs.inflationRate
+      }),
+    };
+  }, [inputs.ssPIA, inputs.ssReinvestRate, inputs.inflationRate,
+      inputs.ssBridgeNqPercent, inputs.ssMarginalTaxRate,
+      inputs.monthlySpending, inputs.totalPortfolio,
+      inputs.partnerSSPIA, inputs.partnerSSStartAge, clientInfo.isMarried]);
+
   // Rebalance targets: use manual percentages when enabled, otherwise null for formula-based
   const rebalanceTargets = useMemo(() => {
     if (useManualAllocation && useManualForRebalance) {
@@ -613,19 +645,24 @@ export default function BucketPortfolioBuilder() {
     }
   }, [clientInfo.currentAge, clientInfo.partnerAge, clientInfo.isMarried]);
 
-  // Sync retirementAge to currentAge when isRetired is checked
+  // When isRetired is first toggled ON, set retirementAge = currentAge as a default.
+  // After that, the advisor can freely override retirementAge on the Accumulation page.
+  const prevIsRetired = useRef(clientInfo.isRetired);
   useEffect(() => {
-    if (clientInfo.isRetired && clientInfo.retirementAge !== clientInfo.currentAge) {
+    if (clientInfo.isRetired && !prevIsRetired.current) {
       setClientInfo(prev => ({ ...prev, retirementAge: prev.currentAge }));
     }
-  }, [clientInfo.isRetired, clientInfo.currentAge, clientInfo.retirementAge]);
+    prevIsRetired.current = clientInfo.isRetired;
+  }, [clientInfo.isRetired, clientInfo.currentAge]);
 
-  // Sync partnerRetirementAge to partnerAge when partnerIsRetired is checked
+  // Same for partner: only sync on initial toggle, not continuously
+  const prevPartnerIsRetired = useRef(clientInfo.partnerIsRetired);
   useEffect(() => {
-    if (clientInfo.partnerIsRetired && clientInfo.partnerRetirementAge !== clientInfo.partnerAge) {
+    if (clientInfo.partnerIsRetired && !prevPartnerIsRetired.current) {
       setClientInfo(prev => ({ ...prev, partnerRetirementAge: prev.partnerAge }));
     }
-  }, [clientInfo.partnerIsRetired, clientInfo.partnerAge, clientInfo.partnerRetirementAge]);
+    prevPartnerIsRetired.current = clientInfo.partnerIsRetired;
+  }, [clientInfo.partnerIsRetired, clientInfo.partnerAge]);
 
   // --- Handlers ---
   const handleClientChange = (e) => {
@@ -1196,6 +1233,7 @@ export default function BucketPortfolioBuilder() {
       optimizerRebalanceFreq={optimizerRebalanceFreq}
       onSetOptimizerRebalanceFreq={setOptimizerRebalanceFreq}
       ssAnalysis={ssAnalysis}
+      ssBreakevenResults={ssBreakevenResults}
       ssPartnerAnalysis={ssPartnerAnalysis}
       ssSimResults={ssSimResults}
       ssPartnerSimResults={ssPartnerSimResults}

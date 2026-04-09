@@ -17,12 +17,14 @@ export {
   getInflationAdjustedDeduction,
   calculateRMD,
   STATE_TAX_DATA,
-  optimizeLiquidationStrategy
+  optimizeLiquidationStrategy,
+  applyDeemedFiling
 } from './calculations';
 export {
   calculateSSAnalysis,
   calculateSSPartnerAnalysis,
-  calculateBreakevenData
+  calculateWealthBreakeven,
+  calculateBreakevenMatrix
 } from './ssAnalysis';
 export {
   generateIPSContent,

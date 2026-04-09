@@ -51,6 +51,7 @@ export const ArchitectPage = ({
   optimizerRebalanceFreq,
   onSetOptimizerRebalanceFreq,
   ssAnalysis,
+  ssBreakevenResults,
   ssPartnerAnalysis,
   ssSimResults,
   ssPartnerSimResults,
@@ -798,6 +799,7 @@ export const ArchitectPage = ({
               clientInfo={clientInfo}
               inputs={inputs}
               ssAnalysis={ssAnalysis}
+              ssBreakevenResults={ssBreakevenResults}
               clientOutcomes={ssOutcomesForDisplay}
               clientWinner={ssWinnerForDisplay}
               partnerOutcomes={ssPartnerOutcomesForDisplay}
@@ -806,6 +808,7 @@ export const ArchitectPage = ({
               onSetTargetMaxPortfolioAge={onSetTargetMaxPortfolioAge}
               onUpdateSSStartAge={onUpdateSSStartAge}
               onUpdatePartnerSSStartAge={onUpdatePartnerSSStartAge}
+              onInputChange={onInputChange}
             />
           )}
 
@@ -1244,18 +1247,29 @@ export const ArchitectPage = ({
           </>
         )}
 
-        {/* Breakeven Chart */}
-        <div className="border border-slate-200 rounded-lg p-4">
-          <h3 className="font-bold text-base text-slate-800 mb-2">Breakeven Analysis (Cumulative SS After Earnings Test)</h3>
-          <LineChart width={670} height={160} data={ssAnalysis.breakevenData}>
-            <CartesianGrid strokeDasharray="3 3" vertical={false} />
-            <XAxis dataKey="age" tick={{ fontSize: 10 }} />
-            <YAxis tickFormatter={(val) => `$${val / 1000}k`} tick={{ fontSize: 10 }} />
-            <Legend wrapperStyle={{ fontSize: '11px' }} />
-            <Line type="monotone" dataKey="claim62" name="@ 62" stroke="#f87171" strokeWidth={2} dot={false} />
-            <Line type="monotone" dataKey="claim67" name="@ 67" stroke="#eab308" strokeWidth={2} dot={false} />
-            <Line type="monotone" dataKey="claim70" name="@ 70" stroke="#059669" strokeWidth={2} dot={false} />
-          </LineChart>
+        {/* Claiming Strategy Rationale */}
+        <div className="border border-slate-200 rounded-lg p-4 mb-3">
+          <h3 className="font-bold text-[13px] text-slate-800 mb-2">Claiming Strategy Rationale</h3>
+          <p className="text-[11px] text-slate-700 leading-relaxed">
+            Delaying Social Security requires funding living expenses from the portfolio. With IRA withdrawals, each $1.00 of spending
+            costs ${inputs.ssMarginalTaxRate > 0 ? `$${(1 / (1 - inputs.ssMarginalTaxRate / 100)).toFixed(2)}` : '$1.00'} after
+            tax gross-up. At {inputs.ssReinvestRate || 4.5}% growth with {inputs.ssBridgeNqPercent}% NQ / {100 - inputs.ssBridgeNqPercent}% IRA
+            funding, delaying to 67 breaks even at age <strong>{ssBreakevenResults?.vs67?.breakevenAge?.toFixed(1) || 'N/A'}</strong> and
+            to 70 at age <strong>{ssBreakevenResults?.vs70?.breakevenAge?.toFixed(1) || 'N/A'}</strong>.
+            {' '}<strong>Recommendation:</strong> Claim at the earliest eligible age once earned income is below the earnings test threshold.
+            {clientInfo.isMarried && ' Under deemed filing, the lower earner automatically receives the higher of their own benefit or 50% of the higher earner\'s PIA.'}
+          </p>
+        </div>
+
+        {/* Scenarios for Further Exploration */}
+        <div className="border border-amber-200 bg-amber-50 rounded-lg p-4">
+          <h3 className="font-bold text-[12px] text-amber-900 mb-1">When Delayed Claiming May Be Worth Exploring</h3>
+          <ul className="text-[11px] text-amber-800 space-y-0.5 list-disc pl-4">
+            <li><strong>Survivor protection:</strong> Higher earner has limited life expectancy but spouse may live much longer — delaying to 70 locks in a 24% larger survivor benefit.</li>
+            <li><strong>Large age gap:</strong> A younger surviving spouse could collect the enhanced survivor benefit for decades.</li>
+            <li><strong>Guaranteed income covers bridge years:</strong> Pensions or other income eliminate the need for portfolio withdrawals, reducing opportunity cost.</li>
+            <li><strong>Roth conversion window:</strong> Delaying SS during low-income years may enable tax-efficient Roth conversions.</li>
+          </ul>
         </div>
       </PrintPageWrapper>
 
@@ -2911,7 +2925,7 @@ const MonteCarloTab = ({ monteCarloData, rebalanceFreq, vaEnabled, vaInputs, onT
   );
 };
 
-const SSOptimizationTab = ({ clientInfo, inputs, ssAnalysis, clientOutcomes, clientWinner, partnerOutcomes, partnerWinner, targetMaxPortfolioAge, onSetTargetMaxPortfolioAge, onUpdateSSStartAge, onUpdatePartnerSSStartAge }) => {
+const SSOptimizationTab = ({ clientInfo, inputs, ssAnalysis, ssBreakevenResults, clientOutcomes, clientWinner, partnerOutcomes, partnerWinner, targetMaxPortfolioAge, onSetTargetMaxPortfolioAge, onUpdateSSStartAge, onUpdatePartnerSSStartAge, onInputChange }) => {
   return (
   <div className="space-y-6 animate-in fade-in duration-300 mt-6">
     <Card className="p-6">
@@ -3034,25 +3048,154 @@ const SSOptimizationTab = ({ clientInfo, inputs, ssAnalysis, clientOutcomes, cli
         </div>
       )}
 
-      {/* Breakeven Chart */}
+      {/* Wealth-Based Breakeven Analysis */}
       <div className="border-t pt-8">
-        <h4 className="font-bold text-slate-800 mb-4">Breakeven Analysis (Cumulative SS After Earnings Test)</h4>
-        <div className="h-64 w-full">
-          <ResponsiveContainer width="100%" height="100%">
-            <LineChart data={ssAnalysis.breakevenData}>
-              <CartesianGrid strokeDasharray="3 3" vertical={false} />
-              <XAxis dataKey="age" />
-              <YAxis tickFormatter={(val) => `$${val / 1000}k`} />
-              <Tooltip formatter={(val) => `$${val.toLocaleString()}`} />
-              <Legend />
-              <Line type="monotone" dataKey="claim62" name="Claim @ 62" stroke="#f87171" strokeWidth={2} dot={false} />
-              <Line type="monotone" dataKey="claim67" name="Claim @ 67" stroke="#eab308" strokeWidth={2} dot={false} />
-              <Line type="monotone" dataKey="claim70" name="Claim @ 70" stroke="#059669" strokeWidth={2} dot={false} />
-            </LineChart>
-          </ResponsiveContainer>
+        <h4 className="font-bold text-slate-800 mb-2">True Break-Even Analysis</h4>
+        <p className="text-xs text-slate-500 mb-4">Compares Total Net Wealth (portfolio balance) between claiming early vs. delaying, accounting for portfolio opportunity cost and IRA tax drag during bridge years.</p>
+
+        {/* Controls */}
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
+          {/* NQ/IRA Funding Mix */}
+          <div>
+            <label className="block text-[11px] font-bold text-slate-500 uppercase mb-1">
+              Bridge Funding: NQ {inputs.ssBridgeNqPercent}% / IRA {100 - inputs.ssBridgeNqPercent}%
+            </label>
+            <input
+              type="range" min="0" max="100" step="10"
+              value={inputs.ssBridgeNqPercent}
+              onChange={(e) => onInputChange({ target: { name: 'ssBridgeNqPercent', value: parseInt(e.target.value), type: 'number' } })}
+              className="w-full h-2 bg-slate-200 rounded-lg appearance-none cursor-pointer accent-slate-700"
+            />
+            <div className="flex justify-between text-[9px] text-slate-400 mt-0.5">
+              <span>100% IRA</span><span>100% NQ</span>
+            </div>
+          </div>
+
+          {/* Marginal Tax Bracket */}
+          <div>
+            <label className="block text-[11px] font-bold text-slate-500 uppercase mb-1">Marginal Tax Bracket</label>
+            <select
+              value={inputs.ssMarginalTaxRate}
+              onChange={(e) => onInputChange({ target: { name: 'ssMarginalTaxRate', value: parseInt(e.target.value), type: 'number' } })}
+              className="w-full text-sm p-1.5 rounded border border-slate-300 bg-white text-slate-800"
+            >
+              <option value={10}>10%</option>
+              <option value={12}>12%</option>
+              <option value={22}>22%</option>
+              <option value={24}>24%</option>
+              <option value={32}>32%</option>
+              <option value={35}>35%</option>
+              <option value={37}>37%</option>
+            </select>
+          </div>
         </div>
-        <p className="text-xs text-slate-500 mt-2">
-          Assumes benefits are reinvested at {inputs.ssReinvestRate || 4.5}% annually.
+
+        {/* Break-Even Age Callouts */}
+        <div className="grid grid-cols-2 gap-3 mb-4">
+          {[
+            { key: 'vs67', label: '62 vs 67', delayAge: 67 },
+            { key: 'vs70', label: '62 vs 70', delayAge: 70 }
+          ].map(({ key, label, delayAge }) => {
+            const be = ssBreakevenResults?.[key]?.breakevenAge;
+            return (
+              <div key={key} className={`p-3 rounded-lg flex items-center gap-3 ${be === null ? 'bg-red-50 border border-red-200' : be <= 80 ? 'bg-emerald-50 border border-emerald-200' : be <= 85 ? 'bg-yellow-50 border border-yellow-200' : 'bg-orange-50 border border-orange-200'}`}>
+                <div className="text-center min-w-[60px]">
+                  <p className={`text-xl font-bold ${be === null ? 'text-red-600' : be <= 80 ? 'text-emerald-700' : be <= 85 ? 'text-yellow-700' : 'text-orange-700'}`}>
+                    {be !== null ? be.toFixed(1) : 'N/A'}
+                  </p>
+                  <p className="text-[9px] font-bold uppercase text-slate-500">{label}</p>
+                </div>
+                <p className="text-[11px] text-slate-600">
+                  {be !== null
+                    ? `Delay to ${delayAge} breaks even at ${be.toFixed(1)}.${be > 85 ? ' Late break-even.' : ''}`
+                    : `Delay to ${delayAge} does not break even by 100.`}
+                </p>
+              </div>
+            );
+          })}
+        </div>
+
+        {/* Three-Line Wealth Comparison Chart */}
+        {(() => {
+          const vs67 = ssBreakevenResults?.vs67;
+          const vs70 = ssBreakevenResults?.vs70;
+          if (!vs67?.chartData || !vs70?.chartData) return null;
+          // Merge chart data: earlyWealth is same for both, add delay67 and delay70
+          const mergedData = vs67.chartData.map((pt, i) => ({
+            age: pt.age,
+            earlyWealth: pt.earlyWealth,
+            delay67: pt.delayedWealth,
+            delay70: vs70.chartData[i]?.delayedWealth ?? 0
+          }));
+          return (
+            <div className="h-72 w-full">
+              <ResponsiveContainer width="100%" height="100%">
+                <LineChart data={mergedData}>
+                  <CartesianGrid strokeDasharray="3 3" vertical={false} />
+                  <XAxis dataKey="age" />
+                  <YAxis tickFormatter={(val) => val >= 1000000 ? `$${(val / 1000000).toFixed(1)}M` : `$${Math.round(val / 1000)}k`} />
+                  <Tooltip formatter={(val) => `$${val.toLocaleString()}`} />
+                  <Legend />
+                  <Line type="monotone" dataKey="earlyWealth" name="Claim @ 62" stroke="#f87171" strokeWidth={2} dot={false} />
+                  <Line type="monotone" dataKey="delay67" name="Delay to 67" stroke="#eab308" strokeWidth={2} dot={false} />
+                  <Line type="monotone" dataKey="delay70" name="Delay to 70" stroke="#059669" strokeWidth={2} dot={false} />
+                </LineChart>
+              </ResponsiveContainer>
+            </div>
+          );
+        })()}
+
+        <p className="text-xs text-slate-500 mt-2 mb-6">
+          Portfolio growth: {inputs.ssReinvestRate || 4.5}% | COLA: {inputs.inflationRate}% | Bridge funding: {inputs.ssBridgeNqPercent}% NQ / {100 - inputs.ssBridgeNqPercent}% IRA | Tax bracket: {inputs.ssMarginalTaxRate}%
+        </p>
+
+        {/* Reference Matrices */}
+        {(() => {
+          const allBrackets = [10, 12, 22, 24, 32, 35, 37];
+          return ['matrix67', 'matrix70'].map(matrixKey => {
+            const matrix = ssBreakevenResults?.[matrixKey];
+            if (!matrix) return null;
+            const label = matrixKey === 'matrix67' ? '62 vs 67' : '62 vs 70';
+            return (
+              <div key={matrixKey} className="bg-slate-50 rounded-lg p-4 border border-slate-200 mb-4">
+                <h5 className="text-xs font-bold text-slate-600 uppercase mb-2">Break-Even Matrix ({label})</h5>
+                <div className="overflow-x-auto">
+                  <table className="w-full text-xs">
+                    <thead>
+                      <tr className="border-b border-slate-300">
+                        <th className="text-left py-1 font-bold text-slate-500 whitespace-nowrap pr-2">NQ / IRA</th>
+                        {allBrackets.map(tax => (
+                          <th key={tax} className="text-center py-1 font-bold text-slate-500 whitespace-nowrap px-1">{tax}%</th>
+                        ))}
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {matrix.map(row => {
+                        const isActive = row.nqPercent === inputs.ssBridgeNqPercent;
+                        return (
+                          <tr key={row.nqPercent} className={`border-b border-slate-100 ${isActive ? 'bg-yellow-50 font-bold' : ''}`}>
+                            <td className="py-1 text-slate-600 whitespace-nowrap pr-2">{row.nqPercent}% / {row.iraPercent}%</td>
+                            {allBrackets.map(tax => {
+                              const isCurrent = isActive && tax === inputs.ssMarginalTaxRate;
+                              const val = row.breakevens[tax];
+                              return (
+                                <td key={tax} className={`py-1 text-center px-1 ${isCurrent ? 'bg-yellow-200 rounded font-bold text-slate-800' : 'text-slate-600'}`}>
+                                  {val !== null ? val.toFixed(1) : 'N/A'}
+                                </td>
+                              );
+                            })}
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            );
+          });
+        })()}
+        <p className="text-[10px] text-slate-400">
+          Matrices assume {inputs.ssReinvestRate || 4.5}% growth, {inputs.inflationRate}% COLA. Higher IRA % and tax bracket push the break-even age later.
         </p>
       </div>
     </Card>

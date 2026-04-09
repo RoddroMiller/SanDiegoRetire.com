@@ -53,6 +53,8 @@ const SAMPLE_INPUTS_BASE = {
   traditionalPercent: 60, rothPercent: 25, nqPercent: 15,
   nqDividendYield: 2.0, nqQualifiedDividendPercent: 80, nqCapitalGainRate: 50,
   withdrawalOverrides: {},
+  ssBridgeNqPercent: 50,
+  ssMarginalTaxRate: 22,
 };
 
 const formatDollar = (v) => `$${(v / 1000).toFixed(0)}k`;

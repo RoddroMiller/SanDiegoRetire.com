@@ -3,7 +3,7 @@
  * Calculates optimal claiming strategies and breakeven analysis
  */
 
-import { getAdjustedSS, calculateWeightedReturn, applySSEarningsTest, calculateAnnualTax } from './calculations';
+import { getAdjustedSS, calculateWeightedReturn, applySSEarningsTest, calculateAnnualTax, applyDeemedFiling } from './calculations';
 
 /**
  * Calculate expense inflation factor for a given year (uses personal inflation rate)
@@ -71,9 +71,9 @@ const calculateAdditionalIncome = (additionalIncomes, clientAge, partnerAge, inf
  * @returns {object} Analysis results with winner, outcomes, and breakeven data
  */
 export const calculateSSAnalysis = ({ inputs, clientInfo, assumptions, targetMaxPortfolioAge }) => {
-  // Build list of strategies to analyze
+  // Build list of strategies to analyze — include retirement age as earliest eligible claim date
   let strategies = [62, 67, 70];
-  if (clientInfo.retirementAge > 62 && clientInfo.retirementAge < 67) {
+  if (clientInfo.retirementAge > 62 && clientInfo.retirementAge < 70) {
     strategies.push(clientInfo.retirementAge);
   }
   strategies = [...new Set(strategies)].sort((a, b) => a - b);
@@ -81,11 +81,22 @@ export const calculateSSAnalysis = ({ inputs, clientInfo, assumptions, targetMax
   const weightedReturn = calculateWeightedReturn(assumptions);
 
   // Determine employment income for earnings test
+  const clientAnnualIncome = clientInfo.annualIncome || 0;
   const partnerAnnualIncome = clientInfo.partnerAnnualIncome || 0;
   const partnerRetAge = clientInfo.partnerRetirementAge || clientInfo.retirementAge;
   const filingStatus = inputs.filingStatus || 'married';
   const stateRate = inputs.stateRate || 0;
   const stateCode = inputs.stateCode || '';
+
+  // Compute simulation start: earliest of client retirement or partner turning 62 (if retired)
+  let simStart = clientInfo.retirementAge;
+  if (clientInfo.isMarried) {
+    const partnerIsAlreadyRetired = clientInfo.partnerIsRetired || partnerRetAge <= clientInfo.partnerAge;
+    if (partnerIsAlreadyRetired) {
+      const partnerTurns62InClientAge = 62 + (clientInfo.currentAge - (clientInfo.partnerAge || clientInfo.currentAge));
+      simStart = Math.min(simStart, Math.max(clientInfo.currentAge, partnerTurns62InClientAge));
+    }
+  }
 
   // Calculate outcome for each claiming strategy — with earnings test and taxes
   const strategyProjections = {};
@@ -95,9 +106,9 @@ export const calculateSSAnalysis = ({ inputs, clientInfo, assumptions, targetMax
     let cumulativeSSAfterTax = 0;
     const annualData = [];
 
-    for (let age = clientInfo.retirementAge; age <= targetMaxPortfolioAge; age++) {
+    for (let age = simStart; age <= targetMaxPortfolioAge; age++) {
       balance *= (1 + weightedReturn);
-      const yearIndex = age - clientInfo.retirementAge;
+      const yearIndex = age - simStart;
       const currentPartnerAge = clientInfo.partnerAge + (age - clientInfo.currentAge);
       const expenseInflationFactor = getExpenseInflationFactor(inputs.personalInflationRate, yearIndex);
       const incomeInflationFactor = getIncomeInflationFactor(inputs.inflationRate, yearIndex);
@@ -113,34 +124,52 @@ export const calculateSSAnalysis = ({ inputs, clientInfo, assumptions, targetMax
       const expense = inputs.monthlySpending * 12 * expenseInflationFactor * (1 - reductionPct);
 
       // Employment income (for earnings test)
+      let clientEmploymentIncome = 0;
+      if (clientAlive && clientAnnualIncome > 0 && age < clientInfo.retirementAge) {
+        clientEmploymentIncome = clientAnnualIncome * incomeInflationFactor;
+      }
       let employmentIncome = 0;
       if (clientInfo.isMarried && partnerAlive && partnerAnnualIncome > 0 && currentPartnerAge < partnerRetAge) {
         employmentIncome = partnerAnnualIncome * incomeInflationFactor;
       }
 
-      // Client SS with earnings test
+      // Client SS with deemed filing and earnings test
       let ssIncome = 0;
-      const effectiveSSStartAge = startAge >= 67 ? startAge : Math.max(startAge, clientInfo.retirementAge);
-      const clientSSFull = getAdjustedSS(inputs.ssPIA, startAge) * 12 * incomeInflationFactor;
-      const partnerSSFull = clientInfo.isMarried ? getAdjustedSS(inputs.partnerSSPIA, inputs.partnerSSStartAge) * 12 * incomeInflationFactor : 0;
+      const clientHasFiled = clientAlive && age >= startAge;
+      const partnerHasFiled = partnerAlive && currentPartnerAge >= inputs.partnerSSStartAge;
 
-      // Apply earnings test
-      const clientSSAfterET = applySSEarningsTest(clientSSFull, 0, age, incomeInflationFactor);
+      // Own benefits (adjusted for claiming age)
+      const clientOwnMonthly = getAdjustedSS(inputs.ssPIA, startAge);
+      const partnerOwnMonthly = clientInfo.isMarried ? getAdjustedSS(inputs.partnerSSPIA, inputs.partnerSSStartAge) : 0;
+
+      // Deemed filing: each person gets max(own benefit, 50% of spouse's PIA)
+      const clientMonthly = clientInfo.isMarried
+        ? applyDeemedFiling(clientOwnMonthly, inputs.partnerSSPIA, partnerHasFiled)
+        : clientOwnMonthly;
+      const partnerMonthly = clientInfo.isMarried
+        ? applyDeemedFiling(partnerOwnMonthly, inputs.ssPIA, clientHasFiled)
+        : 0;
+
+      const clientSSFull = clientMonthly * 12 * incomeInflationFactor;
+      const partnerSSFull = partnerMonthly * 12 * incomeInflationFactor;
+
+      // Apply earnings test (client not working in retirement; partner may still be working)
+      const clientSSAfterET = applySSEarningsTest(clientSSFull, clientEmploymentIncome, age, incomeInflationFactor);
       const partnerSSAfterET = applySSEarningsTest(partnerSSFull, employmentIncome, currentPartnerAge, incomeInflationFactor);
 
-      if (clientAlive && age >= effectiveSSStartAge) {
+      if (clientHasFiled) {
         ssIncome += clientSSAfterET;
       }
-      if (partnerAlive && currentPartnerAge >= inputs.partnerSSStartAge) {
+      if (partnerHasFiled) {
         ssIncome += partnerSSAfterET;
       }
-      // Survivor SS
+      // Survivor SS: surviving spouse gets the higher of their own or deceased spouse's benefit
       if (clientInfo.isMarried) {
-        if (!clientAlive && partnerAlive && currentPartnerAge >= inputs.partnerSSStartAge && clientSSFull > partnerSSFull) {
+        if (!clientAlive && partnerAlive && partnerHasFiled && clientSSFull > partnerSSFull) {
           const survivorBenefit = applySSEarningsTest(clientSSFull, employmentIncome, currentPartnerAge, incomeInflationFactor);
           ssIncome += (survivorBenefit - partnerSSAfterET);
         }
-        if (clientAlive && !partnerAlive && age >= effectiveSSStartAge && partnerSSFull > clientSSFull) {
+        if (clientAlive && !partnerAlive && clientHasFiled && partnerSSFull > clientSSFull) {
           const survivorBenefit = applySSEarningsTest(partnerSSFull, 0, age, incomeInflationFactor);
           ssIncome += (survivorBenefit - clientSSAfterET);
         }
@@ -211,20 +240,7 @@ export const calculateSSAnalysis = ({ inputs, clientInfo, assumptions, targetMax
     (prev.balance > current.balance) ? prev : current
   );
 
-  // Build breakeven data from actual simulation projections
-  const breakevenData = [];
-  const maxAge = targetMaxPortfolioAge;
-  for (let age = 60; age <= maxAge; age++) {
-    const point = { age };
-    strategies.forEach(startAge => {
-      const proj = strategyProjections[startAge];
-      const entry = proj?.find(d => d.age === age);
-      point[`claim${startAge}`] = entry ? entry.cumulativeSSAfterTax : 0;
-    });
-    breakevenData.push(point);
-  }
-
-  return { winner, outcomes, breakevenData };
+  return { winner, outcomes };
 };
 
 /**
@@ -240,28 +256,38 @@ export const calculateSSAnalysis = ({ inputs, clientInfo, assumptions, targetMax
 export const calculateSSPartnerAnalysis = ({ inputs, clientInfo, assumptions, targetMaxPortfolioAge, clientSSWinner }) => {
   if (!clientInfo.isMarried) return null;
 
-  // Build list of strategies to analyze
+  // Build list of strategies to analyze — include partner retirement age as earliest eligible claim date
   let strategies = [62, 67, 70];
-  if (clientInfo.partnerRetirementAge > 62 && clientInfo.partnerRetirementAge < 67) {
-    strategies.push(clientInfo.partnerRetirementAge);
+  const pRetAge = clientInfo.partnerRetirementAge;
+  if (pRetAge > 62 && pRetAge < 70) {
+    strategies.push(pRetAge);
   }
   strategies = [...new Set(strategies)].sort((a, b) => a - b);
 
   const weightedReturn = calculateWeightedReturn(assumptions);
 
+  const clientAnnualIncome = clientInfo.annualIncome || 0;
   const partnerAnnualIncome = clientInfo.partnerAnnualIncome || 0;
   const partnerRetAge = clientInfo.partnerRetirementAge || clientInfo.retirementAge;
   const filingStatus = inputs.filingStatus || 'married';
   const stateRate = inputs.stateRate || 0;
   const stateCode = inputs.stateCode || '';
 
+  // Compute simulation start: earliest of client retirement or partner turning 62 (if retired)
+  let simStart = clientInfo.retirementAge;
+  const partnerIsAlreadyRetired = clientInfo.partnerIsRetired || partnerRetAge <= clientInfo.partnerAge;
+  if (partnerIsAlreadyRetired) {
+    const partnerTurns62InClientAge = 62 + (clientInfo.currentAge - (clientInfo.partnerAge || clientInfo.currentAge));
+    simStart = Math.min(simStart, Math.max(clientInfo.currentAge, partnerTurns62InClientAge));
+  }
+
   // Calculate outcome for each partner claiming strategy — with earnings test and taxes
   const outcomes = strategies.map(pStartAge => {
     let balance = inputs.totalPortfolio;
 
-    for (let age = clientInfo.retirementAge; age <= targetMaxPortfolioAge; age++) {
+    for (let age = simStart; age <= targetMaxPortfolioAge; age++) {
       balance *= (1 + weightedReturn);
-      const yearIndex = age - clientInfo.retirementAge;
+      const yearIndex = age - simStart;
       const currentPartnerAge = clientInfo.partnerAge + (age - clientInfo.currentAge);
       const expenseInflationFactor = getExpenseInflationFactor(inputs.personalInflationRate, yearIndex);
       const incomeInflationFactor = getIncomeInflationFactor(inputs.inflationRate, yearIndex);
@@ -277,33 +303,45 @@ export const calculateSSPartnerAnalysis = ({ inputs, clientInfo, assumptions, ta
       const expense = inputs.monthlySpending * 12 * expenseInflationFactor * (1 - reductionPct);
 
       // Employment income for earnings test
+      let clientEmploymentIncome = 0;
+      if (clientAlive && clientAnnualIncome > 0 && age < clientInfo.retirementAge) {
+        clientEmploymentIncome = clientAnnualIncome * incomeInflationFactor;
+      }
       let employmentIncome = 0;
       if (partnerAlive && partnerAnnualIncome > 0 && currentPartnerAge < partnerRetAge) {
         employmentIncome = partnerAnnualIncome * incomeInflationFactor;
       }
 
       let ssIncome = 0;
-      // Client SS (fixed at optimal age) with earnings test
-      const effectiveClientSSStartAge = clientSSWinner.age >= 67 ? clientSSWinner.age : Math.max(clientSSWinner.age, clientInfo.retirementAge);
-      const clientSSFull = getAdjustedSS(inputs.ssPIA, clientSSWinner.age) * 12 * incomeInflationFactor;
-      const clientSSAfterET = applySSEarningsTest(clientSSFull, 0, age, incomeInflationFactor);
-      if (clientAlive && age >= effectiveClientSSStartAge) {
+      const clientHasFiled = clientAlive && age >= clientSSWinner.age;
+      const partnerHasFiled = partnerAlive && currentPartnerAge >= pStartAge;
+
+      // Own benefits (adjusted for claiming age)
+      const clientOwnMonthly = getAdjustedSS(inputs.ssPIA, clientSSWinner.age);
+      const partnerOwnMonthly = getAdjustedSS(inputs.partnerSSPIA, pStartAge);
+
+      // Deemed filing: each person gets max(own benefit, 50% of spouse's PIA)
+      const clientMonthly = applyDeemedFiling(clientOwnMonthly, inputs.partnerSSPIA, partnerHasFiled);
+      const partnerMonthly = applyDeemedFiling(partnerOwnMonthly, inputs.ssPIA, clientHasFiled);
+
+      const clientSSFull = clientMonthly * 12 * incomeInflationFactor;
+      const partnerSSFull = partnerMonthly * 12 * incomeInflationFactor;
+
+      const clientSSAfterET = applySSEarningsTest(clientSSFull, clientEmploymentIncome, age, incomeInflationFactor);
+      const partnerSSAfterET = applySSEarningsTest(partnerSSFull, employmentIncome, currentPartnerAge, incomeInflationFactor);
+
+      if (clientHasFiled) {
         ssIncome += clientSSAfterET;
       }
-
-      // Partner SS (variable) with earnings test
-      const effectivePartnerSSStartAge = pStartAge >= 67 ? pStartAge : Math.max(pStartAge, clientInfo.partnerRetirementAge);
-      const partnerSSFull = getAdjustedSS(inputs.partnerSSPIA, pStartAge) * 12 * incomeInflationFactor;
-      const partnerSSAfterET = applySSEarningsTest(partnerSSFull, employmentIncome, currentPartnerAge, incomeInflationFactor);
-      if (partnerAlive && currentPartnerAge >= effectivePartnerSSStartAge) {
+      if (partnerHasFiled) {
         ssIncome += partnerSSAfterET;
       }
       // Survivor SS
-      if (!clientAlive && partnerAlive && currentPartnerAge >= effectivePartnerSSStartAge && clientSSFull > partnerSSFull) {
+      if (!clientAlive && partnerAlive && partnerHasFiled && clientSSFull > partnerSSFull) {
         const survivorBenefit = applySSEarningsTest(clientSSFull, employmentIncome, currentPartnerAge, incomeInflationFactor);
         ssIncome += (survivorBenefit - partnerSSAfterET);
       }
-      if (clientAlive && !partnerAlive && age >= effectiveClientSSStartAge && partnerSSFull > clientSSFull) {
+      if (clientAlive && !partnerAlive && clientHasFiled && partnerSSFull > clientSSFull) {
         const survivorBenefit = applySSEarningsTest(partnerSSFull, 0, age, incomeInflationFactor);
         ssIncome += (survivorBenefit - clientSSAfterET);
       }
@@ -354,38 +392,175 @@ export const calculateSSPartnerAnalysis = ({ inputs, clientInfo, assumptions, ta
 };
 
 /**
- * Calculate breakeven data comparing different SS claiming ages
- * Shows accumulated wealth at each age assuming benefits are reinvested
- * @param {number} pia - Primary Insurance Amount
- * @param {number} reinvestRate - Rate of return on reinvested benefits (default 4.5%)
- * @returns {Array} Breakeven data points from age 60 to 95
+ * Calculate wealth-based breakeven between early and delayed SS claiming strategies.
+ *
+ * Uses monthly time steps to model the portfolio opportunity cost and IRA tax drag
+ * during the bridge years (earlyAge to delayedAge). The key asymmetry:
+ *
+ * - Bridge years: The delayer must fund living expenses entirely from the portfolio.
+ *   The cost of replacing the early claimer's SS income is grossed up for IRA tax drag:
+ *     Gross cost = (NQ_mix × SS) + (IRA_mix × SS / (1 - marginalTaxRate))
+ *
+ * - Catch-up phase: After the delayed age, the delayer's higher SS reduces portfolio
+ *   withdrawals. The catch-up rate is the face-value SS difference, with a small
+ *   tax-savings adjustment (10% of the gross-up factor) reflecting reduced IRA draws.
+ *
+ * This asymmetry means higher IRA% and higher tax brackets push the breakeven age
+ * further out, while 100% NQ funding yields a tax-bracket-independent breakeven.
+ *
+ * @param {object} params
+ * @param {number} params.pia - Monthly PIA (Primary Insurance Amount)
+ * @param {number} params.earlyAge - Early claiming age (default 62)
+ * @param {number} params.delayedAge - Delayed claiming age (default 67)
+ * @param {number} params.growthRate - Annual portfolio growth rate in % (default 4.5)
+ * @param {number} params.colaRate - Annual COLA rate in % (default 2.5)
+ * @param {number} params.nqPercent - % of bridge funding from NQ accounts (default 100)
+ * @param {number} params.marginalTaxRate - Marginal tax bracket in % (default 22)
+ * @param {number} params.annualExpense - Annual living expense for chart display
+ * @param {number} params.startingPortfolio - Starting portfolio for chart display
+ * @returns {object} { breakevenAge, chartData, earlyBenefit, delayedBenefit }
  */
-export const calculateBreakevenData = (pia, reinvestRate = 4.5) => {
-  const breakevenData = [];
-  let accumulated = { claim62: 0, claim67: 0, claim70: 0 };
+export const calculateWealthBreakeven = ({
+  pia = 2500,
+  earlyAge = 62,
+  delayedAge = 67,
+  growthRate = 4.5,
+  colaRate = 2.5,
+  nqPercent = 100,
+  marginalTaxRate = 22,
+  annualExpense = 60000,
+  startingPortfolio = 1000000,
+  spousePIA = 0,        // Spouse's PIA for deemed filing (0 = single/ignore)
+  spouseClaimAge = 67   // Age when spouse files (triggers spousal top-up)
+} = {}) => {
+  const monthlyR = growthRate / 100 / 12;
+  const annualCOLA = colaRate / 100;
+  const nqMix = nqPercent / 100;
+  const iraMix = 1 - nqMix;
+  const taxRate = marginalTaxRate / 100;
 
-  const benefit62 = getAdjustedSS(pia, 62) * 12;
-  const benefit67 = getAdjustedSS(pia, 67) * 12;
-  const benefit70 = getAdjustedSS(pia, 70) * 12;
+  // Own benefits adjusted for claiming age
+  const earlyOwnMonthly = getAdjustedSS(pia, earlyAge);
+  const delayedOwnMonthly = getAdjustedSS(pia, delayedAge);
 
-  for (let age = 60; age <= 95; age++) {
-    // Apply growth to accumulated balances
-    accumulated.claim62 *= (1 + reinvestRate / 100);
-    accumulated.claim67 *= (1 + reinvestRate / 100);
-    accumulated.claim70 *= (1 + reinvestRate / 100);
+  // With deemed filing: benefit = max(own, 50% of spouse's PIA) once spouse has filed
+  // Before spouse files, only own benefit
+  const earlyBenefitMonthly = (age) => {
+    if (spousePIA > 0 && age >= spouseClaimAge) {
+      return applyDeemedFiling(earlyOwnMonthly, spousePIA, true);
+    }
+    return earlyOwnMonthly;
+  };
+  const delayedBenefitMonthly = (age) => {
+    if (spousePIA > 0 && age >= spouseClaimAge) {
+      return applyDeemedFiling(delayedOwnMonthly, spousePIA, true);
+    }
+    return delayedOwnMonthly;
+  };
 
-    // Add benefits if claiming age has been reached
-    if (age >= 62) accumulated.claim62 += benefit62;
-    if (age >= 67) accumulated.claim67 += benefit67;
-    if (age >= 70) accumulated.claim70 += benefit70;
+  // Gross-up factor: NQ at face, IRA portion requires tax gross-up
+  const grossUpFactor = nqMix + iraMix / Math.max(0.01, 1 - taxRate);
+  // Catch-up: 10% of the tax benefit applies when higher SS reduces IRA draws
+  const catchUpFactor = 1 + (grossUpFactor - 1) * 0.1;
 
-    breakevenData.push({
+  // --- Breakeven via portfolio-difference model (monthly steps) ---
+  let diff = 0; // positive = early claimer ahead
+  let breakevenAge = null;
+
+  const totalMonths = (100 - earlyAge) * 12;
+  for (let month = 0; month <= totalMonths; month++) {
+    const prevDiff = diff;
+    diff *= (1 + monthlyR);
+
+    const yearFrac = month / 12;
+    const age = earlyAge + yearFrac;
+    const colaFactor = Math.pow(1 + annualCOLA, yearFrac);
+
+    if (age < delayedAge) {
+      // Bridge: early claimer saves SS, delayer pays gross-up to replace it from portfolio
+      diff += earlyBenefitMonthly(age) * colaFactor * grossUpFactor;
+    } else {
+      // Catch-up: delayer's higher SS benefit narrows the gap
+      diff -= (delayedBenefitMonthly(age) - earlyBenefitMonthly(age)) * colaFactor * catchUpFactor;
+    }
+
+    if (month > 0 && prevDiff > 0 && diff <= 0) {
+      const pd = prevDiff;
+      const cd = Math.abs(diff);
+      const exactMonth = (month - 1) + pd / (pd + cd);
+      breakevenAge = Math.round((earlyAge + exactMonth / 12) * 10) / 10;
+    }
+  }
+
+  // --- Chart data via full portfolio simulation (annual steps for display) ---
+  const chartData = [];
+  let earlyPortfolio = startingPortfolio;
+  let delayedPortfolio = startingPortfolio;
+  const annualGrowth = growthRate / 100;
+
+  for (let age = earlyAge; age <= 95; age++) {
+    earlyPortfolio *= (1 + annualGrowth);
+    delayedPortfolio *= (1 + annualGrowth);
+
+    const colaFactor = Math.pow(1 + annualCOLA, age - earlyAge);
+    const expenseThisYear = annualExpense * colaFactor;
+    const earlySSAnnual = earlyBenefitMonthly(age) * 12 * colaFactor;
+    const delayedSSAnnual = (age >= delayedAge) ? delayedBenefitMonthly(age) * 12 * colaFactor : 0;
+
+    // Early claimer: withdraw deficit at face value
+    earlyPortfolio -= Math.max(0, expenseThisYear - earlySSAnnual);
+    // Delayer: bridge years grossed up, catch-up at face value
+    if (age < delayedAge) {
+      const fullNeed = expenseThisYear;
+      delayedPortfolio -= (nqMix * fullNeed + iraMix * fullNeed / Math.max(0.01, 1 - taxRate));
+    } else {
+      delayedPortfolio -= Math.max(0, expenseThisYear - delayedSSAnnual);
+    }
+
+    chartData.push({
       age,
-      claim62: Math.round(accumulated.claim62),
-      claim67: Math.round(accumulated.claim67),
-      claim70: Math.round(accumulated.claim70)
+      earlyWealth: Math.round(earlyPortfolio),
+      delayedWealth: Math.round(delayedPortfolio)
     });
   }
 
-  return breakevenData;
+  return {
+    breakevenAge,
+    chartData,
+    earlyBenefit: Math.round(earlyOwnMonthly),
+    delayedBenefit: Math.round(delayedOwnMonthly)
+  };
+};
+
+/**
+ * Generate a breakeven matrix across NQ/IRA mixes and tax brackets.
+ * @param {object} params
+ * @param {number} params.earlyAge - Early claiming age (default 62)
+ * @param {number} params.delayedAge - Delayed claiming age (default 67)
+ * @param {number} params.growthRate - Annual portfolio growth rate in % (default 4.5)
+ * @param {number} params.colaRate - Annual COLA rate in % (default 2.5)
+ * @returns {Array} Array of { nqPercent, iraPercent, breakevens: { 12, 22, 24 } }
+ */
+export const calculateBreakevenMatrix = ({
+  earlyAge = 62,
+  delayedAge = 67,
+  growthRate = 4.5,
+  colaRate = 2.5
+} = {}) => {
+  const nqMixes = [100, 80, 60, 40, 20, 0];
+  const taxRates = [10, 12, 22, 24, 32, 35, 37];
+
+  return nqMixes.map(nq => ({
+    nqPercent: nq,
+    iraPercent: 100 - nq,
+    breakevens: Object.fromEntries(
+      taxRates.map(tax => [
+        tax,
+        calculateWealthBreakeven({
+          pia: 2500, earlyAge, delayedAge, growthRate, colaRate,
+          nqPercent: nq, marginalTaxRate: tax
+        }).breakevenAge
+      ])
+    )
+  }));
 };
