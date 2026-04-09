@@ -1,9 +1,9 @@
 import React, { useMemo, useState } from 'react';
 import { ResponsiveContainer, AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip } from 'recharts';
-import { User, DollarSign, ArrowRight, Info, AlertTriangle, ChevronDown, ChevronUp, Clock } from 'lucide-react';
+import { User, DollarSign, ArrowRight, Info, AlertTriangle, ChevronDown, ChevronUp, Clock, Plus, Trash2, Settings } from 'lucide-react';
 
 import { COLORS } from '../../constants';
-import { formatPhoneNumber, calculateImpliedSpending } from '../../utils';
+import { formatPhoneNumber, calculateImpliedSpending, STATE_TAX_DATA } from '../../utils';
 import { FormattedNumberInput, Disclaimer } from '../ui';
 
 /**
@@ -23,6 +23,10 @@ export const AccumulationPage = ({
   accumulationData,
   // Navigation
   onProceed,
+  // Account CRUD
+  onAddAccount,
+  onUpdateAccount,
+  onRemoveAccount,
 }) => {
   const [showTaxBreakdown, setShowTaxBreakdown] = useState(false);
 
@@ -174,20 +178,126 @@ export const AccumulationPage = ({
               <DollarSign className="w-5 h-5 text-emerald-600" /> Financial Inputs
             </h3>
             <div className="space-y-4">
-              <div className="relative group">
-                <label className="block text-xs font-bold text-slate-500 uppercase mb-1 flex items-center gap-1">
-                  Current Portfolio <Info className="w-3 h-3 text-slate-400" />
-                </label>
-                <div className="absolute left-0 bottom-full mb-2 hidden group-hover:block w-64 bg-slate-800 text-white text-xs p-2 rounded shadow-lg z-10">
-                  Total of all 401k, Roth, IRA, other retirement assets, and non-retirement investment accounts.
+              {/* Advanced toggle */}
+              {inputs.accounts && inputs.accounts.length > 0 ? (
+                /* --- Advanced Mode: Per-account entry --- */
+                <div className="space-y-3">
+                  <div className="flex items-center justify-between">
+                    <label className="block text-xs font-bold text-slate-500 uppercase flex items-center gap-1">
+                      Portfolio Accounts
+                    </label>
+                    <button
+                      type="button"
+                      onClick={onAddAccount}
+                      className="flex items-center gap-1 text-xs text-emerald-600 hover:text-emerald-700 font-medium"
+                    >
+                      <Plus className="w-3 h-3" /> Add Account
+                    </button>
+                  </div>
+                  {inputs.accounts.map((acct) => (
+                    <div key={acct.id} className="grid grid-cols-12 gap-1.5 items-end p-2 bg-slate-50 rounded border border-slate-200 text-xs">
+                      <div className="col-span-3">
+                        <label className="text-[10px] text-slate-500 uppercase">Label</label>
+                        <input
+                          type="text"
+                          value={acct.label}
+                          onChange={(e) => onUpdateAccount(acct.id, 'label', e.target.value)}
+                          placeholder="e.g. 401k"
+                          className="w-full px-2 py-1.5 border rounded text-xs"
+                        />
+                      </div>
+                      <div className="col-span-2">
+                        <label className="text-[10px] text-slate-500 uppercase">Owner</label>
+                        <select
+                          value={acct.owner}
+                          onChange={(e) => onUpdateAccount(acct.id, 'owner', e.target.value)}
+                          className="w-full px-1 py-1.5 border rounded bg-white text-xs"
+                        >
+                          <option value="client">{clientInfo.name || 'Client'}</option>
+                          {clientInfo.isMarried && <option value="partner">{clientInfo.partnerName || 'Partner'}</option>}
+                        </select>
+                      </div>
+                      <div className="col-span-2">
+                        <label className="text-[10px] text-slate-500 uppercase">Type</label>
+                        <select
+                          value={`${acct.type}-${acct.subtype}`}
+                          onChange={(e) => {
+                            const [type, subtype] = e.target.value.split('-');
+                            onUpdateAccount(acct.id, 'type', type);
+                            onUpdateAccount(acct.id, 'subtype', subtype);
+                          }}
+                          className="w-full px-1 py-1.5 border rounded bg-white text-xs"
+                        >
+                          <option value="traditional-ira">Trad IRA</option>
+                          <option value="traditional-401k">Trad 401k</option>
+                          <option value="roth-ira">Roth IRA</option>
+                          <option value="roth-401k">Roth 401k</option>
+                          <option value="nq-brokerage">NQ</option>
+                        </select>
+                      </div>
+                      <div className="col-span-2">
+                        <label className="text-[10px] text-slate-500 uppercase">Balance</label>
+                        <FormattedNumberInput
+                          value={acct.balance}
+                          onChange={(e) => onUpdateAccount(acct.id, 'balance', parseFloat(e.target.value) || 0)}
+                          className="w-full px-2 py-1.5 border rounded text-xs"
+                        />
+                      </div>
+                      <div className="col-span-2">
+                        <label className="text-[10px] text-slate-500 uppercase">Ann. Contrib</label>
+                        <FormattedNumberInput
+                          value={acct.annualContribution}
+                          onChange={(e) => onUpdateAccount(acct.id, 'annualContribution', parseFloat(e.target.value) || 0)}
+                          className="w-full px-2 py-1.5 border rounded text-xs"
+                        />
+                      </div>
+                      <div className="col-span-1 flex justify-center">
+                        <button type="button" onClick={() => onRemoveAccount(acct.id)} className="text-red-400 hover:text-red-600 p-1">
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                  {/* Summary */}
+                  <div className="px-2 py-1.5 bg-emerald-50 rounded border border-emerald-200 text-xs font-medium space-y-0.5">
+                    <div className="flex justify-between text-emerald-800">
+                      <span>Today: ${inputs.accounts.reduce((s, a) => s + (a.balance || 0), 0).toLocaleString()}</span>
+                      <span>Annual Savings: ${inputs.accounts.reduce((s, a) => s + (a.annualContribution || 0), 0).toLocaleString()}</span>
+                    </div>
+                    {accumulationData.length > 0 && (
+                      <div className="flex justify-between text-emerald-600">
+                        <span>Projected at retirement: ${accumulationData[accumulationData.length - 1].balance.toLocaleString()}</span>
+                        <span>Trad {inputs.traditionalPercent}% | Roth {inputs.rothPercent}% | NQ {inputs.nqPercent}%</span>
+                      </div>
+                    )}
+                  </div>
                 </div>
-                <FormattedNumberInput
-                  name="currentPortfolio"
-                  value={clientInfo.currentPortfolio}
-                  onChange={onClientChange}
-                  className="p-3 border rounded-lg w-full"
-                />
-              </div>
+              ) : (
+                /* --- Simple Mode: single portfolio + savings --- */
+                <>
+                  <div className="relative group">
+                    <label className="block text-xs font-bold text-slate-500 uppercase mb-1 flex items-center gap-1">
+                      Current Portfolio <Info className="w-3 h-3 text-slate-400" />
+                    </label>
+                    <div className="absolute left-0 bottom-full mb-2 hidden group-hover:block w-64 bg-slate-800 text-white text-xs p-2 rounded shadow-lg z-10">
+                      Total of all 401k, Roth, IRA, other retirement assets, and non-retirement investment accounts.
+                    </div>
+                    <FormattedNumberInput
+                      name="currentPortfolio"
+                      value={clientInfo.currentPortfolio}
+                      onChange={onClientChange}
+                      className="p-3 border rounded-lg w-full"
+                    />
+                  </div>
+                  <button
+                    type="button"
+                    onClick={onAddAccount}
+                    className="w-full flex items-center justify-center gap-1.5 px-3 py-1.5 text-xs text-slate-500 rounded border border-dashed border-slate-300 hover:border-emerald-400 hover:text-emerald-600 transition-colors"
+                  >
+                    <Settings className="w-3 h-3" /> Advanced — enter individual accounts
+                  </button>
+                </>
+              )}
               <div className="grid grid-cols-2 gap-4">
                 <div className="relative group">
                   <label className="block text-xs font-bold text-slate-500 uppercase mb-1 flex items-center gap-1">
@@ -203,20 +313,22 @@ export const AccumulationPage = ({
                     className="p-3 border rounded-lg w-full"
                   />
                 </div>
-                <div className="relative group">
-                  <label className="block text-xs font-bold text-slate-500 uppercase mb-1 flex items-center gap-1">
-                    Annual Savings <Info className="w-3 h-3 text-slate-400" />
-                  </label>
-                  <div className="absolute left-0 bottom-full mb-2 hidden group-hover:block w-64 bg-slate-800 text-white text-xs p-2 rounded shadow-lg z-10">
-                    Total yearly contributions to all retirement accounts (401k, IRA, Roth) plus after-tax savings and investment accounts.
+                {!(inputs.accounts && inputs.accounts.length > 0) && (
+                  <div className="relative group">
+                    <label className="block text-xs font-bold text-slate-500 uppercase mb-1 flex items-center gap-1">
+                      Annual Savings <Info className="w-3 h-3 text-slate-400" />
+                    </label>
+                    <div className="absolute left-0 bottom-full mb-2 hidden group-hover:block w-64 bg-slate-800 text-white text-xs p-2 rounded shadow-lg z-10">
+                      Total yearly contributions to all retirement accounts (401k, IRA, Roth) plus after-tax savings and investment accounts.
+                    </div>
+                    <FormattedNumberInput
+                      name="annualSavings"
+                      value={clientInfo.annualSavings}
+                      onChange={onClientChange}
+                      className="p-3 border rounded-lg w-full"
+                    />
                   </div>
-                  <FormattedNumberInput
-                    name="annualSavings"
-                    value={clientInfo.annualSavings}
-                    onChange={onClientChange}
-                    className="p-3 border rounded-lg w-full"
-                  />
-                </div>
+                )}
               </div>
               {/* Income Fields for Tax-Implied Spending */}
               <div className="grid grid-cols-2 gap-4">
@@ -267,15 +379,29 @@ export const AccumulationPage = ({
                     </select>
                   </div>
                   <div>
-                    <label className="block text-xs font-bold text-slate-500 uppercase mb-1">State Tax Rate (%)</label>
-                    <input
-                      type="number"
-                      step="0.1"
-                      name="stateRate"
-                      value={inputs.stateRate || 0}
-                      onChange={onInputChange}
+                    <label className="block text-xs font-bold text-slate-500 uppercase mb-1">State</label>
+                    <select
+                      name="stateCode"
+                      value={inputs.stateCode || ''}
+                      onChange={(e) => {
+                        const code = e.target.value;
+                        const data = STATE_TAX_DATA[code];
+                        onInputChange({ target: { name: 'stateCode', value: code, type: 'text' } });
+                        if (data) {
+                          onInputChange({ target: { name: 'stateRate', value: data.rate, type: 'number' } });
+                        }
+                      }}
                       className="p-3 border rounded-lg w-full text-sm"
-                    />
+                    >
+                      <option value="">Select state...</option>
+                      {Object.entries(STATE_TAX_DATA)
+                        .sort((a, b) => a[1].name.localeCompare(b[1].name))
+                        .map(([code, data]) => (
+                          <option key={code} value={code}>
+                            {data.name} ({data.rate === 0 ? 'No tax' : data.brackets ? `up to ${data.rate}%` : `${data.rate}% flat`})
+                          </option>
+                        ))}
+                    </select>
                   </div>
                 </div>
               )}

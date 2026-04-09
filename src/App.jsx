@@ -276,7 +276,7 @@ export default function BucketPortfolioBuilder() {
         nqQualifiedDividendPercent: s.inputs.nqQualifiedDividendPercent ?? 80,
         nqCapitalGainRate: s.inputs.nqCapitalGainRate > 10 ? 4 : (s.inputs.nqCapitalGainRate ?? 4),
         withdrawalOverrides: s.inputs.withdrawalOverrides || {},
-        accounts: s.inputs.accounts || [],
+        accounts: (s.inputs.accounts || []).map(a => ({ ...a, annualContribution: a.annualContribution || 0 })),
         stateCode: s.inputs.stateCode || '',
         // Migration defaults for life expectancy & survivor benefits
         expectedDeathAge: s.inputs.expectedDeathAge ?? 95,
@@ -390,7 +390,7 @@ export default function BucketPortfolioBuilder() {
   const handleToggleVa = (enabled) => setVaEnabled(enabled);
 
   // --- Calculations (using imported utilities) ---
-  const accumulationData = useMemo(() => calculateAccumulation(clientInfo, inputs.inflationRate, inputs.additionalIncomes), [clientInfo, inputs.inflationRate, inputs.additionalIncomes]);
+  const accumulationData = useMemo(() => calculateAccumulation(clientInfo, inputs.inflationRate, inputs.additionalIncomes, inputs.accounts), [clientInfo, inputs.inflationRate, inputs.additionalIncomes, inputs.accounts]);
 
   // Standard bucket calculations (no VA)
   const formulaBasePlan = useMemo(() => calculateBasePlan(inputs, assumptions, clientInfo), [inputs, assumptions, clientInfo]);
@@ -567,21 +567,35 @@ export default function BucketPortfolioBuilder() {
     }
   }, [di, optimizerRebalanceFreq, vaEnabled, vaInputs]);
 
+
   // Keep totalPortfolio in sync with accumulation data
-  const finalAccumulationBalance = accumulationData.length > 0 ? accumulationData[accumulationData.length - 1].balance : 0;
+  const finalAccumulationEntry = accumulationData.length > 0 ? accumulationData[accumulationData.length - 1] : null;
+  const finalAccumulationBalance = finalAccumulationEntry?.balance || 0;
 
   useEffect(() => {
     if (finalAccumulationBalance > 0) {
       setInputs(prev => {
-        // Don't override totalPortfolio when accounts are defined — accounts are the source of truth
-        if (prev.accounts && prev.accounts.length > 0) return prev;
+        // When accounts exist, derive percentages from per-account projected balances
+        if (prev.accounts && prev.accounts.length > 0 && finalAccumulationEntry?.accountProjections) {
+          const projections = finalAccumulationEntry.accountProjections;
+          const totals = { traditional: 0, roth: 0, nq: 0 };
+          projections.forEach(p => { totals[p.type] = (totals[p.type] || 0) + p.projected; });
+          const total = totals.traditional + totals.roth + totals.nq;
+          if (total > 0) {
+            const tradPct = Math.round((totals.traditional / total) * 100);
+            const rothPct = Math.round((totals.roth / total) * 100);
+            return { ...prev, totalPortfolio: Math.round(total), traditionalPercent: tradPct, rothPercent: rothPct, nqPercent: 100 - tradPct - rothPct };
+          }
+          return prev;
+        }
+        // Simple mode: sync total from aggregate balance
         if (prev.totalPortfolio !== finalAccumulationBalance) {
           return { ...prev, totalPortfolio: finalAccumulationBalance };
         }
         return prev;
       });
     }
-  }, [finalAccumulationBalance]);
+  }, [finalAccumulationBalance, finalAccumulationEntry]);
 
   // Auto-set SS start age to current age for clients over FRA (already collecting)
   useEffect(() => {
@@ -661,24 +675,12 @@ export default function BucketPortfolioBuilder() {
     });
   };
 
-  // Account CRUD handlers — grow balances to retirement, derive totalPortfolio and percentages
-  const recomputeFromAccounts = (accounts) => {
-    const yearsToRetirement = Math.max(0, (clientInfo.retirementAge || 65) - (clientInfo.currentAge || 65));
-    const growthRate = (clientInfo.expectedReturn || 0) / 100;
-
-    const totals = { traditional: 0, roth: 0, nq: 0 };
-    const currentTotals = { traditional: 0, roth: 0, nq: 0 };
-    accounts.forEach(a => {
-      const currentBal = a.balance || 0;
-      const projectedBal = yearsToRetirement > 0 ? currentBal * Math.pow(1 + growthRate, yearsToRetirement) : currentBal;
-      totals[a.type] = (totals[a.type] || 0) + projectedBal;
-      currentTotals[a.type] = (currentTotals[a.type] || 0) + currentBal;
-    });
-    const total = totals.traditional + totals.roth + totals.nq;
-    if (total === 0) return { totalPortfolio: 0, traditionalPercent: 0, rothPercent: 0, nqPercent: 0 };
-    const tradPct = Math.round((totals.traditional / total) * 100);
-    const rothPct = Math.round((totals.roth / total) * 100);
-    return { totalPortfolio: Math.round(total), traditionalPercent: tradPct, rothPercent: rothPct, nqPercent: 100 - tradPct - rothPct };
+  // Account CRUD helpers — sync currentPortfolio and annualSavings from accounts
+  // The accumulation engine projects growth to retirement; this just sets current values
+  const syncClientFromAccounts = (accounts) => {
+    const currentTotal = accounts.reduce((s, a) => s + (a.balance || 0), 0);
+    const totalContributions = accounts.reduce((s, a) => s + (a.annualContribution || 0), 0);
+    setClientInfo(prev => ({ ...prev, currentPortfolio: currentTotal, annualSavings: totalContributions }));
   };
 
   const handleAddAccount = () => {
@@ -689,9 +691,11 @@ export default function BucketPortfolioBuilder() {
         owner: 'client',
         type: 'traditional',
         subtype: 'ira',
-        balance: 0
+        balance: 0,
+        annualContribution: 0
       }];
-      return { ...prev, accounts: newAccounts, ...recomputeFromAccounts(newAccounts) };
+      syncClientFromAccounts(newAccounts);
+      return { ...prev, accounts: newAccounts };
     });
   };
 
@@ -700,30 +704,23 @@ export default function BucketPortfolioBuilder() {
       const newAccounts = prev.accounts.map(a => {
         if (a.id !== id) return a;
         const updated = { ...a, [field]: value };
-        // When type changes, auto-set subtype
         if (field === 'type') {
           updated.subtype = value === 'nq' ? 'brokerage' : 'ira';
         }
         return updated;
       });
-      return { ...prev, accounts: newAccounts, ...recomputeFromAccounts(newAccounts) };
+      syncClientFromAccounts(newAccounts);
+      return { ...prev, accounts: newAccounts };
     });
   };
 
   const handleRemoveAccount = (id) => {
     setInputs(prev => {
       const newAccounts = prev.accounts.filter(a => a.id !== id);
-      return { ...prev, accounts: newAccounts, ...recomputeFromAccounts(newAccounts) };
+      syncClientFromAccounts(newAccounts);
+      return { ...prev, accounts: newAccounts };
     });
   };
-
-  // Recompute projected portfolio when retirement age, current age, or expected return changes
-  useEffect(() => {
-    setInputs(prev => {
-      if (!prev.accounts || prev.accounts.length === 0) return prev;
-      return { ...prev, ...recomputeFromAccounts(prev.accounts) };
-    });
-  }, [clientInfo.currentAge, clientInfo.retirementAge, clientInfo.expectedReturn]);
 
   // Withdrawal Override Handler (per-age overrides)
   const handleWithdrawalOverrideChange = (age, overrideData) => {
@@ -1135,9 +1132,6 @@ export default function BucketPortfolioBuilder() {
         onRemoveCashFlowAdjustment={removeCashFlowAdjustment}
         onAccountSplitChange={handleAccountSplitChange}
         onWithdrawalOverrideChange={handleWithdrawalOverrideChange}
-        onAddAccount={handleAddAccount}
-        onUpdateAccount={handleUpdateAccount}
-        onRemoveAccount={handleRemoveAccount}
         onSetActiveTab={(tab) => {
           setActiveTab(tab);
           setAdvisorView('planning');
@@ -1163,6 +1157,9 @@ export default function BucketPortfolioBuilder() {
         onInputChange={handleInputChange}
         accumulationData={accumulationData}
         onProceed={proceedToArchitect}
+        onAddAccount={handleAddAccount}
+        onUpdateAccount={handleUpdateAccount}
+        onRemoveAccount={handleRemoveAccount}
       />
       </>
     );

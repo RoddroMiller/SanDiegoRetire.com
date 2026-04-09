@@ -647,11 +647,12 @@ export const calculateImpliedSpending = ({
  * @param {Array} additionalIncomes - Additional income streams including one-time events
  * @returns {Array} Array of yearly balance data points
  */
-export const calculateAccumulation = (clientInfo, inflationRate = 0, additionalIncomes = []) => {
+export const calculateAccumulation = (clientInfo, inflationRate = 0, additionalIncomes = [], accounts = []) => {
   const { currentAge, retirementAge, currentPortfolio, annualSavings, expectedReturn } = clientInfo;
   const years = Math.max(0, retirementAge - currentAge);
   const data = [];
-  let balance = currentPortfolio;
+  const growthRate = (expectedReturn || 0) / 100;
+  const inflRate = (inflationRate || 0) / 100;
 
   // Staggered retirement: calculate partner's income share for savings reduction
   const annualIncome = clientInfo.annualIncome || 0;
@@ -659,17 +660,75 @@ export const calculateAccumulation = (clientInfo, inflationRate = 0, additionalI
   const totalIncome = annualIncome + partnerAnnualIncome;
   const partnerRetirementAge = clientInfo.partnerRetirementAge || retirementAge;
 
+  // --- Advanced mode: per-account accumulation ---
+  if (accounts && accounts.length > 0) {
+    // Initialize per-account balances
+    const acctBalances = accounts.map(a => ({ ...a, projected: a.balance || 0 }));
+
+    for (let i = 0; i <= years; i++) {
+      const currentSimAge = currentAge + i;
+      const currentPartnerAge = (clientInfo.partnerAge || currentAge) + i;
+
+      // Add one-time events proportionally across accounts
+      additionalIncomes.forEach(income => {
+        if (income.isOneTime && income.startAge === currentSimAge && currentSimAge < retirementAge) {
+          let amount = income.amount;
+          if (income.inflationAdjusted) amount *= Math.pow(1 + inflRate, i);
+          const totalBal = acctBalances.reduce((s, a) => s + a.projected, 0);
+          if (totalBal > 0) {
+            acctBalances.forEach(a => { a.projected += amount * (a.projected / totalBal); });
+          } else if (acctBalances.length > 0) {
+            acctBalances[acctBalances.length - 1].projected += amount;
+          }
+        }
+      });
+
+      const totalBalance = acctBalances.reduce((s, a) => s + a.projected, 0);
+
+      // Build per-account projected balances snapshot for the final year
+      const accountProjections = i === years ? acctBalances.map(a => ({
+        id: a.id, type: a.type, owner: a.owner, projected: Math.round(a.projected)
+      })) : undefined;
+
+      data.push({ age: currentSimAge, balance: Math.round(totalBalance), accountProjections });
+
+      if (i < years) {
+        // Determine staggered retirement savings reduction
+        const partnerRetired = totalIncome > 0 && partnerAnnualIncome > 0 &&
+          currentPartnerAge >= partnerRetirementAge && currentSimAge < retirementAge;
+        const partnerIncomeShare = partnerRetired ? partnerAnnualIncome / totalIncome : 0;
+
+        acctBalances.forEach(a => {
+          let contribution = a.annualContribution || 0;
+          // Stop partner account contributions when partner retires
+          if (a.owner === 'partner' && partnerRetired) {
+            contribution = 0;
+          } else if (partnerRetired && a.owner === 'client') {
+            // Client accounts keep full contribution
+          }
+          // Inflation-adjust contributions
+          const adjContribution = contribution * Math.pow(1 + inflRate, i);
+          a.projected += adjContribution;
+          a.projected *= (1 + growthRate);
+        });
+      }
+    }
+    return data;
+  }
+
+  // --- Simple mode: single portfolio balance ---
+  let balance = currentPortfolio;
+
   for (let i = 0; i <= years; i++) {
     const currentSimAge = currentAge + i;
     const currentPartnerAge = (clientInfo.partnerAge || currentAge) + i;
 
     // Add one-time events that occur at this age BEFORE retirement
-    // Events AT retirement age are handled in the distribution phase
     additionalIncomes.forEach(income => {
       if (income.isOneTime && income.startAge === currentSimAge && currentSimAge < retirementAge) {
         let amount = income.amount;
         if (income.inflationAdjusted) {
-          amount *= Math.pow(1 + (inflationRate / 100), i);
+          amount *= Math.pow(1 + inflRate, i);
         }
         balance += amount;
       }
@@ -685,9 +744,9 @@ export const calculateAccumulation = (clientInfo, inflationRate = 0, additionalI
         effectiveSavings = annualSavings * (1 - partnerIncomeShare);
       }
 
-      const inflationAdjustedSavings = effectiveSavings * Math.pow(1 + (inflationRate / 100), i);
+      const inflationAdjustedSavings = effectiveSavings * Math.pow(1 + inflRate, i);
       balance += inflationAdjustedSavings;
-      balance *= (1 + (expectedReturn / 100));
+      balance *= (1 + growthRate);
     }
   }
   return data;
@@ -1229,35 +1288,50 @@ export const runSimulation = (basePlan, assumptions, inputs, rebalanceFreq, isMo
         const filingStatus = (inputs.filingStatus === 'married' && !bothAliveForTax) ? 'single' : (inputs.filingStatus || 'married');
         const stateRate = inputs.stateRate || 0;
 
-        // Iterate to convergence (tax depends on withdrawal, withdrawal depends on tax)
+        // Iterate to convergence with balance constraints + RMD enforcement
+        // Tax depends on withdrawal amounts, withdrawal depends on tax, and both are
+        // constrained by available account balances
         let withdrawal = adjustedGap;
-        for (let taxIter = 0; taxIter < 5; taxIter++) {
-          // Compute traditional withdrawal — enforce RMD floor
-          let tradWithdrawal = withdrawal * traditionalPct;
-          let rothWithdrawal = withdrawal * rothPct;
-          let nqWithdrawalAmt = withdrawal * nqPct;
+        let finalTradWithdrawal = 0, finalRothWithdrawal = 0, finalNqWithdrawal = 0;
 
-          if (totalRMD > tradWithdrawal) {
-            // RMD forces a higher traditional withdrawal
-            const rmdForce = totalRMD - tradWithdrawal;
-            tradWithdrawal = totalRMD;
-            // Reduce Roth and NQ proportionally to compensate
-            const nonTradTotal = rothWithdrawal + nqWithdrawalAmt;
-            if (nonTradTotal > rmdForce) {
-              const reductionRatio = (nonTradTotal - rmdForce) / nonTradTotal;
-              rothWithdrawal *= reductionRatio;
-              nqWithdrawalAmt *= reductionRatio;
-            } else {
-              rothWithdrawal = 0;
-              nqWithdrawalAmt = 0;
-            }
+        for (let taxIter = 0; taxIter < 6; taxIter++) {
+          // Step 1: Split by percentage
+          let tradW = withdrawal * traditionalPct;
+          let rothW = withdrawal * rothPct;
+          let nqW = withdrawal * nqPct;
+
+          // Step 2: Enforce RMD floor on Traditional
+          if (totalRMD > tradW) {
+            const rmdForce = totalRMD - tradW;
+            tradW = totalRMD;
+            const nonTrad = rothW + nqW;
+            if (nonTrad > rmdForce) {
+              const ratio = (nonTrad - rmdForce) / nonTrad;
+              rothW *= ratio;
+              nqW *= ratio;
+            } else { rothW = 0; nqW = 0; }
           }
 
+          // Step 3: Cap each at available account balance, redistribute overflow
+          let ovf = 0;
+          if (tradW > traditionalBalance) { ovf += tradW - traditionalBalance; tradW = traditionalBalance; }
+          if (rothW > rothBalance) { ovf += rothW - rothBalance; rothW = rothBalance; }
+          if (nqW > nqAccountBalance) { ovf += nqW - nqAccountBalance; nqW = nqAccountBalance; }
+          // Redistribute: Traditional → NQ → Roth (least tax-advantaged first)
+          if (ovf > 0) { const add = Math.min(ovf, traditionalBalance - tradW); tradW += add; ovf -= add; }
+          if (ovf > 0) { const add = Math.min(ovf, nqAccountBalance - nqW); nqW += add; ovf -= add; }
+          if (ovf > 0) { const add = Math.min(ovf, rothBalance - rothW); rothW += add; ovf -= add; }
+
+          finalTradWithdrawal = tradW;
+          finalRothWithdrawal = rothW;
+          finalNqWithdrawal = nqW;
+
+          // Step 4: Compute tax on the actual constrained split
           taxData = calculateAnnualTax({
             ssIncome,
             pensionIncome: pensionIncome + (vaIncome || 0),
-            traditionalWithdrawal: tradWithdrawal,
-            rothWithdrawal: rothWithdrawal,
+            traditionalWithdrawal: tradW,
+            rothWithdrawal: rothW,
             nqTaxableGain: nqAnnualCapGains,
             nqQualifiedDividends,
             nqOrdinaryDividends,
@@ -1271,29 +1345,12 @@ export const runSimulation = (basePlan, assumptions, inputs, rebalanceFreq, isMo
         }
         totalWithdrawal = withdrawal;
 
-        // Final withdrawal split with RMD enforcement
-        let finalTradWithdrawal = withdrawal * traditionalPct;
-        let finalRothWithdrawal = withdrawal * rothPct;
-        let finalNqWithdrawal = withdrawal * nqPct;
-
-        if (totalRMD > finalTradWithdrawal) {
-          const rmdForce = totalRMD - finalTradWithdrawal;
-          finalTradWithdrawal = totalRMD;
-          const nonTrad = finalRothWithdrawal + finalNqWithdrawal;
-          if (nonTrad > rmdForce) {
-            const ratio = (nonTrad - rmdForce) / nonTrad;
-            finalRothWithdrawal *= ratio;
-            finalNqWithdrawal *= ratio;
-          } else {
-            finalRothWithdrawal = 0;
-            finalNqWithdrawal = 0;
-          }
-          // If RMD exceeds total spending need + tax, excess goes to NQ
+        // Handle RMD excess (when RMD > total spending need, excess reinvested to NQ)
+        if (totalRMD > 0) {
           const totalNeeded = adjustedGap + taxData.totalTax;
           if (totalRMD > totalNeeded && totalNeeded > 0) {
             rmdExcess = totalRMD - totalNeeded;
-            // The full RMD is withdrawn from traditional but excess reinvested to NQ
-            totalWithdrawal = totalRMD; // We withdraw the full RMD
+            totalWithdrawal = Math.max(totalWithdrawal, totalRMD);
           }
         }
 
@@ -1976,5 +2033,135 @@ export const runOptimizedSimulation = (allocation, assumptions, inputs, clientIn
     successRate: ((iterations - failureCount) / iterations) * 100,
     medianLegacy: Math.round(medianLegacy),
     allocation
+  };
+};
+
+// ============================================
+// LIQUIDATION STRATEGY OPTIMIZER
+// ============================================
+
+/**
+ * Optimize the liquidation strategy by finding the best static Trad/Roth/NQ distribution
+ * split that maximizes after-tax legacy (what heirs actually receive).
+ *
+ * Sweeps a grid of static percentage splits, runs the full simulation for each,
+ * scores by after-tax legacy accounting for SECURE Act heir taxes on Traditional.
+ * The simulation engine handles tax convergence, RMD enforcement, and balance tracking.
+ */
+export const optimizeLiquidationStrategy = (basePlan, assumptions, inputs, clientInfo, rebalanceFreq = 0, rebalanceTargets = null) => {
+  if (!inputs.taxEnabled) return null;
+
+  // Heir tax assumptions (SECURE Act: heirs distribute inherited Traditional over 10 years)
+  const heirFederalRate = 0.24;
+  const stateData = inputs.stateCode ? STATE_TAX_DATA[inputs.stateCode] : null;
+  const heirStateRate = stateData ? stateData.rate / 100 : (inputs.stateRate || 0) / 100;
+  const heirTotalRate = heirFederalRate + heirStateRate;
+
+  // Score a static split by running the full simulation
+  const scoreSplit = (tradPct, rothPct, nqPct) => {
+    const testInputs = { ...inputs, traditionalPercent: tradPct, rothPercent: rothPct, nqPercent: nqPct, withdrawalOverrides: {} };
+    const projection = runSimulation(basePlan, assumptions, testInputs, rebalanceFreq, false, null, rebalanceTargets);
+    const last = projection.length > 0 ? projection[projection.length - 1] : {};
+    const grossLegacy = last.total || 0;
+    const tradLegacy = last.traditionalBalanceDetail || 0;
+    const rothLegacy = last.rothBalanceDetail || 0;
+    const nqLegacy = last.nqBalanceDetail || 0;
+    const heirTax = tradLegacy * heirTotalRate;
+    const afterTaxLegacy = grossLegacy - heirTax;
+    const lifetimeTax = projection.reduce((s, r) => s + (r.totalTax || 0), 0);
+    const depleted = projection.some(r => r.total <= 0);
+    const avgRate = projection.length > 0
+      ? (projection.reduce((s, r) => s + parseFloat(r.effectiveRate || 0), 0) / projection.length).toFixed(1)
+      : '0.0';
+    return {
+      tradPct, rothPct, nqPct,
+      projection, grossLegacy, afterTaxLegacy, lifetimeTax, depleted, avgRate,
+      heirTax, tradLegacy, rothLegacy, nqLegacy,
+      score: depleted ? -1 : afterTaxLegacy
+    };
+  };
+
+  // --- Generate candidate splits in 5% increments ---
+  // Priority logic: Traditional + NQ exhaust first, Roth preserved
+  const candidates = [];
+  const step = 5;
+  for (let trad = 0; trad <= 100; trad += step) {
+    for (let nq = 0; nq <= 100 - trad; nq += step) {
+      const roth = 100 - trad - nq;
+      candidates.push({ trad, roth, nq });
+    }
+  }
+
+  // Score all candidates
+  let best = null;
+  const allResults = [];
+
+  for (const c of candidates) {
+    const result = scoreSplit(c.trad, c.roth, c.nq);
+    allResults.push(result);
+    if (!best || result.score > best.score) {
+      best = result;
+    }
+  }
+
+  // Score current strategy for comparison
+  const current = scoreSplit(inputs.traditionalPercent ?? 60, inputs.rothPercent ?? 25, inputs.nqPercent ?? 15);
+
+  // If current is already optimal, note it
+  const isCurrentOptimal = current.score >= best.score;
+  if (isCurrentOptimal) best = current;
+
+  // Top 10 strategies for the comparison table
+  const topStrategies = allResults
+    .filter(r => !r.depleted)
+    .sort((a, b) => b.afterTaxLegacy - a.afterTaxLegacy)
+    .slice(0, 10);
+
+  // Build year-by-year detail from the winning projection
+  const yearDetails = best.projection.map(row => ({
+    age: row.age,
+    tradPct: row.traditionalPctUsed || best.tradPct,
+    rothPct: row.rothPctUsed || best.rothPct,
+    nqPct: row.nqPctUsed || best.nqPct,
+    distribution: row.distribution,
+    totalTax: row.totalTax || 0,
+    effectiveRate: row.effectiveRate || '0.0',
+    rmd: row.rmdAmount || 0,
+    tradBalance: row.traditionalBalanceDetail || 0,
+    rothBalance: row.rothBalanceDetail || 0,
+    nqBalance: row.nqBalanceDetail || 0
+  }));
+
+  return {
+    optimizedSplit: { tradPct: best.tradPct, rothPct: best.rothPct, nqPct: best.nqPct },
+    optimizedProjection: best.projection,
+    currentProjection: current.projection,
+    yearDetails,
+    topStrategies,
+    isCurrentOptimal,
+    summary: {
+      currentLifetimeTax: current.lifetimeTax,
+      optimizedLifetimeTax: best.lifetimeTax,
+      taxSavings: current.lifetimeTax - best.lifetimeTax,
+      currentLegacy: current.grossLegacy,
+      optimizedLegacy: best.grossLegacy,
+      legacyImprovement: best.grossLegacy - current.grossLegacy,
+      currentAvgRate: current.avgRate,
+      optimizedAvgRate: best.avgRate,
+      // After-tax legacy (optimization target)
+      currentAfterTaxLegacy: Math.round(current.afterTaxLegacy),
+      optimizedAfterTaxLegacy: Math.round(best.afterTaxLegacy),
+      afterTaxLegacyImprovement: Math.round(best.afterTaxLegacy - current.afterTaxLegacy),
+      heirTaxRate: Math.round(heirTotalRate * 100),
+      // Legacy composition
+      currentLegacyBreakdown: { traditional: Math.round(current.tradLegacy), roth: Math.round(current.rothLegacy), nq: Math.round(current.nqLegacy) },
+      optimizedLegacyBreakdown: { traditional: Math.round(best.tradLegacy), roth: Math.round(best.rothLegacy), nq: Math.round(best.nqLegacy) },
+      // Total family tax burden
+      currentTotalTaxBurden: current.lifetimeTax + Math.round(current.heirTax),
+      optimizedTotalTaxBurden: best.lifetimeTax + Math.round(best.heirTax),
+      totalTaxSavings: (current.lifetimeTax + Math.round(current.heirTax)) - (best.lifetimeTax + Math.round(best.heirTax)),
+      // Current vs optimized split
+      currentSplit: { tradPct: inputs.traditionalPercent ?? 60, rothPct: inputs.rothPercent ?? 25, nqPct: inputs.nqPercent ?? 15 }
+    }
   };
 };

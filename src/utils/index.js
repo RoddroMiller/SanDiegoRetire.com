@@ -16,7 +16,8 @@ export {
   getInflationAdjustedBrackets,
   getInflationAdjustedDeduction,
   calculateRMD,
-  STATE_TAX_DATA
+  STATE_TAX_DATA,
+  optimizeLiquidationStrategy
 } from './calculations';
 export {
   calculateSSAnalysis,
