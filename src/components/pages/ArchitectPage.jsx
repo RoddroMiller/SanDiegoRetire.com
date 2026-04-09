@@ -1246,7 +1246,7 @@ export const ArchitectPage = ({
 
         {/* Breakeven Chart */}
         <div className="border border-slate-200 rounded-lg p-4">
-          <h3 className="font-bold text-base text-slate-800 mb-2">Breakeven Analysis (Cumulative Benefits)</h3>
+          <h3 className="font-bold text-base text-slate-800 mb-2">Breakeven Analysis (Cumulative SS After Earnings Test)</h3>
           <LineChart width={670} height={160} data={ssAnalysis.breakevenData}>
             <CartesianGrid strokeDasharray="3 3" vertical={false} />
             <XAxis dataKey="age" tick={{ fontSize: 10 }} />
@@ -3036,7 +3036,7 @@ const SSOptimizationTab = ({ clientInfo, inputs, ssAnalysis, clientOutcomes, cli
 
       {/* Breakeven Chart */}
       <div className="border-t pt-8">
-        <h4 className="font-bold text-slate-800 mb-4">Breakeven Analysis (Cumulative Benefits)</h4>
+        <h4 className="font-bold text-slate-800 mb-4">Breakeven Analysis (Cumulative SS After Earnings Test)</h4>
         <div className="h-64 w-full">
           <ResponsiveContainer width="100%" height="100%">
             <LineChart data={ssAnalysis.breakevenData}>

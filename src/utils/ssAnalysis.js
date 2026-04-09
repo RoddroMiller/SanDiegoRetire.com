@@ -3,7 +3,7 @@
  * Calculates optimal claiming strategies and breakeven analysis
  */
 
-import { getAdjustedSS, calculateWeightedReturn } from './calculations';
+import { getAdjustedSS, calculateWeightedReturn, applySSEarningsTest, calculateAnnualTax } from './calculations';
 
 /**
  * Calculate expense inflation factor for a given year (uses personal inflation rate)
@@ -80,74 +80,116 @@ export const calculateSSAnalysis = ({ inputs, clientInfo, assumptions, targetMax
 
   const weightedReturn = calculateWeightedReturn(assumptions);
 
-  // Calculate outcome for each claiming strategy
+  // Determine employment income for earnings test
+  const partnerAnnualIncome = clientInfo.partnerAnnualIncome || 0;
+  const partnerRetAge = clientInfo.partnerRetirementAge || clientInfo.retirementAge;
+  const filingStatus = inputs.filingStatus || 'married';
+  const stateRate = inputs.stateRate || 0;
+  const stateCode = inputs.stateCode || '';
+
+  // Calculate outcome for each claiming strategy — with earnings test and taxes
+  const strategyProjections = {};
+
   const outcomes = strategies.map(startAge => {
     let balance = inputs.totalPortfolio;
+    let cumulativeSSAfterTax = 0;
+    const annualData = [];
 
     for (let age = clientInfo.retirementAge; age <= targetMaxPortfolioAge; age++) {
       balance *= (1 + weightedReturn);
       const yearIndex = age - clientInfo.retirementAge;
       const currentPartnerAge = clientInfo.partnerAge + (age - clientInfo.currentAge);
-      // Expenses use personal inflation rate
       const expenseInflationFactor = getExpenseInflationFactor(inputs.personalInflationRate, yearIndex);
-      // Income uses full inflation rate
       const incomeInflationFactor = getIncomeInflationFactor(inputs.inflationRate, yearIndex);
-      // Death age tracking
       const clientExpectedDeathAge = inputs.expectedDeathAge || 95;
       const partnerExpectedDeathAge = inputs.partnerExpectedDeathAge || 95;
       const clientAlive = age < clientExpectedDeathAge;
       const partnerAlive = clientInfo.isMarried && currentPartnerAge < partnerExpectedDeathAge;
 
-      // Spending reduction after first death
       const bothAlive = clientAlive && partnerAlive;
       const reductionPct = (clientInfo.isMarried && !bothAlive && (clientAlive || partnerAlive))
         ? (inputs.spendingReductionAtFirstDeath || 0) / 100
         : 0;
       const expense = inputs.monthlySpending * 12 * expenseInflationFactor * (1 - reductionPct);
 
-      let income = 0;
+      // Employment income (for earnings test)
+      let employmentIncome = 0;
+      if (clientInfo.isMarried && partnerAlive && partnerAnnualIncome > 0 && currentPartnerAge < partnerRetAge) {
+        employmentIncome = partnerAnnualIncome * incomeInflationFactor;
+      }
 
-      // Client SS income (variable based on strategy)
+      // Client SS with earnings test
+      let ssIncome = 0;
       const effectiveSSStartAge = startAge >= 67 ? startAge : Math.max(startAge, clientInfo.retirementAge);
-      const clientSSBenefit = getAdjustedSS(inputs.ssPIA, startAge) * 12 * incomeInflationFactor;
-      const partnerSSBenefit = clientInfo.isMarried ? getAdjustedSS(inputs.partnerSSPIA, inputs.partnerSSStartAge) * 12 * incomeInflationFactor : 0;
+      const clientSSFull = getAdjustedSS(inputs.ssPIA, startAge) * 12 * incomeInflationFactor;
+      const partnerSSFull = clientInfo.isMarried ? getAdjustedSS(inputs.partnerSSPIA, inputs.partnerSSStartAge) * 12 * incomeInflationFactor : 0;
+
+      // Apply earnings test
+      const clientSSAfterET = applySSEarningsTest(clientSSFull, 0, age, incomeInflationFactor);
+      const partnerSSAfterET = applySSEarningsTest(partnerSSFull, employmentIncome, currentPartnerAge, incomeInflationFactor);
 
       if (clientAlive && age >= effectiveSSStartAge) {
-        income += clientSSBenefit;
+        ssIncome += clientSSAfterET;
       }
       if (partnerAlive && currentPartnerAge >= inputs.partnerSSStartAge) {
-        income += partnerSSBenefit;
+        ssIncome += partnerSSAfterET;
       }
-      // Survivor SS: surviving spouse gets the higher benefit
+      // Survivor SS
       if (clientInfo.isMarried) {
-        if (!clientAlive && partnerAlive && currentPartnerAge >= inputs.partnerSSStartAge && clientSSBenefit > partnerSSBenefit) {
-          income += (clientSSBenefit - partnerSSBenefit);
+        if (!clientAlive && partnerAlive && currentPartnerAge >= inputs.partnerSSStartAge && clientSSFull > partnerSSFull) {
+          const survivorBenefit = applySSEarningsTest(clientSSFull, employmentIncome, currentPartnerAge, incomeInflationFactor);
+          ssIncome += (survivorBenefit - partnerSSAfterET);
         }
-        if (clientAlive && !partnerAlive && age >= effectiveSSStartAge && partnerSSBenefit > clientSSBenefit) {
-          income += (partnerSSBenefit - clientSSBenefit);
+        if (clientAlive && !partnerAlive && age >= effectiveSSStartAge && partnerSSFull > clientSSFull) {
+          const survivorBenefit = applySSEarningsTest(partnerSSFull, 0, age, incomeInflationFactor);
+          ssIncome += (survivorBenefit - clientSSAfterET);
         }
       }
 
-      // Pension income with survivor benefits
+      let pensionIncome = 0;
       if (clientAlive && age >= inputs.pensionStartAge) {
-        income += inputs.monthlyPension * 12 * incomeInflationFactor;
+        pensionIncome += inputs.monthlyPension * 12 * (inputs.pensionCOLA ? incomeInflationFactor : 1);
       } else if (!clientAlive && partnerAlive && (inputs.pensionSurvivorBenefitPct || 0) > 0 && age >= inputs.pensionStartAge) {
-        income += inputs.monthlyPension * (inputs.pensionSurvivorBenefitPct / 100) * 12 * incomeInflationFactor;
+        pensionIncome += inputs.monthlyPension * (inputs.pensionSurvivorBenefitPct / 100) * 12 * (inputs.pensionCOLA ? incomeInflationFactor : 1);
       }
       if (partnerAlive && inputs.partnerMonthlyPension > 0 && currentPartnerAge >= (inputs.partnerPensionStartAge || 65)) {
-        income += inputs.partnerMonthlyPension * 12 * incomeInflationFactor;
+        pensionIncome += inputs.partnerMonthlyPension * 12 * (inputs.partnerPensionCOLA ? incomeInflationFactor : 1);
       } else if (!partnerAlive && clientAlive && (inputs.partnerPensionSurvivorBenefitPct || 0) > 0 && inputs.partnerMonthlyPension > 0 && currentPartnerAge >= (inputs.partnerPensionStartAge || 65)) {
-        income += inputs.partnerMonthlyPension * (inputs.partnerPensionSurvivorBenefitPct / 100) * 12 * incomeInflationFactor;
+        pensionIncome += inputs.partnerMonthlyPension * (inputs.partnerPensionSurvivorBenefitPct / 100) * 12 * (inputs.partnerPensionCOLA ? incomeInflationFactor : 1);
       }
 
-      // Additional income streams (recurring only - one-time adds to portfolio)
       const additionalIncomeResult = calculateAdditionalIncome(inputs.additionalIncomes || [], age, currentPartnerAge, incomeInflationFactor);
-      income += additionalIncomeResult.income;
+      const otherIncome = additionalIncomeResult.income;
       balance += additionalIncomeResult.oneTimeContributions;
 
-      balance -= Math.max(0, expense - income);
+      const totalIncome = ssIncome + pensionIncome + otherIncome + employmentIncome;
+      const gap = Math.max(0, expense - totalIncome);
+
+      // Estimate tax on the withdrawal (simplified — use traditional % for ordinary income estimate)
+      let tax = 0;
+      if (inputs.taxEnabled && gap > 0) {
+        const tradPct = (inputs.traditionalPercent ?? 60) / 100;
+        const effectiveFilingStatus = (filingStatus === 'married' && !bothAlive) ? 'single' : filingStatus;
+        const taxResult = calculateAnnualTax({
+          ssIncome, pensionIncome, traditionalWithdrawal: gap * tradPct,
+          rothWithdrawal: 0, nqTaxableGain: 0, nqQualifiedDividends: 0, nqOrdinaryDividends: 0,
+          otherIncome, employmentIncome
+        }, { filingStatus: effectiveFilingStatus, stateRate, stateCode }, age >= 65);
+        tax = taxResult.totalTax;
+      }
+
+      balance -= (gap + tax);
+
+      // Track cumulative after-tax SS received (for breakeven chart)
+      // The "value" of SS in a given year = the net portfolio impact of having SS
+      // (SS income received minus additional taxes triggered by that SS income)
+      cumulativeSSAfterTax *= (1 + weightedReturn); // Grow accumulated value
+      cumulativeSSAfterTax += ssIncome; // Add this year's SS received
+
+      annualData.push({ age, ssIncome: Math.round(ssIncome), cumulativeSSAfterTax: Math.round(cumulativeSSAfterTax) });
     }
 
+    strategyProjections[startAge] = annualData;
     return { age: startAge, balance: Math.max(0, balance) };
   });
 
@@ -156,8 +198,18 @@ export const calculateSSAnalysis = ({ inputs, clientInfo, assumptions, targetMax
     (prev.balance > current.balance) ? prev : current
   );
 
-  // Calculate breakeven data for comparison chart
-  const breakevenData = calculateBreakevenData(inputs.ssPIA, inputs.ssReinvestRate);
+  // Build breakeven data from actual simulation projections
+  const breakevenData = [];
+  const maxAge = targetMaxPortfolioAge;
+  for (let age = 60; age <= maxAge; age++) {
+    const point = { age };
+    strategies.forEach(startAge => {
+      const proj = strategyProjections[startAge];
+      const entry = proj?.find(d => d.age === age);
+      point[`claim${startAge}`] = entry ? entry.cumulativeSSAfterTax : 0;
+    });
+    breakevenData.push(point);
+  }
 
   return { winner, outcomes, breakevenData };
 };
@@ -184,7 +236,13 @@ export const calculateSSPartnerAnalysis = ({ inputs, clientInfo, assumptions, ta
 
   const weightedReturn = calculateWeightedReturn(assumptions);
 
-  // Calculate outcome for each partner claiming strategy
+  const partnerAnnualIncome = clientInfo.partnerAnnualIncome || 0;
+  const partnerRetAge = clientInfo.partnerRetirementAge || clientInfo.retirementAge;
+  const filingStatus = inputs.filingStatus || 'married';
+  const stateRate = inputs.stateRate || 0;
+  const stateCode = inputs.stateCode || '';
+
+  // Calculate outcome for each partner claiming strategy — with earnings test and taxes
   const outcomes = strategies.map(pStartAge => {
     let balance = inputs.totalPortfolio;
 
@@ -192,70 +250,89 @@ export const calculateSSPartnerAnalysis = ({ inputs, clientInfo, assumptions, ta
       balance *= (1 + weightedReturn);
       const yearIndex = age - clientInfo.retirementAge;
       const currentPartnerAge = clientInfo.partnerAge + (age - clientInfo.currentAge);
-      // Expenses use personal inflation rate
       const expenseInflationFactor = getExpenseInflationFactor(inputs.personalInflationRate, yearIndex);
-      // Income uses full inflation rate
       const incomeInflationFactor = getIncomeInflationFactor(inputs.inflationRate, yearIndex);
-      // Death age tracking
       const clientExpectedDeathAge = inputs.expectedDeathAge || 95;
       const partnerExpectedDeathAge = inputs.partnerExpectedDeathAge || 95;
       const clientAlive = age < clientExpectedDeathAge;
       const partnerAlive = currentPartnerAge < partnerExpectedDeathAge;
 
-      // Spending reduction after first death
       const bothAlive = clientAlive && partnerAlive;
       const reductionPct = (!bothAlive && (clientAlive || partnerAlive))
         ? (inputs.spendingReductionAtFirstDeath || 0) / 100
         : 0;
       const expense = inputs.monthlySpending * 12 * expenseInflationFactor * (1 - reductionPct);
 
-      let income = 0;
+      // Employment income for earnings test
+      let employmentIncome = 0;
+      if (partnerAlive && partnerAnnualIncome > 0 && currentPartnerAge < partnerRetAge) {
+        employmentIncome = partnerAnnualIncome * incomeInflationFactor;
+      }
 
-      // Client SS income (fixed at optimal age from client analysis)
+      let ssIncome = 0;
+      // Client SS (fixed at optimal age) with earnings test
       const effectiveClientSSStartAge = clientSSWinner.age >= 67 ? clientSSWinner.age : Math.max(clientSSWinner.age, clientInfo.retirementAge);
-      const clientSSBenefit = getAdjustedSS(inputs.ssPIA, clientSSWinner.age) * 12 * incomeInflationFactor;
+      const clientSSFull = getAdjustedSS(inputs.ssPIA, clientSSWinner.age) * 12 * incomeInflationFactor;
+      const clientSSAfterET = applySSEarningsTest(clientSSFull, 0, age, incomeInflationFactor);
       if (clientAlive && age >= effectiveClientSSStartAge) {
-        income += clientSSBenefit;
+        ssIncome += clientSSAfterET;
       }
 
-      // Partner SS income (variable based on strategy)
+      // Partner SS (variable) with earnings test
       const effectivePartnerSSStartAge = pStartAge >= 67 ? pStartAge : Math.max(pStartAge, clientInfo.partnerRetirementAge);
-      const partnerSSBenefit = getAdjustedSS(inputs.partnerSSPIA, pStartAge) * 12 * incomeInflationFactor;
+      const partnerSSFull = getAdjustedSS(inputs.partnerSSPIA, pStartAge) * 12 * incomeInflationFactor;
+      const partnerSSAfterET = applySSEarningsTest(partnerSSFull, employmentIncome, currentPartnerAge, incomeInflationFactor);
       if (partnerAlive && currentPartnerAge >= effectivePartnerSSStartAge) {
-        income += partnerSSBenefit;
+        ssIncome += partnerSSAfterET;
       }
-      // Survivor SS: surviving spouse gets the higher benefit
-      if (!clientAlive && partnerAlive && currentPartnerAge >= effectivePartnerSSStartAge && clientSSBenefit > partnerSSBenefit) {
-        income += (clientSSBenefit - partnerSSBenefit);
+      // Survivor SS
+      if (!clientAlive && partnerAlive && currentPartnerAge >= effectivePartnerSSStartAge && clientSSFull > partnerSSFull) {
+        const survivorBenefit = applySSEarningsTest(clientSSFull, employmentIncome, currentPartnerAge, incomeInflationFactor);
+        ssIncome += (survivorBenefit - partnerSSAfterET);
       }
-      if (clientAlive && !partnerAlive && age >= effectiveClientSSStartAge && partnerSSBenefit > clientSSBenefit) {
-        income += (partnerSSBenefit - clientSSBenefit);
+      if (clientAlive && !partnerAlive && age >= effectiveClientSSStartAge && partnerSSFull > clientSSFull) {
+        const survivorBenefit = applySSEarningsTest(partnerSSFull, 0, age, incomeInflationFactor);
+        ssIncome += (survivorBenefit - clientSSAfterET);
       }
 
-      // Pension income with survivor benefits
+      let pensionIncome = 0;
       if (clientAlive && age >= inputs.pensionStartAge) {
-        income += inputs.monthlyPension * 12 * incomeInflationFactor;
+        pensionIncome += inputs.monthlyPension * 12 * (inputs.pensionCOLA ? incomeInflationFactor : 1);
       } else if (!clientAlive && partnerAlive && (inputs.pensionSurvivorBenefitPct || 0) > 0 && age >= inputs.pensionStartAge) {
-        income += inputs.monthlyPension * (inputs.pensionSurvivorBenefitPct / 100) * 12 * incomeInflationFactor;
+        pensionIncome += inputs.monthlyPension * (inputs.pensionSurvivorBenefitPct / 100) * 12 * (inputs.pensionCOLA ? incomeInflationFactor : 1);
       }
       if (partnerAlive && inputs.partnerMonthlyPension > 0 && currentPartnerAge >= (inputs.partnerPensionStartAge || 65)) {
-        income += inputs.partnerMonthlyPension * 12 * incomeInflationFactor;
+        pensionIncome += inputs.partnerMonthlyPension * 12 * (inputs.partnerPensionCOLA ? incomeInflationFactor : 1);
       } else if (!partnerAlive && clientAlive && (inputs.partnerPensionSurvivorBenefitPct || 0) > 0 && inputs.partnerMonthlyPension > 0 && currentPartnerAge >= (inputs.partnerPensionStartAge || 65)) {
-        income += inputs.partnerMonthlyPension * (inputs.partnerPensionSurvivorBenefitPct / 100) * 12 * incomeInflationFactor;
+        pensionIncome += inputs.partnerMonthlyPension * (inputs.partnerPensionSurvivorBenefitPct / 100) * 12 * (inputs.partnerPensionCOLA ? incomeInflationFactor : 1);
       }
 
-      // Additional income streams (recurring only - one-time adds to portfolio)
       const additionalIncomeResult = calculateAdditionalIncome(inputs.additionalIncomes || [], age, currentPartnerAge, incomeInflationFactor);
-      income += additionalIncomeResult.income;
+      const otherIncome = additionalIncomeResult.income;
       balance += additionalIncomeResult.oneTimeContributions;
 
-      balance -= Math.max(0, expense - income);
+      const totalIncome = ssIncome + pensionIncome + otherIncome + employmentIncome;
+      const gap = Math.max(0, expense - totalIncome);
+
+      // Tax estimate
+      let tax = 0;
+      if (inputs.taxEnabled && gap > 0) {
+        const tradPct = (inputs.traditionalPercent ?? 60) / 100;
+        const effectiveFilingStatus = (filingStatus === 'married' && !bothAlive) ? 'single' : filingStatus;
+        const taxResult = calculateAnnualTax({
+          ssIncome, pensionIncome, traditionalWithdrawal: gap * tradPct,
+          rothWithdrawal: 0, nqTaxableGain: 0, nqQualifiedDividends: 0, nqOrdinaryDividends: 0,
+          otherIncome, employmentIncome
+        }, { filingStatus: effectiveFilingStatus, stateRate, stateCode }, age >= 65);
+        tax = taxResult.totalTax;
+      }
+
+      balance -= (gap + tax);
     }
 
     return { age: pStartAge, balance: Math.max(0, balance) };
   });
 
-  // Find the winning strategy
   const winner = outcomes.reduce((prev, current) =>
     (prev.balance > current.balance) ? prev : current
   );
