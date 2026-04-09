@@ -860,6 +860,7 @@ export const ArchitectPage = ({
           {activeTab === 'cashflows' && (
             <CashFlowsTab
               projectionData={projectionData}
+              monteCarloData={monteCarloData}
               inputs={inputs}
               clientInfo={clientInfo}
             />
@@ -4395,16 +4396,21 @@ const LiquidationTab = ({ liquidationData, inputs, onInputChange, onAccountSplit
 // ============================================
 // Cash Flows Tab - Transposed: metrics on Y-axis, years on X-axis
 // ============================================
-const CashFlowsTab = ({ projectionData, inputs, clientInfo }) => {
+const CashFlowsTab = ({ projectionData, monteCarloData, inputs, clientInfo }) => {
+  const [mcMode, setMcMode] = React.useState('deterministic'); // 'deterministic' | 'optimistic' | 'median' | 'conservative'
   const fmt = (val) => `$${Math.round(val).toLocaleString()}`;
   const fmtShort = (val) => val >= 1000000 ? `$${(val / 1000000).toFixed(1)}M` : val >= 1000 ? `$${Math.round(val / 1000)}k` : `$${Math.round(val)}`;
 
-  const hasEmployment = projectionData.some(r => r.employmentIncomeDetail > 0);
-  const hasOther = projectionData.some(r => r.otherIncomeDetail > 0);
-  const hasContributions = projectionData.some(r => r.contribution > 0);
-  const hasNqData = inputs.taxEnabled && projectionData.some(r => r.nqWithdrawal > 0);
-  const hasRMD = inputs.taxEnabled && projectionData.some(r => r.rmdAmount > 0);
-  const hasRMDExcess = hasRMD && projectionData.some(r => r.rmdExcess > 0);
+  const activeData = (mcMode !== 'deterministic' && monteCarloData?.scenarios?.[mcMode])
+    ? monteCarloData.scenarios[mcMode]
+    : projectionData;
+
+  const hasEmployment = activeData.some(r => r.employmentIncomeDetail > 0);
+  const hasOther = activeData.some(r => r.otherIncomeDetail > 0);
+  const hasContributions = activeData.some(r => r.contribution > 0);
+  const hasNqData = inputs.taxEnabled && activeData.some(r => r.nqWithdrawal > 0);
+  const hasRMD = inputs.taxEnabled && activeData.some(r => r.rmdAmount > 0);
+  const hasRMDExcess = hasRMD && activeData.some(r => r.rmdExcess > 0);
 
   // Build row definitions for the transposed table
   const buildRows = () => {
@@ -4463,7 +4469,7 @@ const CashFlowsTab = ({ projectionData, inputs, clientInfo }) => {
       { label: 'Distribution Rate', cls: 'text-red-600', getValue: (r) => `${r.distRate?.toFixed(1) || '0'}%` },
       { label: 'Ending Balance', cls: 'font-bold text-slate-900 bg-emerald-50 text-base', getValue: (r) => fmt(Math.max(0, r.total)) },
     );
-    if (inputs.taxEnabled && projectionData.some(r => r.traditionalBalanceDetail > 0)) {
+    if (inputs.taxEnabled && activeData.some(r => r.traditionalBalanceDetail > 0)) {
       rows.push(
         { label: '', cls: 'bg-slate-200', getValue: () => '', isSeparator: true },
         { label: 'Traditional Balance', cls: 'text-blue-600', getValue: (r) => fmt(r.traditionalBalanceDetail || 0) },
@@ -4479,8 +4485,8 @@ const CashFlowsTab = ({ projectionData, inputs, clientInfo }) => {
   // 5-year chunks for print
   const chunkSize = 5;
   const chunks = [];
-  for (let i = 0; i < projectionData.length; i += chunkSize) {
-    chunks.push(projectionData.slice(i, i + chunkSize));
+  for (let i = 0; i < activeData.length; i += chunkSize) {
+    chunks.push(activeData.slice(i, i + chunkSize));
   }
 
   const renderTransposedTable = (cols, fontSize = 'text-xs') => (
@@ -4507,14 +4513,40 @@ const CashFlowsTab = ({ projectionData, inputs, clientInfo }) => {
   return (
     <div className="space-y-6">
       <Card>
-        <h3 className="font-semibold text-slate-800 text-lg mb-1 flex items-center gap-2">
-          <TableIcon className="w-5 h-5" /> Detailed Retirement Cash Flows
-        </h3>
-        <p className="text-sm text-slate-500 mb-4">
-          Comprehensive income, withdrawal, tax, and portfolio detail by year.
-        </p>
+        <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3 mb-4">
+          <div>
+            <h3 className="font-semibold text-slate-800 text-lg flex items-center gap-2">
+              <TableIcon className="w-5 h-5" /> Detailed Retirement Cash Flows
+            </h3>
+            <p className="text-sm text-slate-500">
+              Comprehensive income, withdrawal, tax, and portfolio detail by year.
+            </p>
+          </div>
+          {monteCarloData?.scenarios && (
+            <div className="flex items-center gap-1 bg-slate-100 p-1 rounded-lg">
+              <button onClick={() => setMcMode('deterministic')}
+                className={`px-2.5 py-1 text-[11px] font-bold rounded transition-all ${mcMode === 'deterministic' ? 'bg-white shadow text-slate-800' : 'text-slate-500 hover:text-slate-700'}`}
+              >Deterministic</button>
+              <button onClick={() => setMcMode('optimistic')}
+                className={`px-2.5 py-1 text-[11px] font-bold rounded transition-all ${mcMode === 'optimistic' ? 'bg-emerald-500 text-white shadow' : 'text-slate-500 hover:text-slate-700'}`}
+              >Optimistic</button>
+              <button onClick={() => setMcMode('median')}
+                className={`px-2.5 py-1 text-[11px] font-bold rounded transition-all ${mcMode === 'median' ? 'bg-blue-500 text-white shadow' : 'text-slate-500 hover:text-slate-700'}`}
+              >Median</button>
+              <button onClick={() => setMcMode('conservative')}
+                className={`px-2.5 py-1 text-[11px] font-bold rounded transition-all ${mcMode === 'conservative' ? 'bg-red-500 text-white shadow' : 'text-slate-500 hover:text-slate-700'}`}
+              >Conservative</button>
+            </div>
+          )}
+        </div>
+        {mcMode !== 'deterministic' && (
+          <p className="text-xs text-slate-500 mb-3 bg-slate-50 p-2 rounded">
+            <strong>Monte Carlo — {mcMode === 'optimistic' ? '90th Percentile' : mcMode === 'median' ? '50th Percentile (Median)' : '10th Percentile'}:</strong>
+            {' '}{mcMode === 'optimistic' ? 'Better than 90% of simulated outcomes.' : mcMode === 'median' ? 'Middle-of-the-road outcome from 1,000 simulations.' : 'Worse than only 10% of simulated outcomes — stress test scenario.'}
+          </p>
+        )}
 
-        {renderTransposedTable(projectionData)}
+        {renderTransposedTable(activeData)}
 
         {inputs.taxEnabled && (
           <div className="mt-3 p-2 bg-amber-50 text-xs text-amber-800 rounded border border-amber-100">
