@@ -319,7 +319,7 @@ export const ArchitectPage = ({
     rows.push(
       { label: '', cls: 'bg-slate-200', getValue: () => '', isSeparator: true },
       { label: 'Starting Balance', cls: 'text-slate-700', getValue: (r) => fmt(r.startBalance) },
-      { label: 'Growth', cls: 'text-emerald-700', getValue: (r) => `${r.growth >= 0 ? '+' : ''}${fmt(r.growth)}` },
+      { label: 'Growth', cls: '', getValue: (r) => `${r.growth >= 0 ? '+' : ''}${fmt(r.growth)}`, dynamicCls: (r) => r.growth >= 0 ? 'text-emerald-700' : 'text-red-600' },
       { label: '', cls: 'bg-slate-200', getValue: () => '', isSeparator: true },
       { label: 'Social Security', cls: 'text-blue-700', getValue: (r) => fmt(r.ssIncomeDetail || 0) },
       { label: 'Pension', cls: 'text-blue-700', getValue: (r) => fmt(r.pensionIncomeDetail || 0) },
@@ -386,7 +386,7 @@ export const ArchitectPage = ({
                 {rowDef.label}
               </td>
               {cols.map((col, ci) => (
-                <td key={ci} className={`p-1.5 text-right whitespace-nowrap ${rowDef.isSeparator ? '' : rowDef.cls || ''}`}>
+                <td key={ci} className={`p-1.5 text-right whitespace-nowrap ${rowDef.isSeparator ? '' : rowDef.dynamicCls ? rowDef.dynamicCls(col) : rowDef.cls || ''}`}>
                   {rowDef.isSeparator ? '' : rowDef.getValue(col)}
                 </td>
               ))}
@@ -4424,7 +4424,7 @@ const CashFlowsTab = ({ projectionData, monteCarloData, inputs, clientInfo }) =>
     rows.push(
       { label: '', cls: 'bg-slate-200', getValue: () => '', isSeparator: true },
       { label: 'Starting Balance', cls: 'text-slate-700', getValue: (r) => fmt(r.startBalance) },
-      { label: 'Growth', cls: 'text-emerald-700', getValue: (r) => `${r.growth >= 0 ? '+' : ''}${fmt(r.growth)}` },
+      { label: 'Growth', cls: '', getValue: (r) => `${r.growth >= 0 ? '+' : ''}${fmt(r.growth)}`, dynamicCls: (r) => r.growth >= 0 ? 'text-emerald-700' : 'text-red-600' },
       { label: '', cls: 'bg-slate-200', getValue: () => '', isSeparator: true },
       { label: 'Social Security', cls: 'text-blue-700', getValue: (r) => fmt(r.ssIncomeDetail || 0) },
       { label: 'Pension', cls: 'text-blue-700', getValue: (r) => fmt(r.pensionIncomeDetail || 0) },
@@ -4499,7 +4499,7 @@ const CashFlowsTab = ({ projectionData, monteCarloData, inputs, clientInfo }) =>
                 {rowDef.label}
               </td>
               {cols.map((col, ci) => (
-                <td key={ci} className={`p-1.5 text-right whitespace-nowrap ${rowDef.isSeparator ? '' : rowDef.cls || ''}`}>
+                <td key={ci} className={`p-1.5 text-right whitespace-nowrap ${rowDef.isSeparator ? '' : rowDef.dynamicCls ? rowDef.dynamicCls(col) : rowDef.cls || ''}`}>
                   {rowDef.isSeparator ? '' : rowDef.getValue(col)}
                 </td>
               ))}
