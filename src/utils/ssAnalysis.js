@@ -165,9 +165,9 @@ export const calculateSSAnalysis = ({ inputs, clientInfo, assumptions, targetMax
       const totalIncome = ssIncome + pensionIncome + otherIncome + employmentIncome;
       const gap = Math.max(0, expense - totalIncome);
 
-      // Estimate tax on the withdrawal (simplified — use traditional % for ordinary income estimate)
+      // Always compute taxes — tax is owed on SS, pension, and withdrawals regardless of gap
       let tax = 0;
-      if (inputs.taxEnabled && gap > 0) {
+      if (inputs.taxEnabled) {
         const tradPct = (inputs.traditionalPercent ?? 60) / 100;
         const effectiveFilingStatus = (filingStatus === 'married' && !bothAlive) ? 'single' : filingStatus;
         const taxResult = calculateAnnualTax({
@@ -180,11 +180,24 @@ export const calculateSSAnalysis = ({ inputs, clientInfo, assumptions, targetMax
 
       balance -= (gap + tax);
 
-      // Track cumulative after-tax SS received (for breakeven chart)
-      // The "value" of SS in a given year = the net portfolio impact of having SS
-      // (SS income received minus additional taxes triggered by that SS income)
-      cumulativeSSAfterTax *= (1 + weightedReturn); // Grow accumulated value
-      cumulativeSSAfterTax += ssIncome; // Add this year's SS received
+      // Track cumulative after-tax SS (net of the tax triggered by having SS)
+      // Compare: what would tax be with zero SS? The difference is the "SS tax cost"
+      let ssTaxCost = 0;
+      if (inputs.taxEnabled && ssIncome > 0) {
+        const effectiveFilingStatus = (filingStatus === 'married' && !bothAlive) ? 'single' : filingStatus;
+        const tradPct = (inputs.traditionalPercent ?? 60) / 100;
+        // Tax without SS (counterfactual: all spending from portfolio)
+        const taxWithoutSS = calculateAnnualTax({
+          ssIncome: 0, pensionIncome, traditionalWithdrawal: expense * tradPct,
+          rothWithdrawal: 0, nqTaxableGain: 0, nqQualifiedDividends: 0, nqOrdinaryDividends: 0,
+          otherIncome, employmentIncome
+        }, { filingStatus: effectiveFilingStatus, stateRate, stateCode }, age >= 65).totalTax;
+        ssTaxCost = Math.max(0, tax - taxWithoutSS);
+      }
+      const ssNetValue = ssIncome - ssTaxCost; // What SS actually saved the portfolio
+
+      cumulativeSSAfterTax *= (1 + weightedReturn);
+      cumulativeSSAfterTax += ssNetValue;
 
       annualData.push({ age, ssIncome: Math.round(ssIncome), cumulativeSSAfterTax: Math.round(cumulativeSSAfterTax) });
     }
@@ -314,9 +327,9 @@ export const calculateSSPartnerAnalysis = ({ inputs, clientInfo, assumptions, ta
       const totalIncome = ssIncome + pensionIncome + otherIncome + employmentIncome;
       const gap = Math.max(0, expense - totalIncome);
 
-      // Tax estimate
+      // Always compute taxes
       let tax = 0;
-      if (inputs.taxEnabled && gap > 0) {
+      if (inputs.taxEnabled) {
         const tradPct = (inputs.traditionalPercent ?? 60) / 100;
         const effectiveFilingStatus = (filingStatus === 'married' && !bothAlive) ? 'single' : filingStatus;
         const taxResult = calculateAnnualTax({
