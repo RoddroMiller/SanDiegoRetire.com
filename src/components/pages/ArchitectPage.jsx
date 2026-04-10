@@ -12,7 +12,7 @@ import {
 } from 'lucide-react';
 
 import { COLORS, LOGO_URL } from '../../constants';
-import { getAdjustedSS, getImpliedPIA, applyDeemedFiling, generateAndDownloadIPS, calculateAnnualTax, calculateTaxableSS, calculateFederalTax, getInflationAdjustedBrackets, getInflationAdjustedDeduction, STATE_TAX_DATA } from '../../utils';
+import { getAdjustedSS, getImpliedPIA, applyDeemedFiling, generateAndDownloadIPS, calculateAnnualTax, calculateTaxableSS, calculateFederalTax, getInflationAdjustedBrackets, getInflationAdjustedDeduction, STATE_TAX_DATA, calculateBasePlan, runSimulation } from '../../utils';
 import { Card, StatBox, AllocationRow, FormattedNumberInput, Disclaimer } from '../ui';
 
 /**
@@ -40,6 +40,7 @@ export const ArchitectPage = ({
   onSetActiveTab,
   rebalanceFreq,
   onSetRebalanceFreq,
+  rebalanceTargets,
   showCashFlowTable,
   onSetShowCashFlowTable,
   // Calculations
@@ -131,6 +132,10 @@ export const ArchitectPage = ({
       : null,
     [ssPartnerOutcomesForDisplay]
   );
+
+  // SS Matrix optimization state (shared between interactive tab and print page)
+  const [ssMatrixData, setSsMatrixData] = useState(null);
+  const [isRunningMatrix, setIsRunningMatrix] = useState(false);
 
   // Withdrawal Override modal state
   const [showWithdrawalOverrides, setShowWithdrawalOverrides] = useState(false);
@@ -800,6 +805,12 @@ export const ArchitectPage = ({
             <SSOptimizationTab
               clientInfo={clientInfo}
               inputs={inputs}
+              assumptions={assumptions}
+              basePlan={basePlan}
+              rebalanceFreq={rebalanceFreq}
+              rebalanceTargets={rebalanceTargets}
+              useManualAllocation={useManualAllocation}
+              manualAllocations={manualAllocations}
               ssAnalysis={ssAnalysis}
               ssBreakevenResults={ssBreakevenResults}
               clientOutcomes={ssOutcomesForDisplay}
@@ -811,6 +822,10 @@ export const ArchitectPage = ({
               onUpdateSSStartAge={onUpdateSSStartAge}
               onUpdatePartnerSSStartAge={onUpdatePartnerSSStartAge}
               onInputChange={onInputChange}
+              matrixData={ssMatrixData}
+              isRunningMatrix={isRunningMatrix}
+              onSetMatrixData={setSsMatrixData}
+              onSetIsRunningMatrix={setIsRunningMatrix}
             />
           )}
 
@@ -1197,78 +1212,175 @@ export const ArchitectPage = ({
 
       {/* PRINT PAGE: Social Security Optimization */}
       <PrintPageWrapper pageNumber={6 + cashFlowPageCount} totalPages={totalPrintPages} title="Social Security Optimization" subtitle="Optimal claiming strategy analysis">
-        {/* Primary Recommendation — compact */}
-        <div className="bg-black text-white p-3 rounded-lg mb-3 flex items-center gap-3">
-          <CheckCircle className="w-6 h-6 text-emerald-400 flex-shrink-0" />
-          <div>
-            <p className="text-[11px] text-slate-400">Client Recommendation</p>
-            <p className="text-base font-bold">
-              Claim at Age <span className="text-emerald-400">{ssWinnerForDisplay.age}</span> to maximize portfolio at age {targetMaxPortfolioAge}
-            </p>
-          </div>
-        </div>
+        {(() => {
+          const FRA = 67;
+          const fmt = (v) => `$${Math.round(v).toLocaleString()}`;
+          const pct = (v) => `${(v * 100).toFixed(1)}%`;
 
-        {/* Claiming Scenarios — 9 cards compact */}
-        <div className="grid grid-cols-9 gap-1.5 mb-3">
-          {ssOutcomesForDisplay.map((outcome) => (
-            <div key={outcome.age} className={`p-1.5 rounded border text-center ${outcome.age === ssWinnerForDisplay.age ? 'border-emerald-500 bg-emerald-50' : 'border-slate-200 bg-slate-50'}`}>
-              <p className="text-[10px] font-bold text-slate-500">Age {outcome.age}</p>
-              <p className={`text-[11px] font-bold ${outcome.age === ssWinnerForDisplay.age ? 'text-emerald-700' : 'text-slate-700'}`}>
-                ${Math.round(outcome.balance / 1000).toLocaleString()}k
-              </p>
-            </div>
-          ))}
-        </div>
+          // Client benefit details
+          const cAge = inputs.ssStartAge;
+          const cInputPIA = inputs.ssPIA;
+          const cReceiving = inputs.ssCurrentlyReceiving;
+          const cPIA = cReceiving ? getImpliedPIA(cInputPIA, cAge) : cInputPIA;
+          const cOwn = cReceiving ? cInputPIA : getAdjustedSS(cPIA, cAge);
+          const cYearsEarly = Math.max(0, FRA - cAge);
+          const cYearsLate = Math.max(0, cAge - FRA);
+          const cReduction = cPIA > 0 && !cReceiving ? (1 - cOwn / cPIA) : 0;
+          const cBonus = cPIA > 0 && !cReceiving && cAge > FRA ? (cOwn / cPIA - 1) : 0;
 
-        {/* Partner Section if married — compact */}
-        {clientInfo.isMarried && ssPartnerOutcomesForDisplay.length > 0 && ssPartnerWinnerForDisplay && (
-          <>
-            <div className="bg-slate-800 text-white p-3 rounded-lg mb-3 flex items-center gap-3">
-              <Users className="w-6 h-6 text-yellow-500 flex-shrink-0" />
-              <div>
-                <p className="text-[11px] text-slate-400">Partner Recommendation</p>
-                <p className="text-base font-bold">
-                  Claim at Age <span className="text-yellow-500">{ssPartnerWinnerForDisplay.age}</span>
-                </p>
+          const pPartnerPIA = clientInfo.isMarried
+            ? (inputs.partnerSSCurrentlyReceiving ? getImpliedPIA(inputs.partnerSSPIA, inputs.partnerSSStartAge) : inputs.partnerSSPIA)
+            : 0;
+          const cSpousalExcess = clientInfo.isMarried ? Math.max(0, pPartnerPIA * 0.5 - cPIA) : 0;
+          const dispAgeDiff = clientInfo.currentAge - (clientInfo.partnerAge || clientInfo.currentAge);
+          const cDispSpousalAge = clientInfo.isMarried ? Math.min(FRA, Math.max(cAge, inputs.partnerSSStartAge + dispAgeDiff)) : cAge;
+          const cAfterDeemed = clientInfo.isMarried ? applyDeemedFiling(cOwn, pPartnerPIA, true, cAge, cPIA, cDispSpousalAge) : cOwn;
+          const cSpousalApplies = cAfterDeemed > cOwn;
+
+          // Partner benefit details
+          let pOwn = 0, pAfterDeemed = 0, pYearsEarly = 0, pYearsLate = 0, pReduction = 0, pBonus = 0, pSpousalExcess = 0, pSpousalApplies = false, pPIA = 0;
+          if (clientInfo.isMarried) {
+            const pAge = inputs.partnerSSStartAge;
+            const pInputPIA = inputs.partnerSSPIA;
+            const pRec = inputs.partnerSSCurrentlyReceiving;
+            pPIA = pRec ? getImpliedPIA(pInputPIA, pAge) : pInputPIA;
+            pOwn = pRec ? pInputPIA : getAdjustedSS(pPIA, pAge);
+            pYearsEarly = Math.max(0, FRA - pAge);
+            pYearsLate = Math.max(0, pAge - FRA);
+            pReduction = pPIA > 0 && !pRec ? (1 - pOwn / pPIA) : 0;
+            pBonus = pPIA > 0 && !pRec && pAge > FRA ? (pOwn / pPIA - 1) : 0;
+            pSpousalExcess = Math.max(0, cPIA * 0.5 - pPIA);
+            const pDispSpousalAge = Math.min(FRA, Math.max(pAge, cAge - dispAgeDiff));
+            pAfterDeemed = applyDeemedFiling(pOwn, cPIA, true, pAge, pPIA, pDispSpousalAge);
+            pSpousalApplies = pAfterDeemed > pOwn;
+          }
+
+          const totalMonthly = cAfterDeemed + pAfterDeemed;
+
+          // Compact benefit row renderer
+          const BenefitRow = ({ label, pia, claimAge, yearsEarly, yearsLate, reduction, bonus, ownBenefit, spousalExcess, spousalApplies, afterDeemed, receiving }) => (
+            <div className="text-[9px] leading-tight">
+              <p className="font-bold text-slate-700 text-[10px] mb-0.5">{label}</p>
+              <div className="grid grid-cols-2 gap-x-3">
+                <span className="text-slate-500">PIA (FRA 67)</span><span className="text-right font-medium">{fmt(pia)}/mo</span>
+                <span className="text-slate-500">Claim age</span>
+                <span className="text-right font-medium">
+                  {claimAge}{yearsEarly > 0 && <span className="text-red-500"> ({yearsEarly}yr early)</span>}{yearsLate > 0 && <span className="text-emerald-600"> ({yearsLate}yr late)</span>}
+                </span>
+                {!receiving && reduction > 0 && <><span className="text-red-500">Early reduction</span><span className="text-right text-red-500">-{pct(reduction)}</span></>}
+                {!receiving && bonus > 0 && <><span className="text-emerald-600">Delayed credits</span><span className="text-right text-emerald-600">+{pct(bonus)}</span></>}
+                <span className="text-slate-500">Own benefit</span><span className="text-right font-medium">{fmt(ownBenefit)}/mo</span>
+                {clientInfo.isMarried && spousalExcess > 0 && <><span className="text-blue-600">Spousal excess</span><span className="text-right text-blue-600">+{fmt(afterDeemed - ownBenefit)}/mo</span></>}
+                <span className="text-slate-700 font-bold border-t border-slate-200 pt-0.5">Total benefit</span>
+                <span className="text-right font-bold text-emerald-700 border-t border-slate-200 pt-0.5">{fmt(afterDeemed)}/mo</span>
               </div>
             </div>
-            <div className="grid grid-cols-9 gap-1.5 mb-3">
-              {ssPartnerOutcomesForDisplay.map((outcome) => (
-                <div key={outcome.age} className={`p-1.5 rounded border text-center ${outcome.age === ssPartnerWinnerForDisplay.age ? 'border-yellow-500 bg-yellow-50' : 'border-slate-200 bg-slate-50'}`}>
-                  <p className="text-[10px] font-bold text-slate-500">Age {outcome.age}</p>
-                  <p className={`text-[11px] font-bold ${outcome.age === ssPartnerWinnerForDisplay.age ? 'text-yellow-700' : 'text-slate-700'}`}>
-                    ${Math.round(outcome.balance / 1000).toLocaleString()}k
-                  </p>
+          );
+
+          return (
+            <>
+              {/* Benefits Calculation Detail — side-by-side compact */}
+              <div className={`grid ${clientInfo.isMarried ? 'grid-cols-2' : 'grid-cols-1 max-w-sm'} gap-4 mb-3 p-3 border border-slate-200 rounded-lg`}>
+                <BenefitRow label={clientInfo.name || 'Client'} pia={cPIA} claimAge={cAge} yearsEarly={cYearsEarly} yearsLate={cYearsLate} reduction={cReduction} bonus={cBonus} ownBenefit={cOwn} spousalExcess={cSpousalExcess} spousalApplies={cSpousalApplies} afterDeemed={cAfterDeemed} receiving={cReceiving} />
+                {clientInfo.isMarried && (
+                  <BenefitRow label={clientInfo.partnerName || 'Partner'} pia={pPIA} claimAge={inputs.partnerSSStartAge} yearsEarly={pYearsEarly} yearsLate={pYearsLate} reduction={pReduction} bonus={pBonus} ownBenefit={pOwn} spousalExcess={pSpousalExcess} spousalApplies={pSpousalApplies} afterDeemed={pAfterDeemed} receiving={inputs.partnerSSCurrentlyReceiving} />
+                )}
+              </div>
+              {clientInfo.isMarried && (
+                <div className="flex justify-end mb-3">
+                  <span className="text-[10px] font-bold text-emerald-700">Combined: {fmt(totalMonthly)}/mo ({fmt(totalMonthly * 12)}/yr)</span>
                 </div>
-              ))}
-            </div>
-          </>
-        )}
+              )}
 
-        {/* Claiming Strategy Rationale — tighter */}
-        <div className="border border-slate-200 rounded-lg p-3 mb-2">
-          <h3 className="font-bold text-[12px] text-slate-800 mb-1">Claiming Strategy Rationale</h3>
-          <p className="text-[10px] text-slate-700 leading-relaxed">
-            Delaying Social Security requires funding living expenses from the portfolio. With IRA withdrawals, each $1.00 of spending
-            costs ${inputs.ssMarginalTaxRate > 0 ? `$${(1 / (1 - inputs.ssMarginalTaxRate / 100)).toFixed(2)}` : '$1.00'} after
-            tax gross-up. At {inputs.ssReinvestRate || 4.5}% growth with {inputs.ssBridgeNqPercent}% NQ / {100 - inputs.ssBridgeNqPercent}% IRA
-            funding, delaying to 67 breaks even at age <strong>{ssBreakevenResults?.vs67?.breakevenAge?.toFixed(1) || 'N/A'}</strong> and
-            to 70 at age <strong>{ssBreakevenResults?.vs70?.breakevenAge?.toFixed(1) || 'N/A'}</strong>.
-            {' '}<strong>Recommendation:</strong> Claim at the earliest eligible age once earned income is below the earnings test threshold.
-            {clientInfo.isMarried && ' Under deemed filing, the lower earner automatically receives the higher of their own benefit or 50% of the higher earner\'s PIA.'}
-          </p>
-        </div>
+              {/* Claiming Age Matrix */}
+              {clientInfo.isMarried && ssMatrixData ? (
+                <>
+                  <div className="bg-black text-white p-2 rounded-lg mb-2 flex items-center gap-2">
+                    <CheckCircle className="w-5 h-5 text-emerald-400 flex-shrink-0" />
+                    <p className="text-[11px] font-bold">
+                      Optimal: Primary <span className="text-emerald-400">{ssMatrixData.winner.clientAge}</span> + Spouse <span className="text-emerald-400">{ssMatrixData.winner.partnerAge}</span>
+                      <span className="text-gray-400 font-normal ml-2">Portfolio at {targetMaxPortfolioAge}: {fmt(Math.round(ssMatrixData.winner.balance))}</span>
+                    </p>
+                  </div>
+                  {(() => {
+                    const allBal = ssMatrixData.matrix.map(m => m.balance);
+                    const minB = Math.min(...allBal);
+                    const maxB = Math.max(...allBal);
+                    const rng = maxB - minB || 1;
+                    return (
+                      <table className="w-full border-collapse text-[9px] mb-2">
+                        <thead>
+                          <tr>
+                            <th className="p-1 bg-slate-100 border border-slate-200 text-[8px] text-slate-500">
+                              <div className="flex flex-col items-center leading-none"><span>Spouse</span><span>\</span><span>Primary</span></div>
+                            </th>
+                            {ssMatrixData.ages.map(a => (
+                              <th key={a} className="p-1 bg-slate-100 border border-slate-200 text-center font-bold text-slate-700">{a}</th>
+                            ))}
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {ssMatrixData.ages.map(pAge => (
+                            <tr key={pAge}>
+                              <td className="p-1 bg-slate-100 border border-slate-200 text-center font-bold text-slate-700">{pAge}</td>
+                              {ssMatrixData.ages.map(cAge => {
+                                const cell = ssMatrixData.matrix.find(m => m.clientAge === cAge && m.partnerAge === pAge);
+                                const bal = cell?.balance || 0;
+                                const isOpt = ssMatrixData.winner.clientAge === cAge && ssMatrixData.winner.partnerAge === pAge;
+                                const isSel = inputs.ssStartAge === cAge && inputs.partnerSSStartAge === pAge;
+                                const p = (bal - minB) / rng;
+                                const bg = isOpt ? 'bg-emerald-200 font-bold' : isSel ? 'bg-blue-100' : p >= 0.85 ? 'bg-emerald-100' : p >= 0.6 ? 'bg-emerald-50' : p >= 0.35 ? 'bg-yellow-50' : p >= 0.15 ? 'bg-orange-50' : 'bg-red-50';
+                                return (
+                                  <td key={cAge} className={`p-1 border border-slate-200 text-center ${bg}`}>
+                                    ${(bal / 1000000).toFixed(2)}M
+                                    {isOpt && <span className="block text-[7px] text-emerald-700">BEST</span>}
+                                  </td>
+                                );
+                              })}
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    );
+                  })()}
+                  <p className="text-[8px] text-slate-400 text-center">Portfolio balance at age {targetMaxPortfolioAge}. Primary claiming age across top, spouse claiming age down left.</p>
+                </>
+              ) : !clientInfo.isMarried ? (
+                /* Single client — compact 9-card row */
+                <>
+                  <div className="bg-black text-white p-2 rounded-lg mb-2 flex items-center gap-2">
+                    <CheckCircle className="w-5 h-5 text-emerald-400 flex-shrink-0" />
+                    <p className="text-[11px]"><span className="text-slate-400">Recommendation:</span> Claim at Age <span className="text-emerald-400 font-bold">{ssWinnerForDisplay.age}</span> to maximize portfolio at age {targetMaxPortfolioAge}</p>
+                  </div>
+                  <div className="grid grid-cols-9 gap-1 mb-2">
+                    {ssOutcomesForDisplay.map((o) => (
+                      <div key={o.age} className={`p-1 rounded border text-center ${o.age === ssWinnerForDisplay.age ? 'border-emerald-500 bg-emerald-50' : 'border-slate-200 bg-slate-50'}`}>
+                        <p className="text-[9px] font-bold text-slate-500">{o.age}</p>
+                        <p className={`text-[10px] font-bold ${o.age === ssWinnerForDisplay.age ? 'text-emerald-700' : 'text-slate-700'}`}>
+                          ${Math.round(o.balance / 1000).toLocaleString()}k
+                        </p>
+                      </div>
+                    ))}
+                  </div>
+                </>
+              ) : (
+                <div className="border border-dashed border-slate-300 rounded-lg p-4 text-center mb-2">
+                  <p className="text-[10px] text-slate-400">Run the Claiming Age Optimization Matrix from the SS Optimizer tab to include the 81-scenario grid here.</p>
+                </div>
+              )}
 
-        {/* Scenarios for Further Exploration — tighter */}
-        <div className="border border-amber-200 bg-amber-50 rounded-lg p-3">
-          <h3 className="font-bold text-[11px] text-amber-900 mb-1">When Delayed Claiming May Be Worth Exploring</h3>
-          <ul className="text-[10px] text-amber-800 space-y-0 list-disc pl-4">
-            <li><strong>Survivor protection:</strong> Higher earner has limited life expectancy but spouse may live much longer — delaying to 70 locks in a 24% larger survivor benefit.</li>
-            <li><strong>Large age gap:</strong> A younger surviving spouse could collect the enhanced survivor benefit for decades.</li>
-            <li><strong>Guaranteed income covers bridge years:</strong> Pensions or other income eliminate the need for portfolio withdrawals, reducing opportunity cost.</li>
-            <li><strong>Roth conversion window:</strong> Delaying SS during low-income years may enable tax-efficient Roth conversions.</li>
-          </ul>
-        </div>
+              {/* Compact rationale */}
+              <div className="border border-slate-200 rounded-lg p-2 mt-1">
+                <p className="text-[9px] text-slate-600 leading-relaxed">
+                  <strong>Strategy:</strong> With IRA withdrawals, each $1 costs ${inputs.ssMarginalTaxRate > 0 ? `$${(1 / (1 - inputs.ssMarginalTaxRate / 100)).toFixed(2)}` : '$1.00'} after tax.
+                  At {inputs.ssReinvestRate || 4.5}% growth, delaying to 67 breaks even at <strong>{ssBreakevenResults?.vs67?.breakevenAge?.toFixed(1) || 'N/A'}</strong>,
+                  to 70 at <strong>{ssBreakevenResults?.vs70?.breakevenAge?.toFixed(1) || 'N/A'}</strong>.
+                  {clientInfo.isMarried && ' Deemed filing: lower earner receives the higher of own benefit or 50% of higher earner\'s PIA.'}
+                </p>
+              </div>
+            </>
+          );
+        })()}
       </PrintPageWrapper>
 
       {/* PRINT PAGE: Monte Carlo Simulation */}
@@ -1332,11 +1444,11 @@ export const ArchitectPage = ({
                   <>
               <tr className="border-b bg-emerald-50">
                 <td className="p-1.5 font-bold">Current Model</td>
-                <td className="p-1.5 text-center">{((basePlan.b1Val / inputs.totalPortfolio) * 100).toFixed(0)}%</td>
-                <td className="p-1.5 text-center">{((basePlan.b2Val / inputs.totalPortfolio) * 100).toFixed(0)}%</td>
-                <td className="p-1.5 text-center">{((basePlan.b3Val / inputs.totalPortfolio) * 100).toFixed(0)}%</td>
-                <td className="p-1.5 text-center">{((basePlan.b4Val / inputs.totalPortfolio) * 100).toFixed(0)}%</td>
-                <td className="p-1.5 text-center">{((Math.max(0, basePlan.b5Val) / inputs.totalPortfolio) * 100).toFixed(0)}%</td>
+                <td className="p-1.5 text-center">{((basePlan.b1Val / inputs.totalPortfolio) * 100).toFixed(1)}%</td>
+                <td className="p-1.5 text-center">{((basePlan.b2Val / inputs.totalPortfolio) * 100).toFixed(1)}%</td>
+                <td className="p-1.5 text-center">{((basePlan.b3Val / inputs.totalPortfolio) * 100).toFixed(1)}%</td>
+                <td className="p-1.5 text-center">{((basePlan.b4Val / inputs.totalPortfolio) * 100).toFixed(1)}%</td>
+                <td className="p-1.5 text-center">{((Math.max(0, basePlan.b5Val) / inputs.totalPortfolio) * 100).toFixed(1)}%</td>
                 <td className="p-1.5 text-center font-bold text-emerald-700">{(monteCarloData?.successRate || 0).toFixed(1)}%</td>
                 <td className="p-1.5 text-center">{fmtLegacy(legacyAt95)}</td>
               </tr>
@@ -1345,8 +1457,8 @@ export const ArchitectPage = ({
                 <td className="p-1.5 text-center">12.5%</td>
                 <td className="p-1.5 text-center">12.5%</td>
                 <td className="p-1.5 text-center">22.5%</td>
-                <td className="p-1.5 text-center">15%</td>
-                <td className="p-1.5 text-center">37.5%</td>
+                <td className="p-1.5 text-center">10.0%</td>
+                <td className="p-1.5 text-center">42.5%</td>
                 <td className="p-1.5 text-center font-bold">{(optimizerData?.strategy4?.successRate || 0).toFixed(1)}%</td>
                 <td className="p-1.5 text-center">{fmtLegacy(optimizerData?.strategy4?.medianLegacy || 0)}</td>
               </tr>
@@ -1354,29 +1466,29 @@ export const ArchitectPage = ({
                 <td className="p-1.5 font-medium">5.5% Model</td>
                 <td className="p-1.5 text-center">17.5%</td>
                 <td className="p-1.5 text-center">17.5%</td>
-                <td className="p-1.5 text-center">25%</td>
-                <td className="p-1.5 text-center">10%</td>
-                <td className="p-1.5 text-center">30%</td>
+                <td className="p-1.5 text-center">25.0%</td>
+                <td className="p-1.5 text-center">10.0%</td>
+                <td className="p-1.5 text-center">30.0%</td>
                 <td className="p-1.5 text-center font-bold">{(optimizerData?.strategy5?.successRate || 0).toFixed(1)}%</td>
                 <td className="p-1.5 text-center">{fmtLegacy(optimizerData?.strategy5?.medianLegacy || 0)}</td>
               </tr>
               <tr className="border-b">
                 <td className="p-1.5 font-medium">Balanced 60/40</td>
-                <td className="p-1.5 text-center">0%</td>
-                <td className="p-1.5 text-center">0%</td>
-                <td className="p-1.5 text-center">100%</td>
-                <td className="p-1.5 text-center">0%</td>
-                <td className="p-1.5 text-center">0%</td>
+                <td className="p-1.5 text-center">0.0%</td>
+                <td className="p-1.5 text-center">0.0%</td>
+                <td className="p-1.5 text-center">100.0%</td>
+                <td className="p-1.5 text-center">0.0%</td>
+                <td className="p-1.5 text-center">0.0%</td>
                 <td className="p-1.5 text-center font-bold">{(optimizerData?.strategy6?.successRate || 0).toFixed(1)}%</td>
                 <td className="p-1.5 text-center">{fmtLegacy(optimizerData?.strategy6?.medianLegacy || 0)}</td>
               </tr>
               <tr className="border-b bg-slate-50">
                 <td className="p-1.5 font-medium">Aggressive Growth</td>
-                <td className="p-1.5 text-center">0%</td>
-                <td className="p-1.5 text-center">0%</td>
-                <td className="p-1.5 text-center">20%</td>
-                <td className="p-1.5 text-center">10%</td>
-                <td className="p-1.5 text-center">70%</td>
+                <td className="p-1.5 text-center">0.0%</td>
+                <td className="p-1.5 text-center">0.0%</td>
+                <td className="p-1.5 text-center">20.0%</td>
+                <td className="p-1.5 text-center">10.0%</td>
+                <td className="p-1.5 text-center">70.0%</td>
                 <td className="p-1.5 text-center font-bold">{(optimizerData?.strategy1?.successRate || 0).toFixed(1)}%</td>
                 <td className="p-1.5 text-center">{fmtLegacy(optimizerData?.strategy1?.medianLegacy || 0)}</td>
               </tr>
@@ -2896,8 +3008,45 @@ const MonteCarloTab = ({ monteCarloData, rebalanceFreq, onSetRebalanceFreq, assu
   );
 };
 
-const SSOptimizationTab = ({ clientInfo, inputs, ssAnalysis, ssBreakevenResults, clientOutcomes, clientWinner, partnerOutcomes, partnerWinner, targetMaxPortfolioAge, onSetTargetMaxPortfolioAge, onUpdateSSStartAge, onUpdatePartnerSSStartAge, onInputChange }) => {
+const SSOptimizationTab = ({ clientInfo, inputs, assumptions, basePlan, rebalanceFreq, rebalanceTargets, useManualAllocation, manualAllocations, ssAnalysis, ssBreakevenResults, clientOutcomes, clientWinner, partnerOutcomes, partnerWinner, targetMaxPortfolioAge, onSetTargetMaxPortfolioAge, onUpdateSSStartAge, onUpdatePartnerSSStartAge, onInputChange, matrixData, isRunningMatrix, onSetMatrixData, onSetIsRunningMatrix }) => {
   const [showBenefitDetails, setShowBenefitDetails] = useState(false);
+
+  const runMatrixOptimization = () => {
+    onSetIsRunningMatrix(true);
+    setTimeout(() => {
+      const ages = [62, 63, 64, 65, 66, 67, 68, 69, 70];
+      const matrix = [];
+      let winner = { clientAge: 67, partnerAge: 67, balance: -1 };
+
+      for (const cAge of ages) {
+        for (const pAge of ages) {
+          const testInputs = { ...inputs, ssStartAge: cAge, partnerSSStartAge: pAge };
+          let testBasePlan = calculateBasePlan(testInputs, assumptions, clientInfo);
+          if (useManualAllocation) {
+            testBasePlan = { ...testBasePlan, b1Val: manualAllocations.b1, b2Val: manualAllocations.b2, b3Val: manualAllocations.b3, b4Val: manualAllocations.b4, b5Val: manualAllocations.b5 };
+          }
+          const projection = runSimulation(testBasePlan, assumptions, testInputs, rebalanceFreq, false, null, rebalanceTargets);
+          const row = projection.find(p => p.age >= targetMaxPortfolioAge) || projection[projection.length - 1];
+          const balance = Math.max(0, row?.total ?? 0);
+
+          matrix.push({ clientAge: cAge, partnerAge: pAge, balance });
+          if (balance > winner.balance) {
+            winner = { clientAge: cAge, partnerAge: pAge, balance };
+          }
+        }
+      }
+
+      onSetMatrixData({ matrix, winner, ages });
+      onSetIsRunningMatrix(false);
+    }, 50);
+  };
+
+  const applyMatrixWinner = () => {
+    if (matrixData?.winner) {
+      onUpdateSSStartAge(matrixData.winner.clientAge);
+      onUpdatePartnerSSStartAge(matrixData.winner.partnerAge);
+    }
+  };
   return (
   <div className="space-y-6 animate-in fade-in duration-300 mt-6">
     <Card className="p-6">
@@ -3132,88 +3281,175 @@ const SSOptimizationTab = ({ clientInfo, inputs, ssAnalysis, ssBreakevenResults,
         );
       })()}
 
-      {/* Client Recommendation */}
-      <div className="mb-12">
-        <div className="bg-black text-white p-6 rounded-xl mb-6 flex items-center gap-4">
-          <CheckCircle className="w-10 h-10 text-emerald-400" />
-          <div>
-            <h4 className="text-lg font-bold">Primary Client Recommendation</h4>
-            <p className="text-gray-400 text-sm mt-1">
-              Claim at Age <strong className="text-emerald-400 text-lg">{clientWinner.age}</strong> to maximize portfolio balance at age {targetMaxPortfolioAge}.
-            </p>
-          </div>
-        </div>
-
-        <div className="grid grid-cols-3 md:grid-cols-9 gap-3 mb-8">
-          {clientOutcomes.map((outcome) => {
-            const isWinner = outcome.age === clientWinner.age;
-            const isSelected = outcome.age === inputs.ssStartAge;
-            return (
-            <div
-              onClick={() => onUpdateSSStartAge(outcome.age)}
-              key={outcome.age}
-              className={`p-3 rounded-lg border cursor-pointer hover:shadow-md transition-all relative ${isWinner ? 'border-emerald-500 bg-emerald-50' : isSelected ? 'border-blue-500 bg-blue-50' : 'border-slate-200 bg-slate-50 hover:border-emerald-300'}`}
-            >
-              <div className="flex items-center gap-1 mb-1">
-                {isSelected && (
-                  <span className="bg-blue-600 text-white text-[9px] font-bold px-1 py-0.5 rounded">Selected</span>
-                )}
-                {isWinner && !isSelected && (
-                  <span className="bg-emerald-600 text-white text-[9px] font-bold px-1 py-0.5 rounded">Best</span>
-                )}
-              </div>
-              <p className="text-xs font-bold text-slate-500">Age {outcome.age}</p>
-              <p className={`text-sm font-bold ${isWinner ? 'text-emerald-700' : isSelected ? 'text-blue-700' : 'text-slate-700'}`}>
-                ${Math.round(outcome.balance).toLocaleString()}
+      {/* Combined Claiming Age Matrix */}
+      {clientInfo.isMarried ? (
+        <div className="mb-12">
+          <div className="flex items-center justify-between mb-4">
+            <div>
+              <h4 className="font-bold text-slate-800">Claiming Age Optimization Matrix</h4>
+              <p className="text-xs text-slate-500 mt-1">
+                81 scenarios — Primary claiming age (columns) vs. Spouse claiming age (rows). Portfolio balance at age {targetMaxPortfolioAge}.
               </p>
-              <p className="text-[10px] text-slate-400">@ Age {targetMaxPortfolioAge}</p>
-            </div>
-            );
-          })}
-        </div>
-      </div>
-
-      {/* Partner Recommendation */}
-      {clientInfo.isMarried && partnerOutcomes.length > 0 && partnerWinner && (
-        <div className="mb-12 border-t pt-8">
-          <div className="bg-slate-800 text-white p-6 rounded-xl mb-6 flex items-center justify-between">
-            <div className="flex items-center gap-4">
-              <Users className="w-10 h-10 text-yellow-500" />
-              <div>
-                <h4 className="text-lg font-bold">Partner Recommendation</h4>
-                <p className="text-gray-400 text-sm mt-1">
-                  Claim at Age <strong className="text-yellow-500 text-lg">{partnerWinner.age}</strong> to maximize portfolio balance at age {targetMaxPortfolioAge}.
-                </p>
-              </div>
             </div>
             <button
-              onClick={() => onUpdatePartnerSSStartAge(partnerWinner.age)}
-              className="px-4 py-2 bg-yellow-500 hover:bg-yellow-400 text-black font-bold rounded-lg transition-all flex items-center gap-2"
+              onClick={runMatrixOptimization}
+              disabled={isRunningMatrix}
+              className="px-5 py-2.5 bg-black hover:bg-slate-800 disabled:bg-slate-400 text-white font-bold rounded-lg transition-all flex items-center gap-2"
             >
-              <CheckCircle className="w-4 h-4" /> Apply Age {partnerWinner.age}
+              {isRunningMatrix ? (
+                <><Loader className="w-4 h-4 animate-spin" /> Running...</>
+              ) : (
+                <><Calculator className="w-4 h-4" /> {matrixData ? 'Re-Run' : 'Run'} Optimization</>
+              )}
             </button>
           </div>
 
+          {matrixData ? (
+            <>
+              {/* Winner callout */}
+              <div className="bg-black text-white p-4 rounded-xl mb-4 flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <CheckCircle className="w-8 h-8 text-emerald-400" />
+                  <div>
+                    <p className="text-sm font-bold">
+                      Optimal: Primary Age <span className="text-emerald-400 text-lg">{matrixData.winner.clientAge}</span> + Spouse Age <span className="text-emerald-400 text-lg">{matrixData.winner.partnerAge}</span>
+                    </p>
+                    <p className="text-gray-400 text-xs">
+                      Portfolio at {targetMaxPortfolioAge}: <strong className="text-emerald-400">${Math.round(matrixData.winner.balance).toLocaleString()}</strong>
+                    </p>
+                  </div>
+                </div>
+                <button
+                  onClick={applyMatrixWinner}
+                  className="px-4 py-2 bg-emerald-500 hover:bg-emerald-400 text-white font-bold rounded-lg transition-all flex items-center gap-2 text-sm"
+                >
+                  <CheckCircle className="w-4 h-4" /> Apply Optimal
+                </button>
+              </div>
+
+              {/* Matrix grid */}
+              {(() => {
+                const allBalances = matrixData.matrix.map(m => m.balance);
+                const minBal = Math.min(...allBalances);
+                const maxBal = Math.max(...allBalances);
+                const range = maxBal - minBal || 1;
+                return (
+              <div className="overflow-x-auto">
+                <table className="w-full border-collapse text-xs">
+                  <thead>
+                    <tr>
+                      <th className="p-1.5 bg-slate-100 border border-slate-200 text-[10px] font-bold text-slate-500 sticky left-0 z-10">
+                        <div className="flex flex-col items-center">
+                          <span>Spouse</span>
+                          <span className="text-slate-400">\</span>
+                          <span>Primary</span>
+                        </div>
+                      </th>
+                      {matrixData.ages.map(age => (
+                        <th key={age} className="p-1.5 bg-slate-100 border border-slate-200 text-center font-bold text-slate-700 min-w-[80px]">
+                          {age}
+                        </th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {matrixData.ages.map(partnerAge => (
+                      <tr key={partnerAge}>
+                        <td className="p-1.5 bg-slate-100 border border-slate-200 text-center font-bold text-slate-700 sticky left-0 z-10">
+                          {partnerAge}
+                        </td>
+                        {matrixData.ages.map(clientAge => {
+                          const cell = matrixData.matrix.find(m => m.clientAge === clientAge && m.partnerAge === partnerAge);
+                          const balance = cell?.balance || 0;
+                          const isOptimal = matrixData.winner.clientAge === clientAge && matrixData.winner.partnerAge === partnerAge;
+                          const isSelected = inputs.ssStartAge === clientAge && inputs.partnerSSStartAge === partnerAge;
+                          const pct = (balance - minBal) / range;
+
+                          // Heat map: red (low) -> yellow (mid) -> green (high)
+                          let bgColor;
+                          if (isOptimal) {
+                            bgColor = 'bg-emerald-200 ring-2 ring-emerald-600';
+                          } else if (isSelected) {
+                            bgColor = 'bg-blue-100 ring-2 ring-blue-500';
+                          } else if (pct >= 0.85) {
+                            bgColor = 'bg-emerald-100';
+                          } else if (pct >= 0.6) {
+                            bgColor = 'bg-emerald-50';
+                          } else if (pct >= 0.35) {
+                            bgColor = 'bg-yellow-50';
+                          } else if (pct >= 0.15) {
+                            bgColor = 'bg-orange-50';
+                          } else {
+                            bgColor = 'bg-red-50';
+                          }
+
+                          return (
+                            <td
+                              key={clientAge}
+                              onClick={() => {
+                                onUpdateSSStartAge(clientAge);
+                                onUpdatePartnerSSStartAge(partnerAge);
+                              }}
+                              className={`p-1.5 border border-slate-200 text-center cursor-pointer hover:ring-2 hover:ring-slate-400 transition-all ${bgColor}`}
+                            >
+                              <p className={`font-bold text-[11px] ${isOptimal ? 'text-emerald-800' : isSelected ? 'text-blue-800' : 'text-slate-700'}`}>
+                                ${(balance / 1000000).toFixed(2)}M
+                              </p>
+                              {isOptimal && <p className="text-[8px] font-bold text-emerald-700 uppercase">Best</p>}
+                              {isSelected && !isOptimal && <p className="text-[8px] font-bold text-blue-600 uppercase">Selected</p>}
+                            </td>
+                          );
+                        })}
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+                );
+              })()}
+              <p className="text-[10px] text-slate-400 mt-2 text-center">Click any cell to apply that claiming age combination. Values show portfolio balance at age {targetMaxPortfolioAge}.</p>
+            </>
+          ) : (
+            <div className="border-2 border-dashed border-slate-300 rounded-xl p-12 text-center">
+              <Calculator className="w-12 h-12 text-slate-300 mx-auto mb-3" />
+              <p className="text-sm text-slate-500 font-medium">Click "Run Optimization" to calculate all 81 claiming age combinations</p>
+              <p className="text-xs text-slate-400 mt-1">Primary ages 62-70 vs. Spouse ages 62-70</p>
+            </div>
+          )}
+        </div>
+      ) : (
+        /* Single client — keep original linear display */
+        <div className="mb-12">
+          <div className="bg-black text-white p-6 rounded-xl mb-6 flex items-center gap-4">
+            <CheckCircle className="w-10 h-10 text-emerald-400" />
+            <div>
+              <h4 className="text-lg font-bold">Claiming Recommendation</h4>
+              <p className="text-gray-400 text-sm mt-1">
+                Claim at Age <strong className="text-emerald-400 text-lg">{clientWinner.age}</strong> to maximize portfolio balance at age {targetMaxPortfolioAge}.
+              </p>
+            </div>
+          </div>
+
           <div className="grid grid-cols-3 md:grid-cols-9 gap-3 mb-8">
-            {partnerOutcomes.map((outcome) => {
-              const isWinner = outcome.age === partnerWinner.age;
-              const isSelected = outcome.age === inputs.partnerSSStartAge;
+            {clientOutcomes.map((outcome) => {
+              const isWinner = outcome.age === clientWinner.age;
+              const isSelected = outcome.age === inputs.ssStartAge;
               return (
               <div
-                onClick={() => onUpdatePartnerSSStartAge(outcome.age)}
+                onClick={() => onUpdateSSStartAge(outcome.age)}
                 key={outcome.age}
-                className={`p-3 rounded-lg border cursor-pointer hover:shadow-md transition-all relative ${isWinner ? 'border-yellow-500 bg-yellow-50' : isSelected ? 'border-blue-500 bg-blue-50' : 'border-slate-200 bg-slate-50 hover:border-yellow-300'}`}
+                className={`p-3 rounded-lg border cursor-pointer hover:shadow-md transition-all relative ${isWinner ? 'border-emerald-500 bg-emerald-50' : isSelected ? 'border-blue-500 bg-blue-50' : 'border-slate-200 bg-slate-50 hover:border-emerald-300'}`}
               >
                 <div className="flex items-center gap-1 mb-1">
                   {isSelected && (
                     <span className="bg-blue-600 text-white text-[9px] font-bold px-1 py-0.5 rounded">Selected</span>
                   )}
                   {isWinner && !isSelected && (
-                    <span className="bg-yellow-600 text-white text-[9px] font-bold px-1 py-0.5 rounded">Best</span>
+                    <span className="bg-emerald-600 text-white text-[9px] font-bold px-1 py-0.5 rounded">Best</span>
                   )}
                 </div>
                 <p className="text-xs font-bold text-slate-500">Age {outcome.age}</p>
-                <p className={`text-sm font-bold ${isWinner ? 'text-yellow-700' : isSelected ? 'text-blue-700' : 'text-slate-700'}`}>
+                <p className={`text-sm font-bold ${isWinner ? 'text-emerald-700' : isSelected ? 'text-blue-700' : 'text-slate-700'}`}>
                   ${Math.round(outcome.balance).toLocaleString()}
                 </p>
                 <p className="text-[10px] text-slate-400">@ Age {targetMaxPortfolioAge}</p>

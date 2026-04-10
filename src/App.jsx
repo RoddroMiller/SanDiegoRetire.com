@@ -1225,6 +1225,7 @@ export default function BucketPortfolioBuilder() {
       ssPartnerAnalysis={ssPartnerAnalysis}
       ssSimResults={ssSimResults}
       ssPartnerSimResults={ssPartnerSimResults}
+      rebalanceTargets={rebalanceTargets}
       targetMaxPortfolioAge={targetMaxPortfolioAge}
       onSetTargetMaxPortfolioAge={setTargetMaxPortfolioAge}
       onUpdateSSStartAge={updateSSStartAge}

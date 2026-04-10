@@ -1849,409 +1849,48 @@ export const calculateAlternativeAllocations = (inputs, basePlan) => {
 };
 
 /**
- * Run Monte Carlo simulation with a custom allocation
- * @param {object} allocation - Custom bucket allocation (b1Val-b5Val)
- * @param {object} assumptions - Return assumptions for each bucket
+ * Run Monte Carlo simulation for a specific allocation strategy.
+ * Delegates to runSimulation (the same engine used for the Current Model)
+ * so that all strategies share identical income, tax, RMD, and rebalancing logic.
+ *
+ * @param {object} allocation - Bucket allocation { b1Val, b2Val, b3Val, b4Val, b5Val }
+ * @param {object} assumptions - Return assumptions
  * @param {object} inputs - Client inputs
  * @param {object} clientInfo - Client information
  * @param {number} rebalanceFreq - Rebalancing frequency (0 = sequential/never, 1 = annual, 3 = every 3 years)
  * @param {object} vaInputs - Optional VA GIB inputs
- * @returns {object} Simulation results with successRate and finalBalance
+ * @returns {object} { successRate, medianLegacy, allocation }
  */
 export const runOptimizedSimulation = (allocation, assumptions, inputs, clientInfo, rebalanceFreq = 0, vaInputs = null) => {
-  const { monthlySpending, ssPIA, partnerSSPIA, ssStartAge, partnerSSStartAge,
-    monthlyPension, pensionStartAge, pensionCOLA, pensionSurvivorBenefitPct,
-    partnerMonthlyPension, partnerPensionStartAge, partnerPensionCOLA, partnerPensionSurvivorBenefitPct,
-    expectedDeathAge, partnerExpectedDeathAge, spendingReductionAtFirstDeath,
-    inflationRate, personalInflationRate, additionalIncomes, cashFlowAdjustments } = inputs;
+  // Build a real basePlan with the same income/expense/tax logic as the Current Model
+  const basePlanForStrategy = calculateBasePlan(inputs, assumptions, clientInfo, !!vaInputs, vaInputs);
 
-  // Start simulation at the earliest relevant age (same logic as calculateBasePlan)
-  let simulationStartAge = Math.max(clientInfo.currentAge, clientInfo.retirementAge);
-  if (clientInfo.isMarried) {
-    const partnerRetAge = clientInfo.partnerRetirementAge || clientInfo.retirementAge;
-    const partnerIsAlreadyRetired = clientInfo.partnerIsRetired || partnerRetAge <= clientInfo.partnerAge;
-    if (partnerIsAlreadyRetired) {
-      const partnerTurns62InClientAge = 62 + (clientInfo.currentAge - clientInfo.partnerAge);
-      const earliestSSAge = Math.max(clientInfo.currentAge, Math.min(simulationStartAge, partnerTurns62InClientAge));
-      simulationStartAge = Math.min(simulationStartAge, earliestSSAge);
-    }
-  }
-
-  // Run until the later-dying spouse's expected death age, capped at 40 years
-  const clientDeathAge = expectedDeathAge || 95;
-  const yearsToClientDeath = clientDeathAge - simulationStartAge;
-  let yearsToLastDeath = yearsToClientDeath;
-  if (clientInfo.isMarried) {
-    const partnerDeathAge_ = partnerExpectedDeathAge || 95;
-    const ageDiff = clientInfo.currentAge - (clientInfo.partnerAge || 0);
-    const partnerDeathInClientAge = partnerDeathAge_ + ageDiff;
-    yearsToLastDeath = Math.max(yearsToClientDeath, partnerDeathInClientAge - simulationStartAge);
-  }
-  const years = Math.min(40, Math.max(1, yearsToLastDeath));
-  const iterations = 1000;
-
-  // Calculate VA allocation if enabled
-  let vaAllocationAmount = 0;
-  if (vaInputs) {
-    if (vaInputs.allocationType === 'percentage') {
-      vaAllocationAmount = inputs.totalPortfolio * (vaInputs.allocationPercent / 100);
-    } else {
-      vaAllocationAmount = Math.min(vaInputs.allocationFixed || 0, inputs.totalPortfolio);
-    }
-  }
-
-  // Calculate initial allocation percentages for rebalancing (excluding VA)
-  const initialTotal = allocation.b1Val + allocation.b2Val + allocation.b3Val + allocation.b4Val + allocation.b5Val;
-  const targetPcts = {
-    b1: initialTotal > 0 ? allocation.b1Val / initialTotal : 0,
-    b2: initialTotal > 0 ? allocation.b2Val / initialTotal : 0,
-    b3: initialTotal > 0 ? allocation.b3Val / initialTotal : 0,
-    b4: initialTotal > 0 ? allocation.b4Val / initialTotal : 0,
-    b5: initialTotal > 0 ? allocation.b5Val / initialTotal : 0
+  // Override bucket values with this strategy's allocation
+  const strategyBasePlan = {
+    ...basePlanForStrategy,
+    b1Val: allocation.b1Val,
+    b2Val: allocation.b2Val,
+    b3Val: allocation.b3Val,
+    b4Val: allocation.b4Val,
+    b5Val: allocation.b5Val
   };
 
-  // Calculate SS values — if currently receiving, input is today's benefit (no adjustment)
-  const ssCurrentlyReceivingMC = inputs.ssCurrentlyReceiving || false;
-  const partnerSSCurrentlyReceivingMC = inputs.partnerSSCurrentlyReceiving || false;
-  const clientSS = ssCurrentlyReceivingMC ? ssPIA : (clientInfo.currentAge >= 67 ? ssPIA : getAdjustedSS(ssPIA, ssStartAge));
-  const partnerSS = partnerSSCurrentlyReceivingMC ? partnerSSPIA : (clientInfo.partnerAge >= 67 ? partnerSSPIA : getAdjustedSS(partnerSSPIA, partnerSSStartAge));
-  const clientImpliedPIA = ssCurrentlyReceivingMC ? getImpliedPIA(ssPIA, ssStartAge) : ssPIA;
-  const partnerImpliedPIA = partnerSSCurrentlyReceivingMC ? getImpliedPIA(partnerSSPIA, partnerSSStartAge) : partnerSSPIA;
+  // Derive rebalance targets from the allocation's own percentages
+  const allocTotal = allocation.b1Val + allocation.b2Val + allocation.b3Val + allocation.b4Val + allocation.b5Val;
+  const strategyRebalanceTargets = allocTotal > 0 ? {
+    b1: (allocation.b1Val / allocTotal) * 100,
+    b2: (allocation.b2Val / allocTotal) * 100,
+    b3: (allocation.b3Val / allocTotal) * 100,
+    b4: (allocation.b4Val / allocTotal) * 100,
+    b5: (allocation.b5Val / allocTotal) * 100
+  } : null;
 
-  // Spousal entitlement ages (same logic as calculateBasePlan)
-  const ageDiffOpt = clientInfo.currentAge - (clientInfo.partnerAge || clientInfo.currentAge);
-  const clientSpousalAge = clientInfo.isMarried
-    ? Math.min(FULL_RETIREMENT_AGE, Math.max(ssStartAge, partnerSSStartAge + ageDiffOpt))
-    : ssStartAge;
-  const partnerSpousalAge = clientInfo.isMarried
-    ? Math.min(FULL_RETIREMENT_AGE, Math.max(partnerSSStartAge, ssStartAge - ageDiffOpt))
-    : partnerSSStartAge;
-
-  // Helper to get annual details
-  const getAnnualDetails = (yearIndex) => {
-    const simAge = simulationStartAge + yearIndex;
-    const currentPartnerAge = clientInfo.partnerAge + (simAge - clientInfo.currentAge);
-    const expenseInflationFactor = Math.pow(1 + (personalInflationRate / 100), yearIndex);
-    const incomeInflationFactor = Math.pow(1 + (inflationRate / 100), yearIndex);
-    // Death age tracking
-    const clientDeathAge = expectedDeathAge || 95;
-    const partnerDeathAge = partnerExpectedDeathAge || 95;
-    const clientAlive = simAge < clientDeathAge;
-    const partnerAlive = clientInfo.isMarried && currentPartnerAge < partnerDeathAge;
-
-    // Spending reduction after first death
-    const bothAlive = clientAlive && partnerAlive;
-    const reductionPct = (clientInfo.isMarried && !bothAlive && (clientAlive || partnerAlive))
-      ? (spendingReductionAtFirstDeath || 0) / 100
-      : 0;
-    const expenses = monthlySpending * 12 * expenseInflationFactor * (1 - reductionPct);
-
-    let ssIncome = 0;
-    let pensionIncome = 0;
-    let otherIncome = 0;
-    let nonTaxableAdditionalIncome = 0;
-
-    // Employment income — compute BEFORE SS so earnings test can be applied
-    let clientEmploymentIncome = 0;
-    const clientAnnualIncome_ = clientInfo.annualIncome || 0;
-    if (clientAlive && clientAnnualIncome_ > 0 && simAge < clientInfo.retirementAge) {
-      clientEmploymentIncome = clientAnnualIncome_ * (inflationRate > 0 ? incomeInflationFactor : 1);
-    }
-    let partnerEmploymentIncome = 0;
-    const partnerAnnualIncome = clientInfo.partnerAnnualIncome || 0;
-    const partnerRetAge = clientInfo.partnerRetirementAge || clientInfo.retirementAge;
-    if (clientInfo.isMarried && partnerAlive && partnerAnnualIncome > 0 && currentPartnerAge < partnerRetAge) {
-      partnerEmploymentIncome = partnerAnnualIncome * (inflationRate > 0 ? incomeInflationFactor : 1);
-    }
-    const employmentIncome = clientEmploymentIncome + partnerEmploymentIncome;
-
-    // Social Security with Deemed Filing and Earnings Test
-    const clientHasFiled = clientAlive && simAge >= ssStartAge;
-    const partnerHasFiled = clientInfo.isMarried && partnerAlive && currentPartnerAge >= partnerSSStartAge;
-
-    const clientMonthly = clientInfo.isMarried
-      ? applyDeemedFiling(clientSS, partnerImpliedPIA, partnerHasFiled, ssStartAge, clientImpliedPIA, clientSpousalAge)
-      : clientSS;
-    const partnerMonthly = clientInfo.isMarried
-      ? applyDeemedFiling(partnerSS, clientImpliedPIA, clientHasFiled, partnerSSStartAge, partnerImpliedPIA, partnerSpousalAge)
-      : 0;
-
-    const clientSSFull = clientMonthly * 12 * incomeInflationFactor;
-    const partnerSSFull = partnerMonthly * 12 * incomeInflationFactor;
-    const clientSSAfterET = applySSEarningsTest(clientSSFull, clientEmploymentIncome, simAge, incomeInflationFactor);
-    const partnerSSAfterET = applySSEarningsTest(partnerSSFull, partnerEmploymentIncome, currentPartnerAge, incomeInflationFactor);
-
-    if (clientHasFiled) {
-      ssIncome += clientSSAfterET;
-    }
-    if (partnerHasFiled) {
-      ssIncome += partnerSSAfterET;
-    }
-    if (clientInfo.isMarried) {
-      if (!clientAlive && partnerHasFiled && clientSSFull > partnerSSFull) {
-        const survivorBenefit = applySSEarningsTest(clientSSFull, employmentIncome, currentPartnerAge, incomeInflationFactor);
-        ssIncome += (survivorBenefit - partnerSSAfterET);
-      }
-      if (clientAlive && !partnerAlive && clientHasFiled && partnerSSFull > clientSSFull) {
-        const survivorBenefit = applySSEarningsTest(partnerSSFull, 0, simAge, incomeInflationFactor);
-        ssIncome += (survivorBenefit - clientSSAfterET);
-      }
-    }
-
-    // Pension with survivor benefits
-    if (clientAlive && simAge >= pensionStartAge) {
-      pensionIncome += monthlyPension * 12 * (pensionCOLA ? incomeInflationFactor : 1);
-    } else if (!clientAlive && partnerAlive && (pensionSurvivorBenefitPct || 0) > 0 && simAge >= pensionStartAge) {
-      pensionIncome += monthlyPension * (pensionSurvivorBenefitPct / 100) * 12 * (pensionCOLA ? incomeInflationFactor : 1);
-    }
-    if (partnerAlive && partnerMonthlyPension > 0 && currentPartnerAge >= (partnerPensionStartAge || 65)) {
-      pensionIncome += partnerMonthlyPension * 12 * (partnerPensionCOLA ? incomeInflationFactor : 1);
-    } else if (!partnerAlive && clientAlive && (partnerPensionSurvivorBenefitPct || 0) > 0 && partnerMonthlyPension > 0 && currentPartnerAge >= (partnerPensionStartAge || 65)) {
-      pensionIncome += partnerMonthlyPension * (partnerPensionSurvivorBenefitPct / 100) * 12 * (partnerPensionCOLA ? incomeInflationFactor : 1);
-    }
-
-    // Recurring additional incomes - stop if owner has died
-    (additionalIncomes || []).forEach(stream => {
-      const ownerAge = stream.owner === 'partner' ? currentPartnerAge : simAge;
-      const ownerAlive = stream.owner === 'partner' ? partnerAlive : clientAlive;
-      if (ownerAlive && !stream.isOneTime && ownerAge >= stream.startAge && ownerAge <= (stream.endAge || 100)) {
-        let streamAmount = stream.amount * 12;
-        if (stream.inflationAdjusted) streamAmount *= incomeInflationFactor;
-        const taxablePct = (stream.taxablePercent ?? 100) / 100;
-        otherIncome += streamAmount * taxablePct;
-        nonTaxableAdditionalIncome += streamAmount * (1 - taxablePct);
-      }
-    });
-
-    // One-time contributions - only if owner is alive
-    let oneTimeContributions = 0;
-    (additionalIncomes || []).forEach(stream => {
-      const ownerAge = stream.owner === 'partner' ? currentPartnerAge : simAge;
-      const ownerAlive = stream.owner === 'partner' ? partnerAlive : clientAlive;
-      if (ownerAlive && stream.isOneTime && ownerAge === stream.startAge) {
-        let streamAmount = stream.amount;
-        if (stream.inflationAdjusted) streamAmount *= incomeInflationFactor;
-        const taxablePct = (stream.taxablePercent ?? 100) / 100;
-        otherIncome += streamAmount * taxablePct;
-        oneTimeContributions += streamAmount * (1 - taxablePct);
-      }
-    });
-
-    const income = ssIncome + pensionIncome + otherIncome + nonTaxableAdditionalIncome + employmentIncome;
-
-    // Apply cash flow adjustments to expenses
-    let adjustedExpenses = expenses;
-    if (cashFlowAdjustments && cashFlowAdjustments.length > 0) {
-      let netAdjustment = 0;
-      cashFlowAdjustments.forEach(adj => {
-        const ownerAge = adj.owner === 'partner' ? currentPartnerAge : simAge;
-        if (adj.type === 'one-time') {
-          if (Math.floor(ownerAge) === adj.startAge) {
-            let amount = adj.amount;
-            if (adj.inflationAdjusted) amount *= expenseInflationFactor;
-            netAdjustment += amount;
-          }
-        } else if (ownerAge >= adj.startAge && ownerAge <= (adj.endAge || 100)) {
-          let amount = adj.amount * 12;
-          if (adj.inflationAdjusted) amount *= expenseInflationFactor;
-          if (adj.type === 'reduction') {
-            netAdjustment -= amount;
-          } else if (adj.type === 'increase') {
-            netAdjustment += amount;
-          }
-        }
-      });
-      adjustedExpenses = Math.max(0, expenses + netAdjustment);
-    }
-
-    const gap = Math.max(0, adjustedExpenses - income);
-    return { expenses: adjustedExpenses, income, gap, simAge, currentPartnerAge, oneTimeContributions,
-      ssIncome, pensionIncome, otherIncome, employmentIncome, clientAlive, partnerAlive };
-  };
-
-  let failureCount = 0;
-  const finalBalances = [];
-
-  for (let iter = 0; iter < iterations; iter++) {
-    // Start with allocation, reduced proportionally for VA
-    let balances = {
-      b1: allocation.b1Val,
-      b2: allocation.b2Val,
-      b3: allocation.b3Val,
-      b4: allocation.b4Val,
-      b5: allocation.b5Val
-    };
-
-    // Initialize VA tracking
-    let vaAccountValue = 0;
-    let vaBenefitBase = 0;
-    let vaHighWaterMark = 0;
-
-    if (vaInputs && vaAllocationAmount > 0) {
-      const totalBuckets = allocation.b1Val + allocation.b2Val + allocation.b3Val + allocation.b4Val + allocation.b5Val;
-      if (totalBuckets > 0) {
-        const reductionRatio = vaAllocationAmount / totalBuckets;
-        balances.b1 = allocation.b1Val * (1 - reductionRatio);
-        balances.b2 = allocation.b2Val * (1 - reductionRatio);
-        balances.b3 = allocation.b3Val * (1 - reductionRatio);
-        balances.b4 = allocation.b4Val * (1 - reductionRatio);
-        balances.b5 = allocation.b5Val * (1 - reductionRatio);
-      }
-      vaAccountValue = vaAllocationAmount;
-      vaBenefitBase = vaAllocationAmount;
-      vaHighWaterMark = vaAllocationAmount;
-    }
-
-    for (let i = 0; i < years; i++) {
-      // Generate random returns
-      const rates = {
-        b1: (assumptions.b1.return + assumptions.b1.stdDev * randn_bm()) / 100,
-        b2: (assumptions.b2.return + assumptions.b2.stdDev * randn_bm()) / 100,
-        b3: (assumptions.b3.return + assumptions.b3.stdDev * randn_bm()) / 100,
-        b4: (assumptions.b4.return + assumptions.b4.stdDev * randn_bm()) / 100,
-        b5: (assumptions.b5.return + assumptions.b5.stdDev * randn_bm()) / 100
-      };
-
-      // Apply returns
-      balances.b1 *= (1 + rates.b1);
-      balances.b2 *= (1 + rates.b2);
-      balances.b3 *= (1 + rates.b3);
-      balances.b4 *= (1 + rates.b4);
-      balances.b5 *= (1 + rates.b5);
-
-      // Add one-time contributions proportionally to target allocation
-      const details = getAnnualDetails(i);
-      if (details.oneTimeContributions > 0) {
-        balances.b1 += details.oneTimeContributions * targetPcts.b1;
-        balances.b2 += details.oneTimeContributions * targetPcts.b2;
-        balances.b3 += details.oneTimeContributions * targetPcts.b3;
-        balances.b4 += details.oneTimeContributions * targetPcts.b4;
-        balances.b5 += details.oneTimeContributions * targetPcts.b5;
-      }
-
-      // Income surplus flows into portfolio as savings
-      if (details.surplus > 0) {
-        balances.b5 += details.surplus;
-      }
-
-      // VA GIB: Calculate guaranteed income and update VA account
-      let vaGuaranteedIncome = 0;
-      if (vaInputs && vaBenefitBase > 0) {
-        // VA account grows with B5 returns
-        vaAccountValue *= (1 + rates.b5);
-
-        // Apply VA fees (1.5% annually)
-        const vaFeeRate = 0.015;
-        vaAccountValue *= (1 - vaFeeRate);
-
-        // High water mark: step-up benefit base if account grows
-        if (vaInputs.highWaterMark && vaAccountValue > vaHighWaterMark) {
-          vaHighWaterMark = vaAccountValue;
-          vaBenefitBase = vaAccountValue;
-        }
-
-        // Only start guaranteed income at income start age
-        const incomeStartAge = vaInputs.incomeStartAge || 65;
-        if (details.simAge >= incomeStartAge) {
-          vaGuaranteedIncome = vaBenefitBase * (vaInputs.withdrawalRate / 100);
-          vaAccountValue = Math.max(0, vaAccountValue - vaGuaranteedIncome);
-        }
-      }
-
-      // Adjust gap by VA guaranteed income
-      const adjustedGap = vaInputs ? Math.max(0, details.gap - vaGuaranteedIncome) : details.gap;
-
-      // Tax-inclusive withdrawal calculation (mirrors runSimulation logic)
-      let withdrawalAmount = adjustedGap;
-      if (inputs.taxEnabled) {
-        const override = inputs.withdrawalOverrides?.[details.simAge];
-        const traditionalPct = (override?.traditionalPercent ?? inputs.traditionalPercent ?? 60) / 100;
-        const rothPct = (override?.rothPercent ?? inputs.rothPercent ?? 25) / 100;
-        const nqPct = (override?.nqPercent ?? inputs.nqPercent ?? 15) / 100;
-
-        const nqDividendYield = (inputs.nqDividendYield ?? 2.0) / 100;
-        const nqQualifiedDividendPct = (inputs.nqQualifiedDividendPercent ?? 80) / 100;
-        const nqAnnualCapGainRate = (inputs.nqCapitalGainRate ?? 4) / 100;
-
-        const startTotal = balances.b1 + balances.b2 + balances.b3 + balances.b4 + balances.b5;
-        const nqBalance = startTotal * nqPct;
-        const nqTotalDividends = nqBalance * nqDividendYield;
-        const nqQualifiedDividends = nqTotalDividends * nqQualifiedDividendPct;
-        const nqOrdinaryDividends = nqTotalDividends - nqQualifiedDividends;
-        const nqAnnualCapGains = nqBalance * nqAnnualCapGainRate;
-
-        const isSenior = details.simAge >= 65;
-        const bothAliveForTax = details.clientAlive && details.partnerAlive;
-        const filingStatus = (inputs.filingStatus === 'married' && !bothAliveForTax) ? 'single' : (inputs.filingStatus || 'married');
-        const stateRate = inputs.stateRate || 0;
-
-        let withdrawal = adjustedGap;
-        for (let taxIter = 0; taxIter < 5; taxIter++) {
-          const taxData = calculateAnnualTax({
-            ssIncome: details.ssIncome,
-            pensionIncome: details.pensionIncome,
-            traditionalWithdrawal: withdrawal * traditionalPct,
-            rothWithdrawal: withdrawal * rothPct,
-            nqTaxableGain: nqAnnualCapGains,
-            nqQualifiedDividends,
-            nqOrdinaryDividends,
-            otherIncome: details.otherIncome,
-            employmentIncome: details.employmentIncome
-          }, { filingStatus, stateRate, stateCode: inputs.stateCode || '' }, isSenior);
-
-          const newWithdrawal = adjustedGap + taxData.totalTax;
-          if (Math.abs(newWithdrawal - withdrawal) < 1) break;
-          withdrawal = newWithdrawal;
-        }
-        withdrawalAmount = withdrawal;
-      }
-      const withdrawOrder = ['b1', 'b2', 'b3', 'b4', 'b5'];
-      for (let b of withdrawOrder) {
-        if (withdrawalAmount <= 0) break;
-        if (balances[b] >= withdrawalAmount) {
-          balances[b] -= withdrawalAmount;
-          withdrawalAmount = 0;
-        } else {
-          withdrawalAmount -= balances[b];
-          balances[b] = 0;
-        }
-      }
-
-      // Rebalance to starting allocation percentages
-      if (rebalanceFreq > 0 && (i + 1) % rebalanceFreq === 0) {
-        const currentTotal = balances.b1 + balances.b2 + balances.b3 + balances.b4 + balances.b5;
-        if (currentTotal > 0) {
-          balances.b1 = currentTotal * targetPcts.b1;
-          balances.b2 = currentTotal * targetPcts.b2;
-          balances.b3 = currentTotal * targetPcts.b3;
-          balances.b4 = currentTotal * targetPcts.b4;
-          balances.b5 = currentTotal * targetPcts.b5;
-        }
-      }
-
-      // Total includes bucket balances plus VA account
-      const bucketTotal = balances.b1 + balances.b2 + balances.b3 + balances.b4 + balances.b5;
-      const total = bucketTotal + (vaInputs ? vaAccountValue : 0);
-      if (total <= 0) {
-        failureCount++;
-        break;
-      }
-    }
-
-    const bucketFinal = balances.b1 + balances.b2 + balances.b3 + balances.b4 + balances.b5;
-    const finalTotal = bucketFinal + (vaInputs ? vaAccountValue : 0);
-    finalBalances.push(Math.max(0, finalTotal));
-  }
-
-  // Calculate median legacy (includes all iterations for consistency with chart)
-  finalBalances.sort((a, b) => a - b);
-  const medianLegacy = finalBalances.length > 0
-    ? finalBalances[Math.floor(finalBalances.length / 2)]
-    : 0;
+  // Run through the exact same Monte Carlo engine as the Current Model
+  const result = runSimulation(strategyBasePlan, assumptions, inputs, rebalanceFreq, true, vaInputs, strategyRebalanceTargets);
 
   return {
-    successRate: ((iterations - failureCount) / iterations) * 100,
-    medianLegacy: Math.round(medianLegacy),
+    successRate: result.successRate,
+    medianLegacy: result.medianLegacy,
     allocation
   };
 };
