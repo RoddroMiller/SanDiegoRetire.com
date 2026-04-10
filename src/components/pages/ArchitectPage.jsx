@@ -12,7 +12,7 @@ import {
 } from 'lucide-react';
 
 import { COLORS, LOGO_URL } from '../../constants';
-import { getAdjustedSS, generateAndDownloadIPS, calculateAnnualTax, calculateTaxableSS, calculateFederalTax, getInflationAdjustedBrackets, getInflationAdjustedDeduction, STATE_TAX_DATA } from '../../utils';
+import { getAdjustedSS, getImpliedPIA, applyDeemedFiling, generateAndDownloadIPS, calculateAnnualTax, calculateTaxableSS, calculateFederalTax, getInflationAdjustedBrackets, getInflationAdjustedDeduction, STATE_TAX_DATA } from '../../utils';
 import { Card, StatBox, AllocationRow, FormattedNumberInput, Disclaimer } from '../ui';
 
 /**
@@ -2927,6 +2927,7 @@ const MonteCarloTab = ({ monteCarloData, rebalanceFreq, vaEnabled, vaInputs, onT
 };
 
 const SSOptimizationTab = ({ clientInfo, inputs, ssAnalysis, ssBreakevenResults, clientOutcomes, clientWinner, partnerOutcomes, partnerWinner, targetMaxPortfolioAge, onSetTargetMaxPortfolioAge, onUpdateSSStartAge, onUpdatePartnerSSStartAge, onInputChange }) => {
+  const [showBenefitDetails, setShowBenefitDetails] = useState(false);
   return (
   <div className="space-y-6 animate-in fade-in duration-300 mt-6">
     <Card className="p-6">
@@ -2956,6 +2957,205 @@ const SSOptimizationTab = ({ clientInfo, inputs, ssAnalysis, ssBreakevenResults,
           </select>
         </div>
       </div>
+
+      {/* SS Benefit Calculation Details (Collapsible) */}
+      {(() => {
+        const FRA = 67;
+        const fmt = (v) => `$${Math.round(v).toLocaleString()}`;
+        const pct = (v) => `${(v * 100).toFixed(1)}%`;
+
+        // Build details for each person
+        const people = [];
+
+        // Client — use implied PIA when currently receiving
+        const cAge = inputs.ssStartAge;
+        const cInputPIA = inputs.ssPIA;
+        const cReceiving = inputs.ssCurrentlyReceiving;
+        const cPIA = cReceiving ? getImpliedPIA(cInputPIA, cAge) : cInputPIA;
+        const cOwn = cReceiving ? cInputPIA : getAdjustedSS(cPIA, cAge);
+        const cYearsEarly = Math.max(0, FRA - cAge);
+        const cYearsLate = Math.max(0, cAge - FRA);
+        const cReduction = cPIA > 0 && !cReceiving ? (1 - cOwn / cPIA) : 0;
+        const cBonus = cPIA > 0 && !cReceiving && cAge > FRA ? (cOwn / cPIA - 1) : 0;
+
+        // Spousal excess: always uses implied PIA for the excess computation
+        const pPartnerPIA = clientInfo.isMarried
+          ? (inputs.partnerSSCurrentlyReceiving ? getImpliedPIA(inputs.partnerSSPIA, inputs.partnerSSStartAge) : inputs.partnerSSPIA)
+          : 0;
+        const cSpousalRaw = clientInfo.isMarried ? pPartnerPIA * 0.5 : 0;
+        const cSpousalExcess = clientInfo.isMarried ? Math.max(0, cSpousalRaw - cPIA) : 0;
+        const cAfterDeemed = clientInfo.isMarried
+          ? applyDeemedFiling(cOwn, pPartnerPIA, true, cAge, cPIA)
+          : cOwn;
+        const cSpousalApplies = cAfterDeemed > cOwn;
+
+        people.push({
+          label: clientInfo.name || 'Client',
+          pia: cPIA,
+          inputPIA: cInputPIA,
+          claimAge: cAge,
+          receiving: cReceiving,
+          ownBenefit: cOwn,
+          yearsEarly: cYearsEarly,
+          yearsLate: cYearsLate,
+          reductionPct: cReduction,
+          bonusPct: cBonus,
+          spousalRaw: cSpousalRaw,
+          spousalExcess: cSpousalExcess,
+          reducedExcess: cAfterDeemed - cOwn,
+          afterDeemed: cAfterDeemed,
+          spousalApplies: cSpousalApplies,
+          isMarried: clientInfo.isMarried
+        });
+
+        // Partner
+        if (clientInfo.isMarried) {
+          const pAge = inputs.partnerSSStartAge;
+          const pInputPIA = inputs.partnerSSPIA;
+          const pReceiving = inputs.partnerSSCurrentlyReceiving;
+          const pPIA = pReceiving ? getImpliedPIA(pInputPIA, pAge) : pInputPIA;
+          const pOwn = pReceiving ? pInputPIA : getAdjustedSS(pPIA, pAge);
+          const pYearsEarly = Math.max(0, FRA - pAge);
+          const pYearsLate = Math.max(0, pAge - FRA);
+          const pReduction = pPIA > 0 && !pReceiving ? (1 - pOwn / pPIA) : 0;
+          const pBonus = pPIA > 0 && !pReceiving && pAge > FRA ? (pOwn / pPIA - 1) : 0;
+
+          const pSpousalRaw = cPIA * 0.5;
+          const pSpousalExcess = Math.max(0, pSpousalRaw - pPIA);
+          const pAfterDeemed = applyDeemedFiling(pOwn, cPIA, true, pAge, pPIA);
+          const pSpousalApplies = pAfterDeemed > pOwn;
+
+          people.push({
+            label: clientInfo.partnerName || 'Partner',
+            pia: pPIA,
+            inputPIA: pInputPIA,
+            claimAge: pAge,
+            receiving: pReceiving,
+            ownBenefit: pOwn,
+            yearsEarly: pYearsEarly,
+            yearsLate: pYearsLate,
+            reductionPct: pReduction,
+            bonusPct: pBonus,
+            spousalRaw: pSpousalRaw,
+            spousalExcess: pSpousalExcess,
+            reducedExcess: pAfterDeemed - pOwn,
+            afterDeemed: pAfterDeemed,
+            spousalApplies: pSpousalApplies,
+            isMarried: true
+          });
+        }
+
+        const totalMonthly = people.reduce((sum, p) => sum + p.afterDeemed, 0);
+
+        return (
+          <div className="bg-slate-50 rounded-xl border border-slate-200 mb-8">
+            <button
+              onClick={() => setShowBenefitDetails(!showBenefitDetails)}
+              className="w-full p-4 flex items-center justify-between text-left hover:bg-slate-100 rounded-xl transition-colors"
+            >
+              <h4 className="font-bold text-slate-800 flex items-center gap-2">
+                <Shield className="w-4 h-4" /> Benefit Calculation Details
+              </h4>
+              <div className="flex items-center gap-3">
+                {clientInfo.isMarried && (
+                  <span className="text-sm font-bold text-emerald-700">{fmt(totalMonthly)}/mo ({fmt(totalMonthly * 12)}/yr)</span>
+                )}
+                <span className={`text-slate-400 transition-transform ${showBenefitDetails ? 'rotate-180' : ''}`}>&#9660;</span>
+              </div>
+            </button>
+            {showBenefitDetails && (
+              <div className="px-5 pb-5">
+                <div className={`grid grid-cols-1 ${clientInfo.isMarried ? 'md:grid-cols-2' : ''} gap-6`}>
+                  {people.map((p) => (
+                    <div key={p.label} className="space-y-2">
+                      <p className="text-xs font-bold text-slate-500 uppercase border-b border-slate-200 pb-1">{p.label}</p>
+                      <table className="w-full text-xs">
+                        <tbody>
+                          <tr>
+                            <td className="py-0.5 text-slate-500">PIA (benefit at FRA 67)</td>
+                            <td className="py-0.5 text-right font-bold text-slate-700">
+                              {p.receiving
+                                ? <span>{fmt(p.pia)}/mo <span className="text-amber-600">(implied from {fmt(p.inputPIA)} @ age {p.claimAge})</span></span>
+                                : `${fmt(p.pia)}/mo`}
+                            </td>
+                          </tr>
+                          <tr>
+                            <td className="py-0.5 text-slate-500">Claiming age</td>
+                            <td className="py-0.5 text-right font-bold text-slate-700">
+                              {p.claimAge}
+                              {p.yearsEarly > 0 && <span className="text-red-500 ml-1">({p.yearsEarly}yr early)</span>}
+                              {p.yearsLate > 0 && <span className="text-emerald-600 ml-1">({p.yearsLate}yr delayed)</span>}
+                            </td>
+                          </tr>
+                          {!p.receiving && p.reductionPct > 0 && (
+                            <tr>
+                              <td className="py-0.5 text-red-500">Early claiming reduction</td>
+                              <td className="py-0.5 text-right font-bold text-red-500">-{pct(p.reductionPct)}</td>
+                            </tr>
+                          )}
+                          {!p.receiving && p.bonusPct > 0 && (
+                            <tr>
+                              <td className="py-0.5 text-emerald-600">Delayed retirement credits</td>
+                              <td className="py-0.5 text-right font-bold text-emerald-600">+{pct(p.bonusPct)}</td>
+                            </tr>
+                          )}
+                          <tr className="border-t border-slate-200">
+                            <td className="py-0.5 text-slate-500">Own benefit{p.receiving ? ' (current)' : ''}</td>
+                            <td className="py-0.5 text-right font-bold text-slate-700">{fmt(p.ownBenefit)}/mo</td>
+                          </tr>
+                          {p.isMarried && (
+                            <>
+                              <tr>
+                                <td className="py-0.5 text-slate-500">50% of spouse's PIA</td>
+                                <td className="py-0.5 text-right text-slate-500">{fmt(p.spousalRaw)}/mo</td>
+                              </tr>
+                              <tr>
+                                <td className="py-0.5 text-slate-500">Spousal excess (50% spouse PIA - own PIA)</td>
+                                <td className="py-0.5 text-right text-slate-500">
+                                  {p.spousalExcess > 0 ? `${fmt(p.spousalExcess)}/mo` : 'None (own PIA higher)'}
+                                </td>
+                              </tr>
+                              {p.spousalApplies && (
+                                <tr>
+                                  <td className="py-0.5 text-blue-600">Reduced spousal excess{p.yearsEarly > 0 ? ` (${pct(p.spousalExcess > 0 ? 1 - p.reducedExcess / p.spousalExcess : 0)} reduction)` : ''}</td>
+                                  <td className="py-0.5 text-right font-bold text-blue-600">+{fmt(p.reducedExcess)}/mo</td>
+                                </tr>
+                              )}
+                              <tr>
+                                <td className="py-0.5 text-slate-500">After deemed filing</td>
+                                <td className="py-0.5 text-right font-bold text-slate-700">
+                                  {fmt(p.afterDeemed)}/mo
+                                  {p.spousalApplies
+                                    ? <span className="text-blue-600 ml-1">(own + spousal excess)</span>
+                                    : <span className="text-slate-400 ml-1">(own only)</span>}
+                                </td>
+                              </tr>
+                            </>
+                          )}
+                          <tr className="border-t border-slate-300 bg-white">
+                            <td className="py-1 text-slate-700 font-bold">Monthly benefit</td>
+                            <td className="py-1 text-right font-bold text-emerald-700 text-sm">{fmt(p.afterDeemed)}/mo</td>
+                          </tr>
+                          <tr>
+                            <td className="py-0.5 text-slate-500">Annual benefit</td>
+                            <td className="py-0.5 text-right font-bold text-slate-700">{fmt(p.afterDeemed * 12)}/yr</td>
+                          </tr>
+                        </tbody>
+                      </table>
+                    </div>
+                  ))}
+                </div>
+                {clientInfo.isMarried && (
+                  <div className="mt-4 pt-3 border-t border-slate-300 flex justify-between items-center">
+                    <span className="text-xs font-bold text-slate-600">Combined Household SS</span>
+                    <span className="text-sm font-bold text-emerald-700">{fmt(totalMonthly)}/mo ({fmt(totalMonthly * 12)}/yr)</span>
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+        );
+      })()}
 
       {/* Client Recommendation */}
       <div className="mb-12">
@@ -3116,37 +3316,7 @@ const SSOptimizationTab = ({ clientInfo, inputs, ssAnalysis, ssBreakevenResults,
           })}
         </div>
 
-        {/* Three-Line Wealth Comparison Chart */}
-        {(() => {
-          const vs67 = ssBreakevenResults?.vs67;
-          const vs70 = ssBreakevenResults?.vs70;
-          if (!vs67?.chartData || !vs70?.chartData) return null;
-          // Merge chart data: earlyWealth is same for both, add delay67 and delay70
-          const mergedData = vs67.chartData.map((pt, i) => ({
-            age: pt.age,
-            earlyWealth: pt.earlyWealth,
-            delay67: pt.delayedWealth,
-            delay70: vs70.chartData[i]?.delayedWealth ?? 0
-          }));
-          return (
-            <div className="h-72 w-full">
-              <ResponsiveContainer width="100%" height="100%">
-                <LineChart data={mergedData}>
-                  <CartesianGrid strokeDasharray="3 3" vertical={false} />
-                  <XAxis dataKey="age" />
-                  <YAxis tickFormatter={(val) => val >= 1000000 ? `$${(val / 1000000).toFixed(1)}M` : `$${Math.round(val / 1000)}k`} />
-                  <Tooltip formatter={(val) => `$${val.toLocaleString()}`} />
-                  <Legend />
-                  <Line type="monotone" dataKey="earlyWealth" name="Claim @ 62" stroke="#f87171" strokeWidth={2} dot={false} />
-                  <Line type="monotone" dataKey="delay67" name="Delay to 67" stroke="#eab308" strokeWidth={2} dot={false} />
-                  <Line type="monotone" dataKey="delay70" name="Delay to 70" stroke="#059669" strokeWidth={2} dot={false} />
-                </LineChart>
-              </ResponsiveContainer>
-            </div>
-          );
-        })()}
-
-        <p className="text-xs text-slate-500 mt-2 mb-6">
+        <p className="text-xs text-slate-500 mb-6">
           Portfolio growth: {inputs.ssReinvestRate || 4.5}% | COLA: {inputs.inflationRate}% | Bridge funding: {inputs.ssBridgeNqPercent}% NQ / {100 - inputs.ssBridgeNqPercent}% IRA | Tax bracket: {inputs.ssMarginalTaxRate}%
         </p>
 
@@ -3930,12 +4100,15 @@ const TaxMapTab = ({ projectionData, inputs, clientInfo, basePlan }) => {
       const tradWithdrawal = row.distribution * (row.traditionalPctUsed || 0) / 100;
       const taxableSS = row.taxableSS || 0;
       const pension = row.pensionIncomeDetail || 0;
-      const nqGains = (row.nqTaxableGain || 0) + (row.nqOrdinaryDividends || 0);
+      // NQ ordinary dividends are taxed at ordinary rates; LTCG and qualified divs are preferential
+      const nqOrdinaryDivs = row.nqOrdinaryDividends || 0;
+      const nqPreferential = (row.nqTaxableGain || 0) + (row.nqQualifiedDividends || 0);
       const otherEmployment = (row.otherIncomeDetail || 0) + (row.employmentIncomeDetail || 0);
       const rmd = row.rmdAmount || 0;
 
       // Total ordinary taxable income (before deduction, for bracket comparison)
-      const totalOrdinaryIncome = taxableSS + pension + tradWithdrawal + nqGains + otherEmployment;
+      // NQ LTCG and qualified dividends are taxed at capital gains rates, NOT ordinary income rates
+      const totalOrdinaryIncome = taxableSS + pension + tradWithdrawal + nqOrdinaryDivs + otherEmployment;
 
       // Bracket thresholds (add deduction so they represent gross income thresholds)
       const bracket12Top = brackets.length > 1 ? brackets[1].max + deduction : 0;
@@ -3960,7 +4133,8 @@ const TaxMapTab = ({ projectionData, inputs, clientInfo, basePlan }) => {
         taxableSS,
         pension,
         tradWithdrawal: Math.round(tradWithdrawal),
-        nqGains: Math.round(nqGains),
+        nqOrdinaryDivs: Math.round(nqOrdinaryDivs),
+        nqPreferential: Math.round(nqPreferential),
         otherEmployment: Math.round(otherEmployment),
         totalOrdinaryIncome: Math.round(totalOrdinaryIncome),
         rmd: Math.round(rmd),
@@ -4034,12 +4208,14 @@ const TaxMapTab = ({ projectionData, inputs, clientInfo, basePlan }) => {
                 contentStyle={{ fontSize: 12 }}
               />
               <Legend wrapperStyle={{ fontSize: 11 }} />
-              {/* Stacked bars for taxable income components */}
+              {/* Stacked bars for ordinary taxable income components */}
               <Bar dataKey="taxableSS" stackId="income" fill="#60a5fa" name="Taxable SS" />
               <Bar dataKey="pension" stackId="income" fill="#34d399" name="Pension" />
               <Bar dataKey="tradWithdrawal" stackId="income" fill="#f97316" name="Traditional" />
-              <Bar dataKey="nqGains" stackId="income" fill="#a78bfa" name="NQ Gains/Divs" />
+              <Bar dataKey="nqOrdinaryDivs" stackId="income" fill="#c084fc" name="NQ Ordinary Divs" />
               <Bar dataKey="otherEmployment" stackId="income" fill="#94a3b8" name="Other/Employment" />
+              {/* Preferential income (LTCG + qualified divs) — taxed at cap gains rates, not ordinary */}
+              <Bar dataKey="nqPreferential" stackId="income" fill="#a78bfa" name="NQ Cap Gains (LTCG rate)" />
               {/* Bracket threshold lines */}
               <Line dataKey="bracket12Top" stroke="#10b981" strokeDasharray="5 5" name="Top of 12%" dot={false} strokeWidth={2} />
               <Line dataKey="bracket22Top" stroke="#f59e0b" strokeDasharray="5 5" name="Top of 22%" dot={false} strokeWidth={2} />

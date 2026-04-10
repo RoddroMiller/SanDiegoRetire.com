@@ -8,6 +8,12 @@ const EARLY_REDUCTION_RATE_FIRST_3_YEARS = 0.0667;
 const EARLY_REDUCTION_RATE_AFTER_3_YEARS = 0.05;
 const DELAYED_CREDIT_RATE = 0.08;
 
+// Spousal benefit early-claiming reduction rates (different from own-benefit rates)
+// First 36 months before FRA: 25/36 of 1% per month = ~8.333% per year
+// Beyond 36 months: 5/12 of 1% per month = 5% per year
+const SPOUSAL_REDUCTION_RATE_FIRST_3_YEARS = 25 / 36 / 100 * 12; // 0.08333 per year
+const SPOUSAL_REDUCTION_RATE_AFTER_3_YEARS = 0.05;
+
 // Social Security Earnings Test (2026 base thresholds, indexed for inflation)
 const SS_EARNINGS_EXEMPT_UNDER_FRA = 24480;    // Annual exempt earnings before FRA year (2026)
 const SS_EARNINGS_EXEMPT_FRA_YEAR = 65160;     // Annual exempt earnings in year reaching FRA (2026)
@@ -45,6 +51,19 @@ export const getAdjustedSS = (pia, startAge) => {
 };
 
 /**
+ * Reverse-engineer PIA from a current benefit amount and claiming age.
+ * Inverts getAdjustedSS: if benefit = PIA × factor, then PIA = benefit / factor.
+ * @param {number} currentBenefit - Current monthly benefit being received
+ * @param {number} startAge - Age when benefits were first claimed
+ * @returns {number} Implied PIA (benefit at Full Retirement Age)
+ */
+export const getImpliedPIA = (currentBenefit, startAge) => {
+  if (!currentBenefit || currentBenefit <= 0) return 0;
+  const factor = getAdjustedSS(1, startAge); // factor that would be applied to PIA of $1
+  return factor > 0 ? currentBenefit / factor : currentBenefit;
+};
+
+/**
  * Apply Social Security Earnings Test — reduces benefits when claiming before FRA while still working
  * Before FRA: $1 withheld for every $2 earned above $24,480 (2026 base, indexed for inflation)
  * In the year reaching FRA: $1 withheld for every $3 earned above $65,160 (2026 base, indexed)
@@ -76,20 +95,45 @@ export const applySSEarningsTest = (annualBenefit, earnedIncome, currentAge, inf
 
 /**
  * Calculate deemed-filing SS benefit with spousal top-up (post-2015 Bipartisan Budget Act).
- * When someone files for SS, they are deemed to have filed for both own and spousal benefits.
- * They receive whichever is larger. Spousal benefit = 50% of the higher earner's PIA,
- * but is only available once the higher earner has also filed.
+ *
+ * SSA calculation method:
+ *   1. Own reduced benefit = own PIA × (1 - own_reduction_for_claiming_age)
+ *   2. Spousal excess = max(0, 50% × spouse_PIA - claimant_own_PIA)
+ *   3. Reduced excess = excess × (1 - spousal_reduction_for_claiming_age)
+ *   4. Total = own reduced benefit + reduced spousal excess
+ *
+ * The spousal excess uses steeper early-claiming reduction rates than own benefits:
+ *   First 36 months: 25/36 of 1%/month (~8.33%/yr) vs 5/9 of 1%/month (~6.67%/yr)
+ *   Beyond 36 months: 5/12 of 1%/month (5%/yr) — same for both
  *
  * @param {number} ownMonthlyBenefit - Claimant's own SS benefit (already adjusted for claiming age)
  * @param {number} spousePIA - Spouse's PIA (monthly, at FRA — NOT adjusted for their claiming age)
  * @param {boolean} spouseHasFiled - Whether the spouse has started receiving SS benefits
- * @returns {number} Monthly benefit after deemed filing (own + spousal top-up if applicable)
+ * @param {number} claimantStartAge - Age the claimant files (used to reduce spousal excess for early claiming)
+ * @param {number} claimantPIA - Claimant's own PIA at FRA (unreduced, for computing spousal excess)
+ * @returns {number} Monthly benefit after deemed filing (own reduced + reduced spousal excess)
  */
-export const applyDeemedFiling = (ownMonthlyBenefit, spousePIA, spouseHasFiled) => {
+export const applyDeemedFiling = (ownMonthlyBenefit, spousePIA, spouseHasFiled, claimantStartAge = FULL_RETIREMENT_AGE, claimantPIA = 0) => {
   if (!spouseHasFiled || !spousePIA) return ownMonthlyBenefit;
-  const spousalBenefit = spousePIA * 0.5;
-  // Spousal top-up: if 50% of spouse's PIA exceeds own benefit, get the difference
-  return Math.max(ownMonthlyBenefit, spousalBenefit);
+
+  // Spousal excess: difference between 50% of spouse's PIA and claimant's own PIA (unreduced)
+  // If claimantPIA not provided, fall back to ownMonthlyBenefit (less accurate but safe)
+  const ownPIA = claimantPIA > 0 ? claimantPIA : ownMonthlyBenefit;
+  const spousalExcess = Math.max(0, spousePIA * 0.5 - ownPIA);
+  if (spousalExcess <= 0) return ownMonthlyBenefit;
+
+  // Apply spousal early-claiming reduction to the excess (steeper rates than own benefit)
+  let reducedExcess = spousalExcess;
+  if (claimantStartAge < FULL_RETIREMENT_AGE) {
+    const yearsEarly = FULL_RETIREMENT_AGE - claimantStartAge;
+    const spousalReduction = yearsEarly <= 3
+      ? yearsEarly * SPOUSAL_REDUCTION_RATE_FIRST_3_YEARS
+      : (3 * SPOUSAL_REDUCTION_RATE_FIRST_3_YEARS) + ((yearsEarly - 3) * SPOUSAL_REDUCTION_RATE_AFTER_3_YEARS);
+    reducedExcess *= (1 - spousalReduction);
+  }
+
+  // Total = own reduced benefit + reduced spousal excess
+  return ownMonthlyBenefit + reducedExcess;
 };
 
 /**
@@ -838,10 +882,14 @@ export const calculateBasePlan = (inputs, assumptions, clientInfo, vaEnabled = f
     }
   }
 
-  // For clients over FRA who entered current SS benefit, use the value directly (no adjustment)
-  // For clients under FRA, apply the standard adjustment based on claiming age
-  const clientSS = clientInfo.currentAge >= 67 ? ssPIA : getAdjustedSS(ssPIA, ssStartAge);
-  const partnerSS = clientInfo.partnerAge >= 67 ? partnerSSPIA : getAdjustedSS(partnerSSPIA, partnerSSStartAge);
+  // If currently receiving, the input is today's monthly benefit (no adjustment needed).
+  // Back-calculate implied PIA for spousal excess computation.
+  const ssCurrentlyReceiving = inputs.ssCurrentlyReceiving || false;
+  const partnerSSCurrentlyReceiving = inputs.partnerSSCurrentlyReceiving || false;
+  const clientSS = ssCurrentlyReceiving ? ssPIA : (clientInfo.currentAge >= 67 ? ssPIA : getAdjustedSS(ssPIA, ssStartAge));
+  const partnerSS = partnerSSCurrentlyReceiving ? partnerSSPIA : (clientInfo.partnerAge >= 67 ? partnerSSPIA : getAdjustedSS(partnerSSPIA, partnerSSStartAge));
+  const clientImpliedPIA = ssCurrentlyReceiving ? getImpliedPIA(ssPIA, ssStartAge) : ssPIA;
+  const partnerImpliedPIA = partnerSSCurrentlyReceiving ? getImpliedPIA(partnerSSPIA, partnerSSStartAge) : partnerSSPIA;
   const totalSS = clientSS + partnerSS;
 
   // Get detailed cash flow numbers for a specific year
@@ -890,12 +938,12 @@ export const calculateBasePlan = (inputs, assumptions, clientInfo, vaEnabled = f
     const clientHasFiled = clientAlive && simAge >= ssStartAge;
     const partnerHasFiled = clientInfo.isMarried && partnerAlive && currentPartnerAge >= partnerSSStartAge;
 
-    // Deemed filing: each person gets max(own benefit, 50% of spouse's PIA) once spouse has filed
+    // Deemed filing: own reduced benefit + reduced spousal excess (SSA method)
     const clientMonthly = clientInfo.isMarried
-      ? applyDeemedFiling(clientSS, partnerSSPIA, partnerHasFiled)
+      ? applyDeemedFiling(clientSS, partnerImpliedPIA, partnerHasFiled, ssStartAge, clientImpliedPIA)
       : clientSS;
     const partnerMonthly = clientInfo.isMarried
-      ? applyDeemedFiling(partnerSS, ssPIA, clientHasFiled)
+      ? applyDeemedFiling(partnerSS, clientImpliedPIA, clientHasFiled, partnerSSStartAge, partnerImpliedPIA)
       : 0;
 
     const clientSSFull = clientMonthly * 12 * incomeInflationFactor;
@@ -1768,9 +1816,13 @@ export const runOptimizedSimulation = (allocation, assumptions, inputs, clientIn
     b5: initialTotal > 0 ? allocation.b5Val / initialTotal : 0
   };
 
-  // Calculate SS values
-  const clientSS = clientInfo.currentAge >= 67 ? ssPIA : getAdjustedSS(ssPIA, ssStartAge);
-  const partnerSS = clientInfo.partnerAge >= 67 ? partnerSSPIA : getAdjustedSS(partnerSSPIA, partnerSSStartAge);
+  // Calculate SS values — if currently receiving, input is today's benefit (no adjustment)
+  const ssCurrentlyReceivingMC = inputs.ssCurrentlyReceiving || false;
+  const partnerSSCurrentlyReceivingMC = inputs.partnerSSCurrentlyReceiving || false;
+  const clientSS = ssCurrentlyReceivingMC ? ssPIA : (clientInfo.currentAge >= 67 ? ssPIA : getAdjustedSS(ssPIA, ssStartAge));
+  const partnerSS = partnerSSCurrentlyReceivingMC ? partnerSSPIA : (clientInfo.partnerAge >= 67 ? partnerSSPIA : getAdjustedSS(partnerSSPIA, partnerSSStartAge));
+  const clientImpliedPIA = ssCurrentlyReceivingMC ? getImpliedPIA(ssPIA, ssStartAge) : ssPIA;
+  const partnerImpliedPIA = partnerSSCurrentlyReceivingMC ? getImpliedPIA(partnerSSPIA, partnerSSStartAge) : partnerSSPIA;
 
   // Helper to get annual details
   const getAnnualDetails = (yearIndex) => {
@@ -1815,10 +1867,10 @@ export const runOptimizedSimulation = (allocation, assumptions, inputs, clientIn
     const partnerHasFiled = clientInfo.isMarried && partnerAlive && currentPartnerAge >= partnerSSStartAge;
 
     const clientMonthly = clientInfo.isMarried
-      ? applyDeemedFiling(clientSS, partnerSSPIA, partnerHasFiled)
+      ? applyDeemedFiling(clientSS, partnerImpliedPIA, partnerHasFiled, ssStartAge, clientImpliedPIA)
       : clientSS;
     const partnerMonthly = clientInfo.isMarried
-      ? applyDeemedFiling(partnerSS, ssPIA, clientHasFiled)
+      ? applyDeemedFiling(partnerSS, clientImpliedPIA, clientHasFiled, partnerSSStartAge, partnerImpliedPIA)
       : 0;
 
     const clientSSFull = clientMonthly * 12 * incomeInflationFactor;

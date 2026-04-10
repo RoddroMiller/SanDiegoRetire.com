@@ -3,7 +3,7 @@
  * Calculates optimal claiming strategies and breakeven analysis
  */
 
-import { getAdjustedSS, calculateWeightedReturn, applySSEarningsTest, calculateAnnualTax, applyDeemedFiling } from './calculations';
+import { getAdjustedSS, getImpliedPIA, calculateWeightedReturn, applySSEarningsTest, calculateAnnualTax, applyDeemedFiling } from './calculations';
 
 /**
  * Calculate expense inflation factor for a given year (uses personal inflation rate)
@@ -138,16 +138,23 @@ export const calculateSSAnalysis = ({ inputs, clientInfo, assumptions, targetMax
       const clientHasFiled = clientAlive && age >= startAge;
       const partnerHasFiled = partnerAlive && currentPartnerAge >= inputs.partnerSSStartAge;
 
-      // Own benefits (adjusted for claiming age)
-      const clientOwnMonthly = getAdjustedSS(inputs.ssPIA, startAge);
-      const partnerOwnMonthly = clientInfo.isMarried ? getAdjustedSS(inputs.partnerSSPIA, inputs.partnerSSStartAge) : 0;
+      // Own benefits (adjusted for claiming age; if currently receiving, input is the actual benefit)
+      const clientOwnMonthly = inputs.ssCurrentlyReceiving ? inputs.ssPIA : getAdjustedSS(inputs.ssPIA, startAge);
+      const partnerOwnMonthly = clientInfo.isMarried
+        ? (inputs.partnerSSCurrentlyReceiving ? inputs.partnerSSPIA : getAdjustedSS(inputs.partnerSSPIA, inputs.partnerSSStartAge))
+        : 0;
 
-      // Deemed filing: each person gets max(own benefit, 50% of spouse's PIA)
+      // Back-calculate implied PIA when currently receiving (for spousal excess computation)
+      const clientPIA = inputs.ssCurrentlyReceiving ? getImpliedPIA(inputs.ssPIA, inputs.ssStartAge) : inputs.ssPIA;
+      const partnerPIA = inputs.partnerSSCurrentlyReceiving ? getImpliedPIA(inputs.partnerSSPIA, inputs.partnerSSStartAge) : inputs.partnerSSPIA;
+
+      // Deemed filing: own reduced benefit + reduced spousal excess (SSA method)
+      // Always use actual claiming age for spousal reduction (even when currently receiving)
       const clientMonthly = clientInfo.isMarried
-        ? applyDeemedFiling(clientOwnMonthly, inputs.partnerSSPIA, partnerHasFiled)
+        ? applyDeemedFiling(clientOwnMonthly, partnerPIA, partnerHasFiled, inputs.ssCurrentlyReceiving ? inputs.ssStartAge : startAge, clientPIA)
         : clientOwnMonthly;
       const partnerMonthly = clientInfo.isMarried
-        ? applyDeemedFiling(partnerOwnMonthly, inputs.ssPIA, clientHasFiled)
+        ? applyDeemedFiling(partnerOwnMonthly, clientPIA, clientHasFiled, inputs.partnerSSStartAge, partnerPIA)
         : 0;
 
       const clientSSFull = clientMonthly * 12 * incomeInflationFactor;
@@ -316,13 +323,17 @@ export const calculateSSPartnerAnalysis = ({ inputs, clientInfo, assumptions, ta
       const clientHasFiled = clientAlive && age >= clientSSWinner.age;
       const partnerHasFiled = partnerAlive && currentPartnerAge >= pStartAge;
 
-      // Own benefits (adjusted for claiming age)
-      const clientOwnMonthly = getAdjustedSS(inputs.ssPIA, clientSSWinner.age);
-      const partnerOwnMonthly = getAdjustedSS(inputs.partnerSSPIA, pStartAge);
+      // Own benefits (adjusted for claiming age; if currently receiving, input is the actual benefit)
+      const clientOwnMonthly = inputs.ssCurrentlyReceiving ? inputs.ssPIA : getAdjustedSS(inputs.ssPIA, clientSSWinner.age);
+      const partnerOwnMonthly = inputs.partnerSSCurrentlyReceiving ? inputs.partnerSSPIA : getAdjustedSS(inputs.partnerSSPIA, pStartAge);
 
-      // Deemed filing: each person gets max(own benefit, 50% of spouse's PIA)
-      const clientMonthly = applyDeemedFiling(clientOwnMonthly, inputs.partnerSSPIA, partnerHasFiled);
-      const partnerMonthly = applyDeemedFiling(partnerOwnMonthly, inputs.ssPIA, clientHasFiled);
+      // Back-calculate implied PIA when currently receiving
+      const clientPIA = inputs.ssCurrentlyReceiving ? getImpliedPIA(inputs.ssPIA, inputs.ssStartAge) : inputs.ssPIA;
+      const partnerPIA = inputs.partnerSSCurrentlyReceiving ? getImpliedPIA(inputs.partnerSSPIA, inputs.partnerSSStartAge) : inputs.partnerSSPIA;
+
+      // Deemed filing: own reduced benefit + reduced spousal excess (SSA method)
+      const clientMonthly = applyDeemedFiling(clientOwnMonthly, partnerPIA, partnerHasFiled, inputs.ssCurrentlyReceiving ? inputs.ssStartAge : clientSSWinner.age, clientPIA);
+      const partnerMonthly = applyDeemedFiling(partnerOwnMonthly, clientPIA, clientHasFiled, inputs.partnerSSCurrentlyReceiving ? inputs.partnerSSStartAge : pStartAge, partnerPIA);
 
       const clientSSFull = clientMonthly * 12 * incomeInflationFactor;
       const partnerSSFull = partnerMonthly * 12 * incomeInflationFactor;
@@ -443,17 +454,17 @@ export const calculateWealthBreakeven = ({
   const earlyOwnMonthly = getAdjustedSS(pia, earlyAge);
   const delayedOwnMonthly = getAdjustedSS(pia, delayedAge);
 
-  // With deemed filing: benefit = max(own, 50% of spouse's PIA) once spouse has filed
+  // With deemed filing: own reduced + reduced spousal excess, once spouse has filed
   // Before spouse files, only own benefit
   const earlyBenefitMonthly = (age) => {
     if (spousePIA > 0 && age >= spouseClaimAge) {
-      return applyDeemedFiling(earlyOwnMonthly, spousePIA, true);
+      return applyDeemedFiling(earlyOwnMonthly, spousePIA, true, earlyAge, pia);
     }
     return earlyOwnMonthly;
   };
   const delayedBenefitMonthly = (age) => {
     if (spousePIA > 0 && age >= spouseClaimAge) {
-      return applyDeemedFiling(delayedOwnMonthly, spousePIA, true);
+      return applyDeemedFiling(delayedOwnMonthly, spousePIA, true, delayedAge, pia);
     }
     return delayedOwnMonthly;
   };

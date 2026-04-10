@@ -18,7 +18,8 @@ export {
   calculateRMD,
   STATE_TAX_DATA,
   optimizeLiquidationStrategy,
-  applyDeemedFiling
+  applyDeemedFiling,
+  getImpliedPIA
 } from './calculations';
 export {
   calculateSSAnalysis,

@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import {
   Briefcase, DollarSign, Shield, Info, Plus, RefreshCcw,
-  TrendingUp, Settings, Table as TableIcon, Heart
+  TrendingUp, Settings, Table as TableIcon, Heart, Trash2
 } from 'lucide-react';
 
 import { estimatePIAFromIncome, STATE_TAX_DATA } from '../../utils';
@@ -406,15 +406,19 @@ export const InputsPage = ({
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div className="relative group">
               <label className="text-xs font-bold text-slate-500 uppercase flex items-center gap-1">
-                Benefit @ FRA <Info className="w-3 h-3 text-slate-400" />
+                {inputs.ssCurrentlyReceiving ? 'Current Monthly Benefit' : 'Benefit @ FRA'} <Info className="w-3 h-3 text-slate-400" />
               </label>
               <div className="absolute left-0 bottom-full mb-1 hidden group-hover:block w-56 bg-slate-800 text-white text-xs p-2 rounded shadow-lg z-10">
-                Your Social Security benefit at Full Retirement Age (67) from your SSA statement.
+                {inputs.ssCurrentlyReceiving
+                  ? "Your current monthly Social Security benefit amount."
+                  : "Your Social Security benefit at Full Retirement Age (67) from your SSA statement."}
               </div>
               <FormattedNumberInput name="ssPIA" value={inputs.ssPIA} onChange={onInputChange} className="w-full px-3 py-2 border rounded-md text-sm" />
-              <button type="button" onClick={() => setShowSSEstimator(!showSSEstimator)} className="text-xs text-blue-500 hover:text-blue-700 mt-1">
-                {showSSEstimator ? 'Hide estimator' : 'Estimate from income'}
-              </button>
+              {!inputs.ssCurrentlyReceiving && (
+                <button type="button" onClick={() => setShowSSEstimator(!showSSEstimator)} className="text-xs text-blue-500 hover:text-blue-700 mt-1">
+                  {showSSEstimator ? 'Hide estimator' : 'Estimate from income'}
+                </button>
+              )}
             </div>
             <div className="relative group">
               <label className="text-xs font-bold text-slate-500 uppercase flex items-center gap-1">
@@ -426,6 +430,16 @@ export const InputsPage = ({
               <input type="number" name="ssStartAge" value={inputs.ssStartAge} onChange={onInputChange} min={62} max={70} className="w-full px-3 py-2 border rounded-md text-sm" />
             </div>
           </div>
+          <label className="flex items-center gap-2 mt-2 text-sm text-slate-600 cursor-pointer">
+            <input
+              type="checkbox"
+              name="ssCurrentlyReceiving"
+              checked={inputs.ssCurrentlyReceiving || false}
+              onChange={onInputChange}
+              className="w-4 h-4 rounded border-slate-300 text-emerald-600"
+            />
+            Currently receiving benefits (amount above is today's monthly benefit)
+          </label>
           {showSSEstimator && (
             <div className="flex items-center gap-2 mt-1">
               <input type="number" placeholder="Annual income" value={ssEstimateIncome} onChange={e => setSSEstimateIncome(e.target.value)} className="w-full px-3 py-2 border rounded-md text-sm" />
@@ -445,15 +459,19 @@ export const InputsPage = ({
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div className="relative group">
                   <label className="text-xs font-bold text-slate-500 uppercase flex items-center gap-1">
-                    Partner Benefit <Info className="w-3 h-3 text-slate-400" />
+                    {inputs.partnerSSCurrentlyReceiving ? 'Current Monthly Benefit' : 'Partner Benefit'} <Info className="w-3 h-3 text-slate-400" />
                   </label>
                   <div className="absolute left-0 bottom-full mb-1 hidden group-hover:block w-56 bg-slate-800 text-white text-xs p-2 rounded shadow-lg z-10">
-                    Your partner's Social Security benefit at Full Retirement Age.
+                    {inputs.partnerSSCurrentlyReceiving
+                      ? "Your partner's current monthly Social Security benefit amount."
+                      : "Your partner's Social Security benefit at Full Retirement Age."}
                   </div>
                   <FormattedNumberInput name="partnerSSPIA" value={inputs.partnerSSPIA} onChange={onInputChange} className="w-full px-3 py-2 border rounded-md text-sm" />
-                  <button type="button" onClick={() => setShowPartnerSSEstimator(!showPartnerSSEstimator)} className="text-xs text-blue-500 hover:text-blue-700 mt-1">
-                    {showPartnerSSEstimator ? 'Hide estimator' : 'Estimate from income'}
-                  </button>
+                  {!inputs.partnerSSCurrentlyReceiving && (
+                    <button type="button" onClick={() => setShowPartnerSSEstimator(!showPartnerSSEstimator)} className="text-xs text-blue-500 hover:text-blue-700 mt-1">
+                      {showPartnerSSEstimator ? 'Hide estimator' : 'Estimate from income'}
+                    </button>
+                  )}
                 </div>
                 <div className="relative group">
                   <label className="text-xs font-bold text-slate-500 uppercase flex items-center gap-1">
@@ -465,6 +483,16 @@ export const InputsPage = ({
                   <input type="number" name="partnerSSStartAge" value={inputs.partnerSSStartAge} onChange={onInputChange} min={62} max={70} className="w-full px-3 py-2 border rounded-md text-sm" />
                 </div>
               </div>
+              <label className="flex items-center gap-2 mt-2 text-sm text-slate-600 cursor-pointer">
+                <input
+                  type="checkbox"
+                  name="partnerSSCurrentlyReceiving"
+                  checked={inputs.partnerSSCurrentlyReceiving || false}
+                  onChange={onInputChange}
+                  className="w-4 h-4 rounded border-slate-300 text-emerald-600"
+                />
+                Currently receiving benefits (amount above is today's monthly benefit)
+              </label>
               {showPartnerSSEstimator && (
                 <div className="flex items-center gap-2 mt-1">
                   <input type="number" placeholder="Partner annual income" value={partnerSSEstimateIncome} onChange={e => setPartnerSSEstimateIncome(e.target.value)} className="w-full px-3 py-2 border rounded-md text-sm" />
