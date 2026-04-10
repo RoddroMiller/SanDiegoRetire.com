@@ -113,7 +113,7 @@ export const applySSEarningsTest = (annualBenefit, earnedIncome, currentAge, inf
  * @param {number} claimantPIA - Claimant's own PIA at FRA (unreduced, for computing spousal excess)
  * @returns {number} Monthly benefit after deemed filing (own reduced + reduced spousal excess)
  */
-export const applyDeemedFiling = (ownMonthlyBenefit, spousePIA, spouseHasFiled, claimantStartAge = FULL_RETIREMENT_AGE, claimantPIA = 0) => {
+export const applyDeemedFiling = (ownMonthlyBenefit, spousePIA, spouseHasFiled, claimantStartAge = FULL_RETIREMENT_AGE, claimantPIA = 0, spousalEntitlementAge = null) => {
   if (!spouseHasFiled || !spousePIA) return ownMonthlyBenefit;
 
   // Spousal excess: difference between 50% of spouse's PIA and claimant's own PIA (unreduced)
@@ -122,10 +122,15 @@ export const applyDeemedFiling = (ownMonthlyBenefit, spousePIA, spouseHasFiled, 
   const spousalExcess = Math.max(0, spousePIA * 0.5 - ownPIA);
   if (spousalExcess <= 0) return ownMonthlyBenefit;
 
-  // Apply spousal early-claiming reduction to the excess (steeper rates than own benefit)
+  // Spousal excess reduction is based on the claimant's age when they become entitled to spousal benefits.
+  // Under deemed filing (post-2015), if the claimant filed before their spouse, they only get their own
+  // benefit initially. The spousal excess starts when the spouse files. The reduction is based on the
+  // claimant's age at THAT point — not when they originally filed for their own benefit.
+  // spousalEntitlementAge = max(claimantStartAge, claimant's age when spouse filed)
+  const reductionAge = spousalEntitlementAge !== null ? spousalEntitlementAge : claimantStartAge;
   let reducedExcess = spousalExcess;
-  if (claimantStartAge < FULL_RETIREMENT_AGE) {
-    const yearsEarly = FULL_RETIREMENT_AGE - claimantStartAge;
+  if (reductionAge < FULL_RETIREMENT_AGE) {
+    const yearsEarly = FULL_RETIREMENT_AGE - reductionAge;
     const spousalReduction = yearsEarly <= 3
       ? yearsEarly * SPOUSAL_REDUCTION_RATE_FIRST_3_YEARS
       : (3 * SPOUSAL_REDUCTION_RATE_FIRST_3_YEARS) + ((yearsEarly - 3) * SPOUSAL_REDUCTION_RATE_AFTER_3_YEARS);
@@ -836,7 +841,7 @@ export const calculateWeightedReturn = (assumptions) => {
  * @param {object} vaInputs - VA GIB inputs (allocation, withdrawal rate, etc.)
  * @returns {object} Base plan with bucket values and helper functions
  */
-export const calculateBasePlan = (inputs, assumptions, clientInfo, vaEnabled = false, vaInputs = null) => {
+export const calculateBasePlan = (inputs, assumptions, clientInfo, vaEnabled = false, vaInputs = null, spousalAgeOverrides = null) => {
   const {
     totalPortfolio, monthlySpending, ssPIA, partnerSSPIA,
     ssStartAge, partnerSSStartAge, monthlyPension, pensionStartAge, pensionCOLA,
@@ -892,6 +897,19 @@ export const calculateBasePlan = (inputs, assumptions, clientInfo, vaEnabled = f
   const partnerImpliedPIA = partnerSSCurrentlyReceiving ? getImpliedPIA(partnerSSPIA, partnerSSStartAge) : partnerSSPIA;
   const totalSS = clientSS + partnerSS;
 
+  // Spousal entitlement ages: the spousal excess reduction is based on the claimant's age when
+  // they become entitled to spousal benefits (the later of when they file and when their spouse files).
+  // This corrects the deemed-filing behavior: filing early only penalizes the own benefit reduction,
+  // not the spousal excess, if the spouse hasn't filed yet.
+  // spousalAgeOverrides allows the SS optimizer to freeze one spouse's entitlement age while varying the other.
+  const ageDiff = clientInfo.currentAge - (clientInfo.partnerAge || clientInfo.currentAge);
+  const clientSpousalAge = spousalAgeOverrides?.client ?? (clientInfo.isMarried
+    ? Math.min(FULL_RETIREMENT_AGE, Math.max(ssStartAge, partnerSSStartAge + ageDiff))
+    : ssStartAge);
+  const partnerSpousalAge = spousalAgeOverrides?.partner ?? (clientInfo.isMarried
+    ? Math.min(FULL_RETIREMENT_AGE, Math.max(partnerSSStartAge, ssStartAge - ageDiff))
+    : partnerSSStartAge);
+
   // Get detailed cash flow numbers for a specific year
   const getAnnualDetails = (yearIndex) => {
     const simAge = simulationStartAge + yearIndex;
@@ -939,11 +957,12 @@ export const calculateBasePlan = (inputs, assumptions, clientInfo, vaEnabled = f
     const partnerHasFiled = clientInfo.isMarried && partnerAlive && currentPartnerAge >= partnerSSStartAge;
 
     // Deemed filing: own reduced benefit + reduced spousal excess (SSA method)
+    // Spousal excess reduction uses entitlement age (when both spouses have filed), not filing age
     const clientMonthly = clientInfo.isMarried
-      ? applyDeemedFiling(clientSS, partnerImpliedPIA, partnerHasFiled, ssStartAge, clientImpliedPIA)
+      ? applyDeemedFiling(clientSS, partnerImpliedPIA, partnerHasFiled, ssStartAge, clientImpliedPIA, clientSpousalAge)
       : clientSS;
     const partnerMonthly = clientInfo.isMarried
-      ? applyDeemedFiling(partnerSS, clientImpliedPIA, clientHasFiled, partnerSSStartAge, partnerImpliedPIA)
+      ? applyDeemedFiling(partnerSS, clientImpliedPIA, clientHasFiled, partnerSSStartAge, partnerImpliedPIA, partnerSpousalAge)
       : 0;
 
     const clientSSFull = clientMonthly * 12 * incomeInflationFactor;
@@ -1055,10 +1074,13 @@ export const calculateBasePlan = (inputs, assumptions, clientInfo, vaEnabled = f
     }
 
     const gap = Math.max(0, adjustedExpenses - income);
+    // Surplus: when income exceeds expenses, excess flows into the portfolio as savings
+    const surplus = Math.max(0, income - adjustedExpenses);
     return {
       expenses: adjustedExpenses,
       income,
       gap,
+      surplus,
       simAge,
       currentPartnerAge,
       oneTimeContributions,
@@ -1073,21 +1095,76 @@ export const calculateBasePlan = (inputs, assumptions, clientInfo, vaEnabled = f
 
   const getAnnualGap = (yearIndex) => getAnnualDetails(yearIndex).gap;
 
+  // Tax-aware gap: estimate the gross withdrawal needed to cover spending + taxes
+  const getTaxAwareGap = (yearIndex) => {
+    if (!inputs.taxEnabled) return getAnnualGap(yearIndex);
+
+    const details = getAnnualDetails(yearIndex);
+    const rawGap = details.gap;
+    if (rawGap <= 0) return 0;
+
+    // Estimate tax on the withdrawal using account-type split
+    const traditionalPct = (inputs.traditionalPercent ?? 60) / 100;
+    const rothPct = (inputs.rothPercent ?? 25) / 100;
+    const nqPct = (inputs.nqPercent ?? 15) / 100;
+    const nqDividendYield = (inputs.nqDividendYield ?? 2.0) / 100;
+    const nqQualifiedDividendPct = (inputs.nqQualifiedDividendPercent ?? 80) / 100;
+    const nqAnnualCapGainRate = (inputs.nqCapitalGainRate ?? 4) / 100;
+
+    // Estimate NQ balance as share of remaining portfolio (rough)
+    const estNqBalance = bucketPortfolio * nqPct;
+    const nqTotalDividends = estNqBalance * nqDividendYield;
+    const nqQualifiedDividends = nqTotalDividends * nqQualifiedDividendPct;
+    const nqOrdinaryDividends = nqTotalDividends - nqQualifiedDividends;
+    const nqAnnualCapGains = estNqBalance * nqAnnualCapGainRate;
+
+    const isSenior = details.simAge >= 65;
+    const filingStatus = inputs.filingStatus || 'married';
+    const stateRate = inputs.stateRate || 0;
+
+    // Two-pass convergence: estimate tax, then re-estimate with tax-inclusive withdrawal
+    let withdrawal = rawGap;
+    for (let pass = 0; pass < 2; pass++) {
+      const taxData = calculateAnnualTax({
+        ssIncome: details.ssIncome,
+        pensionIncome: details.pensionIncome + (details.vaIncome || 0),
+        traditionalWithdrawal: withdrawal * traditionalPct,
+        rothWithdrawal: withdrawal * rothPct,
+        nqTaxableGain: nqAnnualCapGains,
+        nqQualifiedDividends,
+        nqOrdinaryDividends,
+        otherIncome: details.otherIncome,
+        employmentIncome: details.employmentIncome
+      }, { filingStatus, stateRate, stateCode: inputs.stateCode || '' }, isSenior);
+      withdrawal = rawGap + taxData.totalTax;
+    }
+
+    return withdrawal;
+  };
+
   const calculateBucketNeed = (startYear, endYear, rate) => {
     let totalPV = 0;
     for (let year = startYear; year <= endYear; year++) {
-      const futureGap = getAnnualGap(year - 1);
+      const futureGap = getTaxAwareGap(year - 1);
       const pvFactor = Math.pow(1 + (rate / 100), year - 1);
       totalPV += futureGap / pvFactor;
     }
     return totalPV;
   };
 
-  // Calculate raw bucket targets from spending needs
-  const b1Target = Math.round(calculateBucketNeed(1, 3, assumptions.b1.return) / 1000) * 1000;
-  const b2Target = Math.round(calculateBucketNeed(4, 6, assumptions.b2.return) / 1000) * 1000;
-  // B3 covers years 7-15 with minimum 20% and maximum 25% allocation
-  const b3Calculated = Math.round(calculateBucketNeed(7, 15, assumptions.b3.return) / 1000) * 1000;
+  // Offset bucket years by pre-retirement gap: when the simulation starts before client retirement
+  // (e.g., to capture partner's early SS), the first N years have zero gaps because the client is
+  // still working. Bucket horizons should be relative to when withdrawals actually begin.
+  const retirementYearOffset = Math.max(0, clientInfo.retirementAge - simulationStartAge);
+
+  // Calculate raw bucket targets from spending needs (offset by pre-retirement years)
+  const b1Start = 1 + retirementYearOffset;
+  const b1Target = Math.round(calculateBucketNeed(b1Start, b1Start + 2, assumptions.b1.return) / 1000) * 1000;
+  const b2Start = b1Start + 3;
+  const b2Target = Math.round(calculateBucketNeed(b2Start, b2Start + 2, assumptions.b2.return) / 1000) * 1000;
+  // B3 covers years 7-15 of retirement with minimum 20% and maximum 25% allocation
+  const b3Start = b1Start + 6;
+  const b3Calculated = Math.round(calculateBucketNeed(b3Start, b3Start + 8, assumptions.b3.return) / 1000) * 1000;
   // Only apply B3 min/max floors when portfolio can cover B1+B2 spending needs
   const spendingDriven = b1Target + b2Target;
   const hasSpendingSurplus = bucketPortfolio > spendingDriven;
@@ -1120,6 +1197,7 @@ export const calculateBasePlan = (inputs, assumptions, clientInfo, vaEnabled = f
     b5Val,
     isDeficit: b5Val === 0 && bucketPortfolio < (b1Target + b2Target + b3Target + b4FullTarget),
     getAnnualGap,
+    getTaxAwareGap,
     getAnnualDetails,
     simulationStartAge,
     clientInfo,
@@ -1142,7 +1220,7 @@ export const calculateBasePlan = (inputs, assumptions, clientInfo, vaEnabled = f
  * @returns {Array|object} Simulation results
  */
 export const runSimulation = (basePlan, assumptions, inputs, rebalanceFreq, isMonteCarlo = false, vaInputs = null, rebalanceTargets = null) => {
-  const { b1Val, b2Val, b3Val, b4Val, b5Val, getAnnualGap, getAnnualDetails, simulationStartAge, clientInfo } = basePlan;
+  const { b1Val, b2Val, b3Val, b4Val, b5Val, getAnnualGap, getTaxAwareGap, getAnnualDetails, simulationStartAge, clientInfo } = basePlan;
 
   // Run until the later-dying spouse's expected death age, capped at 40 years
   const startAge = simulationStartAge || 65;
@@ -1248,7 +1326,7 @@ export const runSimulation = (basePlan, assumptions, inputs, rebalanceFreq, isMo
       }
 
       const {
-        expenses, income, gap, simAge, currentPartnerAge, oneTimeContributions,
+        expenses, income, gap, surplus, simAge, currentPartnerAge, oneTimeContributions,
         ssIncome, pensionIncome, otherIncome, vaIncome, employmentIncome
       } = getAnnualDetails(i - 1);
 
@@ -1263,17 +1341,25 @@ export const runSimulation = (basePlan, assumptions, inputs, rebalanceFreq, isMo
         balances.b5 += oneTimeContributions;
       }
 
+      // Income surplus (income > expenses) flows into portfolio as savings
+      if (surplus > 0) {
+        balances.b5 += surplus;
+      }
+
       const postGrowthTotal = Object.values(balances).reduce((a, b) => a + b, 0);
-      const annualGrowth = postGrowthTotal - startTotal - oneTimeContributions;
+      const annualGrowth = postGrowthTotal - startTotal - oneTimeContributions - (surplus > 0 ? surplus : 0);
 
       const appliedBench = isMonteCarlo
         ? (benchmarkReturn + (assumptions.b3.stdDev / 100) * randn_bm())
         : benchmarkReturn;
       benchmarkBalance *= (1 + appliedBench);
 
-      // Add one-time contributions to benchmark as well
+      // Add one-time contributions and surplus to benchmark as well
       if (oneTimeContributions > 0) {
         benchmarkBalance += oneTimeContributions;
+      }
+      if (surplus > 0) {
+        benchmarkBalance += surplus;
       }
 
       // VA GIB: Calculate guaranteed income and update VA account
@@ -1522,11 +1608,12 @@ export const runSimulation = (basePlan, assumptions, inputs, rebalanceFreq, isMo
           // Dynamic rebalancing with rolling window targets (formula-based)
 
           // Helper to calculate present value of spending gaps for a range of years
+          // Uses tax-aware gap so rebalancing accounts for tax-inclusive distributions
           const calcPVGaps = (startYear, endYear, rate) => {
             let totalPV = 0;
             for (let yr = startYear; yr <= endYear; yr++) {
               if (yr > years) break; // Don't go beyond simulation
-              const futureGap = getAnnualGap(yr - 1);
+              const futureGap = getTaxAwareGap(yr - 1);
               const yearsOut = yr - i; // Years from current rebalance point
               const pvFactor = Math.pow(1 + (rate / 100), yearsOut);
               totalPV += futureGap / pvFactor;
@@ -1623,7 +1710,13 @@ export const runSimulation = (basePlan, assumptions, inputs, rebalanceFreq, isMo
         otherIncomeDetail: Math.round(otherIncome),
         vaIncomeDetail: Math.round(vaIncome || 0),
         employmentIncomeDetail: Math.round(employmentIncome || 0),
-        taxableSS: Math.round(taxData.taxableSS || 0)
+        taxableSS: Math.round(taxData.taxableSS || 0),
+        // Per-bucket return rates (as decimals, e.g. 0.05 = 5%)
+        r1: rates.b1,
+        r2: rates.b2,
+        r3: rates.b3,
+        r4: rates.b4,
+        r5: rates.b5
       });
     }
 
@@ -1635,6 +1728,7 @@ export const runSimulation = (basePlan, assumptions, inputs, rebalanceFreq, isMo
     const processed = [];
     for (let y = 0; y < years; y++) {
       const vals = results.map(r => r[y]?.total || 0).sort((a, b) => a - b);
+
       processed.push({
         year: y + 1,
         p10: vals[Math.floor(iterations * 0.1)],
@@ -1824,6 +1918,15 @@ export const runOptimizedSimulation = (allocation, assumptions, inputs, clientIn
   const clientImpliedPIA = ssCurrentlyReceivingMC ? getImpliedPIA(ssPIA, ssStartAge) : ssPIA;
   const partnerImpliedPIA = partnerSSCurrentlyReceivingMC ? getImpliedPIA(partnerSSPIA, partnerSSStartAge) : partnerSSPIA;
 
+  // Spousal entitlement ages (same logic as calculateBasePlan)
+  const ageDiffOpt = clientInfo.currentAge - (clientInfo.partnerAge || clientInfo.currentAge);
+  const clientSpousalAge = clientInfo.isMarried
+    ? Math.min(FULL_RETIREMENT_AGE, Math.max(ssStartAge, partnerSSStartAge + ageDiffOpt))
+    : ssStartAge;
+  const partnerSpousalAge = clientInfo.isMarried
+    ? Math.min(FULL_RETIREMENT_AGE, Math.max(partnerSSStartAge, ssStartAge - ageDiffOpt))
+    : partnerSSStartAge;
+
   // Helper to get annual details
   const getAnnualDetails = (yearIndex) => {
     const simAge = simulationStartAge + yearIndex;
@@ -1867,10 +1970,10 @@ export const runOptimizedSimulation = (allocation, assumptions, inputs, clientIn
     const partnerHasFiled = clientInfo.isMarried && partnerAlive && currentPartnerAge >= partnerSSStartAge;
 
     const clientMonthly = clientInfo.isMarried
-      ? applyDeemedFiling(clientSS, partnerImpliedPIA, partnerHasFiled, ssStartAge, clientImpliedPIA)
+      ? applyDeemedFiling(clientSS, partnerImpliedPIA, partnerHasFiled, ssStartAge, clientImpliedPIA, clientSpousalAge)
       : clientSS;
     const partnerMonthly = clientInfo.isMarried
-      ? applyDeemedFiling(partnerSS, clientImpliedPIA, clientHasFiled, partnerSSStartAge, partnerImpliedPIA)
+      ? applyDeemedFiling(partnerSS, clientImpliedPIA, clientHasFiled, partnerSSStartAge, partnerImpliedPIA, partnerSpousalAge)
       : 0;
 
     const clientSSFull = clientMonthly * 12 * incomeInflationFactor;
@@ -2024,6 +2127,11 @@ export const runOptimizedSimulation = (allocation, assumptions, inputs, clientIn
         balances.b3 += details.oneTimeContributions * targetPcts.b3;
         balances.b4 += details.oneTimeContributions * targetPcts.b4;
         balances.b5 += details.oneTimeContributions * targetPcts.b5;
+      }
+
+      // Income surplus flows into portfolio as savings
+      if (details.surplus > 0) {
+        balances.b5 += details.surplus;
       }
 
       // VA GIB: Calculate guaranteed income and update VA account

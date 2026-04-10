@@ -1893,7 +1893,7 @@ export const ClientWizard = ({
         {/* Header */}
         <div className="bg-black p-4 sm:p-6 rounded-t-2xl text-white flex items-center justify-between gap-3">
           <div className="flex items-center gap-3">
-            <img src={LOGO_URL} alt="Logo" className="h-10 sm:h-12 md:h-[72px] w-auto bg-white p-1 sm:p-2 rounded-lg flex-shrink-0" />
+            <img src={LOGO_URL} alt="Logo" className="h-16 sm:h-20 md:h-[96px] w-auto bg-white p-1 sm:p-2 rounded-lg flex-shrink-0" />
             <div>
               <h1 className="text-lg sm:text-xl md:text-2xl font-bold">Retirement Planning</h1>
               <p className="text-yellow-500 text-xs sm:text-sm mt-1">Step {wizardStep} of 2</p>

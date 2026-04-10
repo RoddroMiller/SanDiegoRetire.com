@@ -118,7 +118,7 @@ export const GateScreen = ({ onAdvisorClick, onClientLoginClick, onProspectEntry
     <div className="min-h-screen bg-slate-50 flex items-center justify-center p-4 sm:p-6">
       <div className="bg-white p-6 sm:p-10 rounded-2xl shadow-xl max-w-4xl w-full text-center">
         {/* Logo */}
-        <img src={LOGO_URL} alt="Logo" className="h-20 sm:h-28 mx-auto mb-4 sm:mb-6" />
+        <img src={LOGO_URL} alt="Logo" className="w-full h-auto mx-auto mb-4 sm:mb-6" />
 
         {/* Hero Headline */}
         <h1 className="text-3xl sm:text-4xl font-bold text-slate-900 mb-2">

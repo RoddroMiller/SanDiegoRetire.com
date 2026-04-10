@@ -71,11 +71,8 @@ const calculateAdditionalIncome = (additionalIncomes, clientAge, partnerAge, inf
  * @returns {object} Analysis results with winner, outcomes, and breakeven data
  */
 export const calculateSSAnalysis = ({ inputs, clientInfo, assumptions, targetMaxPortfolioAge }) => {
-  // Build list of strategies to analyze — include retirement age as earliest eligible claim date
-  let strategies = [62, 67, 70];
-  if (clientInfo.retirementAge > 62 && clientInfo.retirementAge < 70) {
-    strategies.push(clientInfo.retirementAge);
-  }
+  // Build list of strategies to analyze — all ages 62 through 70
+  let strategies = [62, 63, 64, 65, 66, 67, 68, 69, 70];
   strategies = [...new Set(strategies)].sort((a, b) => a - b);
 
   const weightedReturn = calculateWeightedReturn(assumptions);
@@ -148,13 +145,24 @@ export const calculateSSAnalysis = ({ inputs, clientInfo, assumptions, targetMax
       const clientPIA = inputs.ssCurrentlyReceiving ? getImpliedPIA(inputs.ssPIA, inputs.ssStartAge) : inputs.ssPIA;
       const partnerPIA = inputs.partnerSSCurrentlyReceiving ? getImpliedPIA(inputs.partnerSSPIA, inputs.partnerSSStartAge) : inputs.partnerSSPIA;
 
-      // Deemed filing: own reduced benefit + reduced spousal excess (SSA method)
-      // Always use actual claiming age for spousal reduction (even when currently receiving)
+      // Deemed filing: spousal excess reduction uses entitlement age (when both have filed).
+      // For the CLIENT optimizer: freeze ALL partner spousal parameters to client's retirement age
+      // so varying the client test age doesn't change the partner's income at all.
+      const cAgeDiff = clientInfo.currentAge - (clientInfo.partnerAge || clientInfo.currentAge);
+      const cClaimAge = inputs.ssCurrentlyReceiving ? inputs.ssStartAge : startAge;
+      const clientSpousalAge = clientInfo.isMarried
+        ? Math.min(67, Math.max(cClaimAge, inputs.partnerSSStartAge + cAgeDiff))
+        : cClaimAge;
+      const fixedPartnerSpousalAge = clientInfo.isMarried
+        ? Math.min(67, Math.max(inputs.partnerSSStartAge, clientInfo.retirementAge - cAgeDiff))
+        : inputs.partnerSSStartAge;
+
       const clientMonthly = clientInfo.isMarried
-        ? applyDeemedFiling(clientOwnMonthly, partnerPIA, partnerHasFiled, inputs.ssCurrentlyReceiving ? inputs.ssStartAge : startAge, clientPIA)
+        ? applyDeemedFiling(clientOwnMonthly, partnerPIA, partnerHasFiled, cClaimAge, clientPIA, clientSpousalAge)
         : clientOwnMonthly;
+      // Partner benefit: timing uses real test age (clientHasFiled), reduction uses frozen retirement age
       const partnerMonthly = clientInfo.isMarried
-        ? applyDeemedFiling(partnerOwnMonthly, clientPIA, clientHasFiled, inputs.partnerSSStartAge, partnerPIA)
+        ? applyDeemedFiling(partnerOwnMonthly, clientPIA, clientHasFiled, inputs.partnerSSStartAge, partnerPIA, fixedPartnerSpousalAge)
         : 0;
 
       const clientSSFull = clientMonthly * 12 * incomeInflationFactor;
@@ -200,6 +208,7 @@ export const calculateSSAnalysis = ({ inputs, clientInfo, assumptions, targetMax
 
       const totalIncome = ssIncome + pensionIncome + otherIncome + employmentIncome;
       const gap = Math.max(0, expense - totalIncome);
+      const surplus = Math.max(0, totalIncome - expense);
 
       // Always compute taxes — tax is owed on SS, pension, and withdrawals regardless of gap
       let tax = 0;
@@ -214,6 +223,8 @@ export const calculateSSAnalysis = ({ inputs, clientInfo, assumptions, targetMax
         tax = taxResult.totalTax;
       }
 
+      // Surplus (income > expenses) flows into portfolio; gap withdrawn from portfolio
+      balance += surplus;
       balance -= (gap + tax);
 
       // Track cumulative after-tax SS (net of the tax triggered by having SS)
@@ -242,9 +253,8 @@ export const calculateSSAnalysis = ({ inputs, clientInfo, assumptions, targetMax
     return { age: startAge, balance: Math.max(0, balance) };
   });
 
-  // Find the winning strategy (highest remaining balance)
   const winner = outcomes.reduce((prev, current) =>
-    (prev.balance > current.balance) ? prev : current
+    (current.balance > prev.balance) ? current : prev
   );
 
   return { winner, outcomes };
@@ -263,12 +273,8 @@ export const calculateSSAnalysis = ({ inputs, clientInfo, assumptions, targetMax
 export const calculateSSPartnerAnalysis = ({ inputs, clientInfo, assumptions, targetMaxPortfolioAge, clientSSWinner }) => {
   if (!clientInfo.isMarried) return null;
 
-  // Build list of strategies to analyze — include partner retirement age as earliest eligible claim date
-  let strategies = [62, 67, 70];
-  const pRetAge = clientInfo.partnerRetirementAge;
-  if (pRetAge > 62 && pRetAge < 70) {
-    strategies.push(pRetAge);
-  }
+  // Build list of strategies to analyze — all ages 62 through 70
+  let strategies = [62, 63, 64, 65, 66, 67, 68, 69, 70];
   strategies = [...new Set(strategies)].sort((a, b) => a - b);
 
   const weightedReturn = calculateWeightedReturn(assumptions);
@@ -331,9 +337,18 @@ export const calculateSSPartnerAnalysis = ({ inputs, clientInfo, assumptions, ta
       const clientPIA = inputs.ssCurrentlyReceiving ? getImpliedPIA(inputs.ssPIA, inputs.ssStartAge) : inputs.ssPIA;
       const partnerPIA = inputs.partnerSSCurrentlyReceiving ? getImpliedPIA(inputs.partnerSSPIA, inputs.partnerSSStartAge) : inputs.partnerSSPIA;
 
-      // Deemed filing: own reduced benefit + reduced spousal excess (SSA method)
-      const clientMonthly = applyDeemedFiling(clientOwnMonthly, partnerPIA, partnerHasFiled, inputs.ssCurrentlyReceiving ? inputs.ssStartAge : clientSSWinner.age, clientPIA);
-      const partnerMonthly = applyDeemedFiling(partnerOwnMonthly, clientPIA, clientHasFiled, inputs.partnerSSCurrentlyReceiving ? inputs.partnerSSStartAge : pStartAge, partnerPIA);
+      // Deemed filing: spousal excess reduction uses entitlement age (when both have filed).
+      // For the PARTNER optimizer: freeze client's spousal age (client has no spousal excess with high PIA,
+      // but keeps the model consistent). Partner spousal age uses client's retirement age as the anchor.
+      const pAgeDiff = clientInfo.currentAge - (clientInfo.partnerAge || clientInfo.currentAge);
+      const pClientClaimAge = inputs.ssCurrentlyReceiving ? inputs.ssStartAge : clientSSWinner.age;
+      const pPartnerClaimAge = inputs.partnerSSCurrentlyReceiving ? inputs.partnerSSStartAge : pStartAge;
+      const clientSpousalAge = Math.min(67, Math.max(pClientClaimAge, pPartnerClaimAge + pAgeDiff));
+      // Partner spousal age: use client's actual claiming age (fixed, not varying with partner test)
+      const partnerSpousalAge = Math.min(67, Math.max(pPartnerClaimAge, pClientClaimAge - pAgeDiff));
+
+      const clientMonthly = applyDeemedFiling(clientOwnMonthly, partnerPIA, partnerHasFiled, pClientClaimAge, clientPIA, clientSpousalAge);
+      const partnerMonthly = applyDeemedFiling(partnerOwnMonthly, clientPIA, clientHasFiled, pPartnerClaimAge, partnerPIA, partnerSpousalAge);
 
       const clientSSFull = clientMonthly * 12 * incomeInflationFactor;
       const partnerSSFull = partnerMonthly * 12 * incomeInflationFactor;
@@ -375,6 +390,7 @@ export const calculateSSPartnerAnalysis = ({ inputs, clientInfo, assumptions, ta
 
       const totalIncome = ssIncome + pensionIncome + otherIncome + employmentIncome;
       const gap = Math.max(0, expense - totalIncome);
+      const surplus = Math.max(0, totalIncome - expense);
 
       // Always compute taxes
       let tax = 0;
@@ -389,6 +405,7 @@ export const calculateSSPartnerAnalysis = ({ inputs, clientInfo, assumptions, ta
         tax = taxResult.totalTax;
       }
 
+      balance += surplus;
       balance -= (gap + tax);
     }
 
@@ -396,7 +413,7 @@ export const calculateSSPartnerAnalysis = ({ inputs, clientInfo, assumptions, ta
   });
 
   const winner = outcomes.reduce((prev, current) =>
-    (prev.balance > current.balance) ? prev : current
+    (current.balance > prev.balance) ? current : prev
   );
 
   return { winner, outcomes };
@@ -455,16 +472,18 @@ export const calculateWealthBreakeven = ({
   const delayedOwnMonthly = getAdjustedSS(pia, delayedAge);
 
   // With deemed filing: own reduced + reduced spousal excess, once spouse has filed
-  // Before spouse files, only own benefit
+  // Spousal excess reduction uses entitlement age (when both have filed), not filing age
   const earlyBenefitMonthly = (age) => {
     if (spousePIA > 0 && age >= spouseClaimAge) {
-      return applyDeemedFiling(earlyOwnMonthly, spousePIA, true, earlyAge, pia);
+      const spousalAge = Math.min(67, Math.max(earlyAge, spouseClaimAge));
+      return applyDeemedFiling(earlyOwnMonthly, spousePIA, true, earlyAge, pia, spousalAge);
     }
     return earlyOwnMonthly;
   };
   const delayedBenefitMonthly = (age) => {
     if (spousePIA > 0 && age >= spouseClaimAge) {
-      return applyDeemedFiling(delayedOwnMonthly, spousePIA, true, delayedAge, pia);
+      const spousalAge = Math.min(67, Math.max(delayedAge, spouseClaimAge));
+      return applyDeemedFiling(delayedOwnMonthly, spousePIA, true, delayedAge, pia, spousalAge);
     }
     return delayedOwnMonthly;
   };

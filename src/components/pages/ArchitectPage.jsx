@@ -402,7 +402,7 @@ export const ArchitectPage = ({
 
       {/* PRINT PAGE 1: Cover Page */}
       <div className="hidden print:flex flex-col min-h-[10in] break-after-page items-center justify-center text-center p-12 bg-white">
-        <img src={LOGO_URL} alt="Logo" className="h-40 mb-8" />
+        <img src={LOGO_URL} alt="Logo" className="h-56 mb-8" />
         <h1 className="text-5xl font-bold text-slate-900 mb-4">Retirement Strategy Illustration</h1>
         <div className="w-32 h-1.5 bg-emerald-600 mx-auto mb-10"></div>
         <p className="text-3xl text-slate-600 mb-3">Prepared for</p>
@@ -783,6 +783,8 @@ export const ArchitectPage = ({
             <MonteCarloTab
               monteCarloData={monteCarloData}
               rebalanceFreq={rebalanceFreq}
+              onSetRebalanceFreq={onSetRebalanceFreq}
+              assumptions={assumptions}
               vaEnabled={vaEnabled}
               vaInputs={vaInputs}
               onToggleVa={onToggleVa}
@@ -1483,7 +1485,7 @@ export const ArchitectPage = ({
       {/* PRINT PAGE 10: Back Cover - The One Process */}
       <div className="hidden print:flex flex-col min-h-[10in] break-after-page p-12 bg-white">
         <div className="flex-1 flex flex-col items-center justify-center text-center">
-          <img src={LOGO_URL} alt="Logo" className="h-24 mb-6" />
+          <img src={LOGO_URL} alt="Logo" className="h-36 mb-6" />
           <h2 className="text-3xl font-bold text-slate-900 mb-2">The One Process</h2>
           <div className="w-24 h-1 bg-emerald-600 mx-auto mb-3"></div>
           <p className="text-[13px] text-slate-600 mb-8 max-w-lg">
@@ -1795,7 +1797,7 @@ const AllocationTab = ({
   <div className="mt-6 animate-in fade-in duration-300">
     <div className="flex justify-between items-start mb-4 hidden print:flex">
       <h2 className="text-2xl font-bold text-slate-900">Phase 2: Distribution Allocation</h2>
-      <img src={LOGO_URL} alt="Logo" className="h-12" />
+      <img src={LOGO_URL} alt="Logo" className="h-16" />
     </div>
     {/* Manual Allocation Toggle */}
     <Card className="p-4 mb-6 print:hidden">
@@ -1828,8 +1830,42 @@ const AllocationTab = ({
 
       {useManualAllocation && (
         <div className="mt-4 space-y-4">
-          {/* Mode Toggle */}
-          <div className="flex items-center gap-4">
+          {/* Preset Models + Mode Toggle */}
+          <div className="flex flex-wrap items-center gap-4">
+            {/* Preset Model Selector */}
+            <div>
+              <span className="text-sm font-medium text-slate-600 mr-2">Preset:</span>
+              <select
+                onChange={(e) => {
+                  const tp = inputs.totalPortfolio || 1;
+                  const presets = {
+                    '': null,
+                    'formula': { b1: formulaAllocations.b1Val, b2: formulaAllocations.b2Val, b3: formulaAllocations.b3Val, b4: formulaAllocations.b4Val, b5: formulaAllocations.b5Val },
+                    '4pct': { b1: Math.round(tp * 0.125), b2: Math.round(tp * 0.125), b3: Math.round(tp * 0.225), b4: Math.round(tp * 0.10), b5: Math.round(tp * 0.425) },
+                    '5pct': { b1: Math.round(tp * 0.175), b2: Math.round(tp * 0.175), b3: Math.round(tp * 0.25), b4: Math.round(tp * 0.10), b5: Math.round(tp * 0.30) },
+                    'aggressive': { b1: 0, b2: 0, b3: Math.round(tp * 0.20), b4: Math.round(tp * 0.10), b5: Math.round(tp * 0.70) },
+                    'barbell': { b1: Math.min(Math.round((inputs.monthlySpending || 0) * 12 * 3), tp), b2: 0, b3: 0, b4: 0, b5: Math.max(0, tp - Math.min(Math.round((inputs.monthlySpending || 0) * 12 * 3), tp)) },
+                    'balanced': { b1: 0, b2: 0, b3: tp, b4: 0, b5: 0 },
+                  };
+                  const preset = presets[e.target.value];
+                  if (preset) {
+                    ['b1', 'b2', 'b3', 'b4', 'b5'].forEach(k => onManualAllocationChange(k, preset[k], 'dollar'));
+                  }
+                  e.target.value = '';
+                }}
+                className="bg-white border text-xs font-bold rounded px-2 py-1.5"
+                defaultValue=""
+              >
+                <option value="" disabled>Select a model...</option>
+                <option value="formula">Formula (Calculated)</option>
+                <option value="4pct">4% Model</option>
+                <option value="5pct">5.5% Model</option>
+                <option value="aggressive">Aggressive Growth</option>
+                <option value="barbell">Barbell Strategy</option>
+                <option value="balanced">Balanced 60/40</option>
+              </select>
+            </div>
+
             <span className="text-sm font-medium text-slate-600">Input Mode:</span>
             <div className="flex rounded-lg border border-slate-200 overflow-hidden">
               <button
@@ -1855,7 +1891,7 @@ const AllocationTab = ({
             </div>
 
             {/* Rebalance Toggle */}
-            <label className="flex items-center gap-2 cursor-pointer ml-6">
+            <label className="flex items-center gap-2 cursor-pointer">
               <input
                 type="checkbox"
                 checked={useManualForRebalance}
@@ -2552,13 +2588,12 @@ const WithdrawalOverrideModal = ({ projectionData, inputs, onWithdrawalOverrideC
   );
 };
 
-const MonteCarloTab = ({ monteCarloData, rebalanceFreq, vaEnabled, vaInputs, onToggleVa, onVaInputChange, vaMonteCarloData, inputs, basePlan, vaAdjustedBasePlan }) => {
-  // Derive final projection age from simulation data
+const MonteCarloTab = ({ monteCarloData, rebalanceFreq, onSetRebalanceFreq, assumptions, vaEnabled, vaInputs, onToggleVa, onVaInputChange, vaMonteCarloData, inputs, basePlan, vaAdjustedBasePlan }) => {
+  const [scenario, setScenario] = useState('median');
   const simYears = monteCarloData?.data?.length || 30;
   const startAge = basePlan?.simulationStartAge || 65;
   const finalProjectionAge = startAge + simYears;
 
-  // Calculate VA allocation amount for display
   const vaAllocationAmount = vaInputs && vaEnabled
     ? (vaInputs.allocationType === 'percentage'
         ? inputs.totalPortfolio * (vaInputs.allocationPercent / 100)
@@ -2569,12 +2604,52 @@ const MonteCarloTab = ({ monteCarloData, rebalanceFreq, vaEnabled, vaInputs, onT
     ? vaAllocationAmount * (vaInputs.withdrawalRate / 100)
     : 0;
 
+  const fmt = (val) => val >= 1000000 ? `$${(val / 1000000).toFixed(1)}M` : `$${Math.round(val).toLocaleString()}`;
+  const fmtPct = (val) => `${(val * 100).toFixed(1)}%`;
+
+  const bucketLabels = [
+    { key: 'b1', rKey: 'r1', label: 'B1', name: 'Short Term', color: COLORS.shortTerm },
+    { key: 'b2', rKey: 'r2', label: 'B2', name: 'Mid Term', color: COLORS.midTerm },
+    { key: 'b3', rKey: 'r3', label: 'B3', name: 'Balanced', color: COLORS.hedged },
+    { key: 'b4', rKey: 'r4', label: 'B4', name: 'Income & Growth', color: COLORS.income },
+    { key: 'b5', rKey: 'r5', label: 'B5', name: 'Long Term', color: COLORS.longTerm },
+  ];
+
+  const scenarioKey = scenario === 'optimistic' ? 'optimistic' : scenario === 'conservative' ? 'conservative' : 'median';
+  const scenarioData = monteCarloData?.scenarios?.[scenarioKey] || [];
+
   return (
     <div className="space-y-6 animate-in fade-in duration-300 mt-6">
-      {/* VA GIB Override Section */}
-      <Card className="p-4 print:hidden border-l-4 border-purple-500">
-        <div className="flex flex-wrap items-center justify-between gap-4">
-          <div className="flex items-center gap-3">
+      {/* Controls Row */}
+      <Card className="p-4 print:hidden">
+        <div className="flex flex-wrap items-center gap-4">
+          <div className="bg-slate-50 px-3 py-1.5 rounded-lg border border-slate-200">
+            <label className="text-[12px] font-bold text-slate-500 uppercase block mb-1">Rebalance Frequency</label>
+            <select
+              value={rebalanceFreq}
+              onChange={(e) => onSetRebalanceFreq(parseInt(e.target.value))}
+              className="bg-white border text-xs font-bold rounded px-2 py-1 w-full"
+            >
+              <option value={0}>Sequential (No Rebalance)</option>
+              <option value={1}>Annual Rebalance</option>
+              <option value={3}>Every 3 Years</option>
+              <option value={6}>Every 6 Years</option>
+            </select>
+          </div>
+          <div className="bg-slate-50 px-3 py-1.5 rounded-lg border border-slate-200">
+            <label className="text-[12px] font-bold text-slate-500 uppercase block mb-1">Scenario View</label>
+            <select
+              value={scenario}
+              onChange={(e) => setScenario(e.target.value)}
+              className="bg-white border text-xs font-bold rounded px-2 py-1 w-full"
+            >
+              <option value="optimistic">Optimistic (90th Percentile)</option>
+              <option value="median">Median (50th Percentile)</option>
+              <option value="conservative">Conservative (10th Percentile)</option>
+            </select>
+          </div>
+          {/* VA GIB Toggle */}
+          <div className="bg-slate-50 px-3 py-1.5 rounded-lg border border-slate-200 flex items-center gap-2">
             <label className="flex items-center gap-2 cursor-pointer">
               <input
                 type="checkbox"
@@ -2582,182 +2657,90 @@ const MonteCarloTab = ({ monteCarloData, rebalanceFreq, vaEnabled, vaInputs, onT
                 onChange={(e) => onToggleVa(e.target.checked)}
                 className="w-4 h-4 rounded border-slate-300 text-purple-600 focus:ring-purple-500"
               />
-              <span className="font-medium text-slate-700">VA GIB Override</span>
+              <span className="text-xs font-bold text-slate-600">VA GIB Override</span>
             </label>
             {vaEnabled && (
-              <span className="text-xs bg-purple-100 text-purple-700 px-2 py-1 rounded-full font-medium">
-                VA GIB Active
-              </span>
+              <span className="text-[10px] bg-purple-100 text-purple-700 px-1.5 py-0.5 rounded-full font-medium">Active</span>
             )}
           </div>
-          <div className="text-sm text-slate-500">
-            <Shield className="w-4 h-4 inline mr-1" />
-            Variable Annuity with Guaranteed Income Benefit
-          </div>
         </div>
+      </Card>
 
-        {vaEnabled && (
-          <div className="mt-4 space-y-4">
-            {/* Allocation Type Toggle */}
+      {/* VA GIB Inputs (collapsed into its own card when enabled) */}
+      {vaEnabled && (
+        <Card className="p-4 print:hidden border-l-4 border-purple-500">
+          <div className="space-y-4">
             <div className="flex items-center gap-4">
               <span className="text-sm font-medium text-slate-600">Allocation Type:</span>
               <div className="flex rounded-lg border border-slate-200 overflow-hidden">
                 <button
                   onClick={() => onVaInputChange('allocationType', 'percentage')}
                   className={`px-4 py-1.5 text-sm font-medium transition-colors ${
-                    vaInputs.allocationType === 'percentage'
-                      ? 'bg-purple-600 text-white'
-                      : 'bg-white text-slate-600 hover:bg-slate-50'
+                    vaInputs.allocationType === 'percentage' ? 'bg-purple-600 text-white' : 'bg-white text-slate-600 hover:bg-slate-50'
                   }`}
-                >
-                  Percentage
-                </button>
+                >Percentage</button>
                 <button
                   onClick={() => onVaInputChange('allocationType', 'fixed')}
                   className={`px-4 py-1.5 text-sm font-medium transition-colors ${
-                    vaInputs.allocationType === 'fixed'
-                      ? 'bg-purple-600 text-white'
-                      : 'bg-white text-slate-600 hover:bg-slate-50'
+                    vaInputs.allocationType === 'fixed' ? 'bg-purple-600 text-white' : 'bg-white text-slate-600 hover:bg-slate-50'
                   }`}
-                >
-                  Fixed $
-                </button>
+                >Fixed $</button>
               </div>
             </div>
-
-            {/* Input Grid */}
             <div className="grid grid-cols-2 sm:grid-cols-5 gap-4">
-              {/* Allocation Input */}
               <div>
                 <label className="block text-xs font-medium text-slate-600 mb-1">
                   {vaInputs.allocationType === 'percentage' ? 'Allocation %' : 'Allocation $'}
                 </label>
                 <div className="relative">
-                  {vaInputs.allocationType === 'fixed' && (
-                    <span className="absolute left-2 top-1/2 -translate-y-1/2 text-slate-400 text-sm">$</span>
-                  )}
-                  {vaInputs.allocationType === 'percentage' && (
-                    <span className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 text-sm">%</span>
-                  )}
-                  <input
-                    type="number"
+                  {vaInputs.allocationType === 'fixed' && <span className="absolute left-2 top-1/2 -translate-y-1/2 text-slate-400 text-sm">$</span>}
+                  {vaInputs.allocationType === 'percentage' && <span className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 text-sm">%</span>}
+                  <input type="number"
                     value={Number(vaInputs.allocationType === 'percentage' ? vaInputs.allocationPercent : vaInputs.allocationFixed)}
-                    onChange={(e) => onVaInputChange(
-                      vaInputs.allocationType === 'percentage' ? 'allocationPercent' : 'allocationFixed',
-                      parseFloat(e.target.value) || 0
-                    )}
-                    className={`w-full py-1.5 text-sm border border-slate-200 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-purple-500 ${
-                      vaInputs.allocationType === 'percentage' ? 'pl-2 pr-6' : 'pl-6 pr-2'
-                    }`}
-                    min="0"
-                    max={vaInputs.allocationType === 'percentage' ? 100 : inputs.totalPortfolio}
+                    onChange={(e) => onVaInputChange(vaInputs.allocationType === 'percentage' ? 'allocationPercent' : 'allocationFixed', parseFloat(e.target.value) || 0)}
+                    className={`w-full py-1.5 text-sm border border-slate-200 rounded-lg focus:ring-2 focus:ring-purple-500 ${vaInputs.allocationType === 'percentage' ? 'pl-2 pr-6' : 'pl-6 pr-2'}`}
+                    min="0" max={vaInputs.allocationType === 'percentage' ? 100 : inputs.totalPortfolio}
                   />
                 </div>
               </div>
-
-              {/* Income Start Age */}
               <div>
-                <label className="block text-xs font-medium text-slate-600 mb-1">
-                  Income Start Age
-                </label>
-                <input
-                  type="number"
-                  value={vaInputs.incomeStartAge || 65}
+                <label className="block text-xs font-medium text-slate-600 mb-1">Income Start Age</label>
+                <input type="number" value={vaInputs.incomeStartAge || 65}
                   onChange={(e) => onVaInputChange('incomeStartAge', parseInt(e.target.value) || 65)}
-                  className="w-full px-2 py-1.5 text-sm border border-slate-200 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-purple-500"
-                  min="55"
-                  max="85"
+                  className="w-full px-2 py-1.5 text-sm border border-slate-200 rounded-lg focus:ring-2 focus:ring-purple-500" min="55" max="85"
                 />
-                <div className="text-xs text-slate-400 mt-0.5">When income begins</div>
               </div>
-
-              {/* Withdrawal Rate */}
               <div>
-                <label className="block text-xs font-medium text-slate-600 mb-1">
-                  Withdrawal Rate
-                </label>
+                <label className="block text-xs font-medium text-slate-600 mb-1">Withdrawal Rate</label>
                 <div className="relative">
                   <span className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 text-sm">%</span>
-                  <input
-                    type="number"
-                    step="0.1"
-                    value={Number(vaInputs.withdrawalRate)}
+                  <input type="number" step="0.1" value={Number(vaInputs.withdrawalRate)}
                     onChange={(e) => onVaInputChange('withdrawalRate', parseFloat(e.target.value) || 0)}
-                    onBlur={(e) => {
-                      // Clean up any leading zeros on blur
-                      const val = parseFloat(e.target.value) || 0;
-                      if (val !== vaInputs.withdrawalRate) {
-                        onVaInputChange('withdrawalRate', val);
-                      }
-                    }}
-                    className="w-full pl-2 pr-6 py-1.5 text-sm border border-slate-200 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-purple-500"
-                    min="0"
-                    max="10"
+                    className="w-full pl-2 pr-6 py-1.5 text-sm border border-slate-200 rounded-lg focus:ring-2 focus:ring-purple-500" min="0" max="10"
                   />
                 </div>
-                <div className="text-xs text-slate-400 mt-0.5">Typically 5-7%</div>
               </div>
-
-              {/* High Water Mark */}
               <div>
-                <label className="block text-xs font-medium text-slate-600 mb-1">
-                  High Water Mark
-                </label>
+                <label className="block text-xs font-medium text-slate-600 mb-1">High Water Mark</label>
                 <label className="flex items-center gap-2 cursor-pointer mt-2">
-                  <input
-                    type="checkbox"
-                    checked={vaInputs.highWaterMark}
+                  <input type="checkbox" checked={vaInputs.highWaterMark}
                     onChange={(e) => onVaInputChange('highWaterMark', e.target.checked)}
                     className="w-4 h-4 rounded border-slate-300 text-purple-600 focus:ring-purple-500"
                   />
                   <span className="text-sm text-slate-600">Step-up benefit</span>
                 </label>
               </div>
-
-              {/* Summary */}
               <div className="bg-purple-50 p-3 rounded-lg border border-purple-200">
                 <div className="text-xs font-medium text-purple-700 mb-1">VA Summary</div>
                 <div className="text-sm">
-                  <div><strong>${vaAllocationAmount.toLocaleString()}</strong> allocated to VA</div>
+                  <div><strong>${vaAllocationAmount.toLocaleString()}</strong> allocated</div>
                   <div className="text-purple-700"><strong>${Math.round(annualGuaranteedIncome).toLocaleString()}</strong>/yr @ age {vaInputs.incomeStartAge || 65}</div>
                 </div>
               </div>
             </div>
-
-            {/* Adjusted Bucket Allocations */}
-            {vaAdjustedBasePlan && (
-              <div className="mt-4 p-3 bg-slate-50 rounded-lg border border-slate-200">
-                <div className="text-xs font-medium text-slate-700 mb-2">Adjusted Bucket Allocations (with VA income)</div>
-                <div className="grid grid-cols-5 gap-2 text-xs">
-                  <div className="text-center">
-                    <div className="text-slate-500">B1</div>
-                    <div className="font-bold">${(vaAdjustedBasePlan.b1Val / 1000).toFixed(0)}k</div>
-                  </div>
-                  <div className="text-center">
-                    <div className="text-slate-500">B2</div>
-                    <div className="font-bold">${(vaAdjustedBasePlan.b2Val / 1000).toFixed(0)}k</div>
-                  </div>
-                  <div className="text-center">
-                    <div className="text-slate-500">B3</div>
-                    <div className="font-bold">${(vaAdjustedBasePlan.b3Val / 1000).toFixed(0)}k</div>
-                  </div>
-                  <div className="text-center">
-                    <div className="text-slate-500">B4</div>
-                    <div className="font-bold">${(vaAdjustedBasePlan.b4Val / 1000).toFixed(0)}k</div>
-                  </div>
-                  <div className="text-center">
-                    <div className="text-slate-500">B5</div>
-                    <div className="font-bold">${(vaAdjustedBasePlan.b5Val / 1000).toFixed(0)}k</div>
-                  </div>
-                </div>
-                <div className="mt-2 text-xs text-slate-500">
-                  Bucket total: ${((vaAdjustedBasePlan.b1Val + vaAdjustedBasePlan.b2Val + vaAdjustedBasePlan.b3Val + vaAdjustedBasePlan.b4Val + vaAdjustedBasePlan.b5Val) / 1000).toFixed(0)}k + VA: ${(vaAllocationAmount / 1000).toFixed(0)}k = ${(inputs.totalPortfolio / 1000).toFixed(0)}k
-                </div>
-              </div>
-            )}
           </div>
-        )}
-      </Card>
+        </Card>
+      )}
 
       {/* Success Rate Stats */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
@@ -2779,146 +2762,138 @@ const MonteCarloTab = ({ monteCarloData, rebalanceFreq, vaEnabled, vaInputs, onT
         )}
         <div className={`${vaEnabled ? '' : 'md:col-span-2'} bg-indigo-50 p-4 rounded-lg text-sm text-indigo-900 flex items-center`}>
           <p>
-            <strong>Simulation Logic:</strong> 1,000 iterations using Gaussian distribution.
-            Strategy: <strong>{rebalanceFreq === 0 ? 'Sequential Depletion' : `Bucket Refill Every ${rebalanceFreq} Years`}</strong>.
+            <strong>Simulation:</strong> 1,000 iterations, Gaussian distribution.
+            Strategy: <strong>{rebalanceFreq === 0 ? 'Sequential Depletion' : `Bucket Refill Every ${rebalanceFreq} Year${rebalanceFreq > 1 ? 's' : ''}`}</strong>.
+            Viewing: <strong>{scenario === 'optimistic' ? '90th Percentile' : scenario === 'conservative' ? '10th Percentile' : 'Median'}</strong>.
           </p>
         </div>
       </div>
 
-      {/* Side-by-Side Charts when VA enabled */}
-      {vaEnabled && vaMonteCarloData ? (
-        <>
-          <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
-            {/* Without VA */}
-            <Card className="p-6">
-              <h3 className="font-bold text-lg text-slate-800 mb-4">Without VA</h3>
-              <div className="h-72 w-full">
-                <ResponsiveContainer width="100%" height="100%">
-                  <ComposedChart data={monteCarloData.data}>
-                    <CartesianGrid strokeDasharray="3 3" vertical={false} />
-                    <XAxis dataKey="year" tick={{ fontSize: 10 }} />
-                    <YAxis tickFormatter={(val) => val >= 2000000 ? `$${Math.round(val / 1000000)}M` : `$${Math.round(val / 1000)}k`} tick={{ fontSize: 10 }} />
-                    <Legend wrapperStyle={{ fontSize: '11px' }} />
-                    <Area type="monotone" dataKey="p90" name="90th %" stroke="#166534" strokeWidth={2} fill={COLORS.midTerm} fillOpacity={0.3} />
-                    <Area type="monotone" dataKey="p10" name="10th %" stroke="#dc2626" strokeWidth={2} fill="white" fillOpacity={1} />
-                    <Line type="monotone" dataKey="median" name="Median" stroke={COLORS.longTerm} strokeWidth={3} dot={false} />
-                  </ComposedChart>
-                </ResponsiveContainer>
-              </div>
-              <div className="mt-3 flex justify-around text-center">
-                <div>
-                  <span className={`text-2xl font-bold ${monteCarloData.successRate >= 85 ? 'text-emerald-600' : monteCarloData.successRate >= 65 ? 'text-orange-600' : 'text-red-600'}`}>
-                    {monteCarloData.successRate.toFixed(1)}%
-                  </span>
-                  <div className="text-slate-500 text-sm">Success Rate</div>
-                </div>
-                <div>
-                  <span className="text-2xl font-bold text-slate-700">
-                    ${(monteCarloData.medianLegacy || 0).toLocaleString()}
-                  </span>
-                  <div className="text-slate-500 text-sm">Median Legacy</div>
-                </div>
-              </div>
-            </Card>
+      {/* Year-by-Year Returns by Bucket — Representative Iteration */}
+      <Card className="p-6">
+        <h3 className="font-bold text-lg text-slate-800 mb-4">
+          Returns by Bucket — {scenario === 'optimistic' ? 'Optimistic (90th %)' : scenario === 'conservative' ? 'Conservative (10th %)' : 'Median (50th %)'}
+        </h3>
+        <div className="overflow-x-auto">
+          <table className="w-full text-xs border-collapse">
+            <thead>
+              <tr className="border-b-2 border-slate-300">
+                <th className="text-left p-2 font-bold text-slate-600 sticky left-0 bg-white">Year</th>
+                <th className="text-left p-2 font-bold text-slate-600 sticky left-0 bg-white">Age</th>
+                {bucketLabels.map(b => (
+                  <th key={b.key} className="text-right p-2 font-bold" style={{ color: b.color }}>{b.label} - {b.name}</th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {scenarioData.map((row, idx) => (
+                <tr key={idx} className={idx % 2 === 0 ? 'bg-slate-50' : 'bg-white'}>
+                  <td className="p-2 font-medium text-slate-700 sticky left-0" style={{ backgroundColor: idx % 2 === 0 ? 'rgb(248,250,252)' : 'white' }}>{idx + 1}</td>
+                  <td className="p-2 text-slate-600 sticky left-0" style={{ backgroundColor: idx % 2 === 0 ? 'rgb(248,250,252)' : 'white' }}>{startAge + idx + 1}</td>
+                  {bucketLabels.map(b => {
+                    const val = row[b.rKey] || 0;
+                    return (
+                      <td key={b.key} className={`p-2 text-right font-mono ${val >= 0 ? 'text-emerald-700' : 'text-red-600'}`}>
+                        {fmtPct(val)}
+                      </td>
+                    );
+                  })}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </Card>
 
-            {/* With VA GIB */}
-            <Card className="p-6 border-2 border-purple-200">
-              <h3 className="font-bold text-lg text-slate-800 mb-4 flex items-center gap-2">
-                <Shield className="w-5 h-5 text-purple-600" /> With VA GIB
-              </h3>
-              <div className="h-72 w-full">
-                <ResponsiveContainer width="100%" height="100%">
-                  <ComposedChart data={vaMonteCarloData.data}>
-                    <CartesianGrid strokeDasharray="3 3" vertical={false} />
-                    <XAxis dataKey="year" tick={{ fontSize: 10 }} />
-                    <YAxis tickFormatter={(val) => val >= 2000000 ? `$${Math.round(val / 1000000)}M` : `$${Math.round(val / 1000)}k`} tick={{ fontSize: 10 }} />
-                    <Legend wrapperStyle={{ fontSize: '11px' }} />
-                    <Area type="monotone" dataKey="p90" name="90th %" stroke="#7c3aed" strokeWidth={2} fill="#a78bfa" fillOpacity={0.3} />
-                    <Area type="monotone" dataKey="p10" name="10th %" stroke="#dc2626" strokeWidth={2} fill="white" fillOpacity={1} />
-                    <Line type="monotone" dataKey="median" name="Median" stroke="#000000" strokeWidth={3} dot={false} />
-                  </ComposedChart>
-                </ResponsiveContainer>
-              </div>
-              <div className="mt-3 flex justify-around text-center">
-                <div>
-                  <span className={`text-2xl font-bold ${vaMonteCarloData.successRate >= 85 ? 'text-purple-600' : vaMonteCarloData.successRate >= 65 ? 'text-orange-600' : 'text-red-600'}`}>
-                    {vaMonteCarloData.successRate.toFixed(1)}%
-                  </span>
-                  <div className="text-slate-500 text-sm">Success Rate</div>
-                </div>
-                <div>
-                  <span className="text-2xl font-bold text-purple-700">
-                    ${(vaMonteCarloData.medianLegacy || 0).toLocaleString()}
-                  </span>
-                  <div className="text-slate-500 text-sm">Median Legacy</div>
-                </div>
-              </div>
-            </Card>
-          </div>
+      {/* Year-by-Year Bucket Balances — Representative Iteration */}
+      <Card className="p-6">
+        <h3 className="font-bold text-lg text-slate-800 mb-4">
+          Bucket Balances by Year — {scenario === 'optimistic' ? 'Optimistic (90th %)' : scenario === 'conservative' ? 'Conservative (10th %)' : 'Median (50th %)'}
+        </h3>
+        <div className="overflow-x-auto">
+          <table className="w-full text-xs border-collapse">
+            <thead>
+              <tr className="border-b-2 border-slate-300">
+                <th className="text-left p-2 font-bold text-slate-600 sticky left-0 bg-white">Year</th>
+                <th className="text-left p-2 font-bold text-slate-600 sticky left-0 bg-white">Age</th>
+                {bucketLabels.map(b => (
+                  <th key={b.key} className="text-right p-2 font-bold" style={{ color: b.color }}>{b.label} - {b.name}</th>
+                ))}
+                <th className="text-right p-2 font-bold text-slate-800">Total</th>
+              </tr>
+            </thead>
+            <tbody>
+              {scenarioData.map((row, idx) => {
+                const bucketTotal = bucketLabels.reduce((sum, b) => sum + (row[b.key] || 0), 0);
+                return (
+                  <tr key={idx} className={idx % 2 === 0 ? 'bg-slate-50' : 'bg-white'}>
+                    <td className="p-2 font-medium text-slate-700 sticky left-0" style={{ backgroundColor: idx % 2 === 0 ? 'rgb(248,250,252)' : 'white' }}>{idx + 1}</td>
+                    <td className="p-2 text-slate-600 sticky left-0" style={{ backgroundColor: idx % 2 === 0 ? 'rgb(248,250,252)' : 'white' }}>{startAge + idx + 1}</td>
+                    {bucketLabels.map(b => (
+                      <td key={b.key} className="p-2 text-right font-mono text-slate-700">
+                        {fmt(row[b.key] || 0)}
+                      </td>
+                    ))}
+                    <td className="p-2 text-right font-mono font-bold text-slate-900">{fmt(bucketTotal)}</td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      </Card>
 
-          {/* Impact Summary */}
-          <Card className="p-6 bg-gradient-to-r from-purple-50 to-indigo-50 border-purple-200">
-            <h3 className="font-bold text-lg text-slate-800 mb-4 flex items-center gap-2">
-              <TrendingUp className="w-5 h-5 text-purple-600" /> VA GIB Impact Summary
-            </h3>
-            <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
-              <div className="text-center">
-                <div className="text-sm text-slate-500 mb-1">Success Rate Change</div>
-                <div className={`text-2xl font-bold ${vaMonteCarloData.successRate - monteCarloData.successRate >= 0 ? 'text-emerald-600' : 'text-red-600'}`}>
-                  {vaMonteCarloData.successRate - monteCarloData.successRate >= 0 ? '+' : ''}
-                  {(vaMonteCarloData.successRate - monteCarloData.successRate).toFixed(1)}%
-                </div>
-              </div>
-              <div className="text-center">
-                <div className="text-sm text-slate-500 mb-1">Legacy Change</div>
-                <div className={`text-2xl font-bold ${(vaMonteCarloData.medianLegacy || 0) - (monteCarloData.medianLegacy || 0) >= 0 ? 'text-emerald-600' : 'text-red-600'}`}>
-                  {(vaMonteCarloData.medianLegacy || 0) - (monteCarloData.medianLegacy || 0) >= 0 ? '+' : ''}
-                  ${Math.round((vaMonteCarloData.medianLegacy || 0) - (monteCarloData.medianLegacy || 0)).toLocaleString()}
-                </div>
-              </div>
-              <div className="text-center">
-                <div className="text-sm text-slate-500 mb-1">VA Allocation</div>
-                <div className="text-2xl font-bold text-purple-600">
-                  ${vaAllocationAmount.toLocaleString()}
-                </div>
-              </div>
-              <div className="text-center">
-                <div className="text-sm text-slate-500 mb-1">Annual Guaranteed</div>
-                <div className="text-2xl font-bold text-purple-600">
-                  ${Math.round(annualGuaranteedIncome).toLocaleString()}
-                </div>
-              </div>
-              <div className="text-center">
-                <div className="text-sm text-slate-500 mb-1">Monthly Guaranteed</div>
-                <div className="text-2xl font-bold text-purple-600">
-                  ${Math.round(annualGuaranteedIncome / 12).toLocaleString()}
-                </div>
+      {/* Monte Carlo Range Chart */}
+      <Card className="p-6">
+        <h3 className="font-bold text-lg text-slate-800 mb-6">Portfolio Range (Through Age {finalProjectionAge})</h3>
+        <div className="h-80 w-full">
+          <ResponsiveContainer width="100%" height="100%">
+            <ComposedChart data={monteCarloData.data}>
+              <CartesianGrid strokeDasharray="3 3" vertical={false} />
+              <XAxis dataKey="year" />
+              <YAxis tickFormatter={(val) => val >= 2000000 ? `$${Math.round(val / 1000000)}M` : `$${Math.round(val / 1000)}k`} />
+              <Legend />
+              <Area type="monotone" dataKey="p90" name="Upside (90th Percentile)" stroke="#166534" strokeWidth={2} fill={COLORS.midTerm} fillOpacity={0.3} />
+              <Area type="monotone" dataKey="p10" name="Downside (10th Percentile)" stroke="#dc2626" strokeWidth={2} fill="white" fillOpacity={1} />
+              <Line type="monotone" dataKey="median" name="Median Outcome" stroke={COLORS.longTerm} strokeWidth={3} dot={false} />
+            </ComposedChart>
+          </ResponsiveContainer>
+        </div>
+      </Card>
+
+      {/* VA Impact Summary when enabled */}
+      {vaEnabled && vaMonteCarloData && (
+        <Card className="p-6 bg-gradient-to-r from-purple-50 to-indigo-50 border-purple-200">
+          <h3 className="font-bold text-lg text-slate-800 mb-4 flex items-center gap-2">
+            <TrendingUp className="w-5 h-5 text-purple-600" /> VA GIB Impact Summary
+          </h3>
+          <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
+            <div className="text-center">
+              <div className="text-sm text-slate-500 mb-1">Success Rate Change</div>
+              <div className={`text-2xl font-bold ${vaMonteCarloData.successRate - monteCarloData.successRate >= 0 ? 'text-emerald-600' : 'text-red-600'}`}>
+                {vaMonteCarloData.successRate - monteCarloData.successRate >= 0 ? '+' : ''}
+                {(vaMonteCarloData.successRate - monteCarloData.successRate).toFixed(1)}%
               </div>
             </div>
-            <div className="mt-4 p-3 bg-white/50 rounded-lg text-sm text-slate-600">
-              <strong>Note:</strong> VA GIB provides guaranteed lifetime income regardless of market performance.
-              The benefit base {vaInputs.highWaterMark ? 'steps up on market gains (high water mark)' : 'remains fixed'}.
-              Withdrawal rate of {vaInputs.withdrawalRate}% is applied to the benefit base.
-              VA incurs approximately 1.5% annual fees and grows with B5 (long-term) returns.
+            <div className="text-center">
+              <div className="text-sm text-slate-500 mb-1">Legacy Change</div>
+              <div className={`text-2xl font-bold ${(vaMonteCarloData.medianLegacy || 0) - (monteCarloData.medianLegacy || 0) >= 0 ? 'text-emerald-600' : 'text-red-600'}`}>
+                {(vaMonteCarloData.medianLegacy || 0) - (monteCarloData.medianLegacy || 0) >= 0 ? '+' : ''}
+                ${Math.round((vaMonteCarloData.medianLegacy || 0) - (monteCarloData.medianLegacy || 0)).toLocaleString()}
+              </div>
             </div>
-          </Card>
-        </>
-      ) : (
-        /* Standard single chart when VA not enabled */
-        <Card className="p-6">
-          <h3 className="font-bold text-lg text-slate-800 mb-6">Monte Carlo Range (Through Age {finalProjectionAge})</h3>
-          <div className="h-96 w-full">
-            <ResponsiveContainer width="100%" height="100%">
-              <ComposedChart data={monteCarloData.data}>
-                <CartesianGrid strokeDasharray="3 3" vertical={false} />
-                <XAxis dataKey="year" />
-                <YAxis tickFormatter={(val) => val >= 2000000 ? `$${Math.round(val / 1000000)}M` : `$${Math.round(val / 1000)}k`} />
-                <Legend />
-                <Area type="monotone" dataKey="p90" name="Upside (90th Percentile)" stroke="#166534" strokeWidth={2} fill={COLORS.midTerm} fillOpacity={0.3} />
-                <Area type="monotone" dataKey="p10" name="Downside (10th Percentile)" stroke="#dc2626" strokeWidth={2} fill="white" fillOpacity={1} />
-                <Line type="monotone" dataKey="median" name="Median Outcome" stroke={COLORS.longTerm} strokeWidth={3} dot={false} />
-              </ComposedChart>
-            </ResponsiveContainer>
+            <div className="text-center">
+              <div className="text-sm text-slate-500 mb-1">VA Allocation</div>
+              <div className="text-2xl font-bold text-purple-600">${vaAllocationAmount.toLocaleString()}</div>
+            </div>
+            <div className="text-center">
+              <div className="text-sm text-slate-500 mb-1">Annual Guaranteed</div>
+              <div className="text-2xl font-bold text-purple-600">${Math.round(annualGuaranteedIncome).toLocaleString()}</div>
+            </div>
+            <div className="text-center">
+              <div className="text-sm text-slate-500 mb-1">Monthly Guaranteed</div>
+              <div className="text-2xl font-bold text-purple-600">${Math.round(annualGuaranteedIncome / 12).toLocaleString()}</div>
+            </div>
           </div>
         </Card>
       )}
@@ -2984,8 +2959,12 @@ const SSOptimizationTab = ({ clientInfo, inputs, ssAnalysis, ssBreakevenResults,
           : 0;
         const cSpousalRaw = clientInfo.isMarried ? pPartnerPIA * 0.5 : 0;
         const cSpousalExcess = clientInfo.isMarried ? Math.max(0, cSpousalRaw - cPIA) : 0;
+        const dispAgeDiff = clientInfo.currentAge - (clientInfo.partnerAge || clientInfo.currentAge);
+        const cDispSpousalAge = clientInfo.isMarried
+          ? Math.min(FRA, Math.max(cAge, inputs.partnerSSStartAge + dispAgeDiff))
+          : cAge;
         const cAfterDeemed = clientInfo.isMarried
-          ? applyDeemedFiling(cOwn, pPartnerPIA, true, cAge, cPIA)
+          ? applyDeemedFiling(cOwn, pPartnerPIA, true, cAge, cPIA, cDispSpousalAge)
           : cOwn;
         const cSpousalApplies = cAfterDeemed > cOwn;
 
@@ -3022,7 +3001,8 @@ const SSOptimizationTab = ({ clientInfo, inputs, ssAnalysis, ssBreakevenResults,
 
           const pSpousalRaw = cPIA * 0.5;
           const pSpousalExcess = Math.max(0, pSpousalRaw - pPIA);
-          const pAfterDeemed = applyDeemedFiling(pOwn, cPIA, true, pAge, pPIA);
+          const pDispSpousalAge = Math.min(FRA, Math.max(pAge, cAge - dispAgeDiff));
+          const pAfterDeemed = applyDeemedFiling(pOwn, cPIA, true, pAge, pPIA, pDispSpousalAge);
           const pSpousalApplies = pAfterDeemed > pOwn;
 
           people.push({
@@ -3169,7 +3149,7 @@ const SSOptimizationTab = ({ clientInfo, inputs, ssAnalysis, ssBreakevenResults,
           </div>
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-8">
+        <div className="grid grid-cols-3 md:grid-cols-9 gap-3 mb-8">
           {clientOutcomes.map((outcome) => {
             const isWinner = outcome.age === clientWinner.age;
             const isSelected = outcome.age === inputs.ssStartAge;
@@ -3177,21 +3157,21 @@ const SSOptimizationTab = ({ clientInfo, inputs, ssAnalysis, ssBreakevenResults,
             <div
               onClick={() => onUpdateSSStartAge(outcome.age)}
               key={outcome.age}
-              className={`p-4 rounded-lg border cursor-pointer hover:shadow-md transition-all relative ${isWinner ? 'border-emerald-500 bg-emerald-50' : isSelected ? 'border-blue-500 bg-blue-50' : 'border-slate-200 bg-slate-50 hover:border-emerald-300'}`}
+              className={`p-3 rounded-lg border cursor-pointer hover:shadow-md transition-all relative ${isWinner ? 'border-emerald-500 bg-emerald-50' : isSelected ? 'border-blue-500 bg-blue-50' : 'border-slate-200 bg-slate-50 hover:border-emerald-300'}`}
             >
-              <div className="absolute top-2 right-2 flex items-center gap-1">
+              <div className="flex items-center gap-1 mb-1">
                 {isSelected && (
-                  <span className="bg-blue-600 text-white text-[10px] font-bold px-1.5 py-0.5 rounded">Selected</span>
+                  <span className="bg-blue-600 text-white text-[9px] font-bold px-1 py-0.5 rounded">Selected</span>
                 )}
-                {!isSelected && (
-                  <MousePointerClick className="w-4 h-4 text-emerald-600 opacity-50" />
+                {isWinner && !isSelected && (
+                  <span className="bg-emerald-600 text-white text-[9px] font-bold px-1 py-0.5 rounded">Best</span>
                 )}
               </div>
-              <p className="text-xs font-bold text-slate-500 uppercase">Claim at {outcome.age}</p>
-              <p className={`text-xl font-bold ${isWinner ? 'text-emerald-700' : isSelected ? 'text-blue-700' : 'text-slate-700'}`}>
+              <p className="text-xs font-bold text-slate-500">Age {outcome.age}</p>
+              <p className={`text-sm font-bold ${isWinner ? 'text-emerald-700' : isSelected ? 'text-blue-700' : 'text-slate-700'}`}>
                 ${Math.round(outcome.balance).toLocaleString()}
               </p>
-              <p className="text-[12px] text-slate-400">Projected Portfolio @ Age {targetMaxPortfolioAge}</p>
+              <p className="text-[10px] text-slate-400">@ Age {targetMaxPortfolioAge}</p>
             </div>
             );
           })}
@@ -3219,7 +3199,7 @@ const SSOptimizationTab = ({ clientInfo, inputs, ssAnalysis, ssBreakevenResults,
             </button>
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-8">
+          <div className="grid grid-cols-3 md:grid-cols-9 gap-3 mb-8">
             {partnerOutcomes.map((outcome) => {
               const isWinner = outcome.age === partnerWinner.age;
               const isSelected = outcome.age === inputs.partnerSSStartAge;
@@ -3227,21 +3207,21 @@ const SSOptimizationTab = ({ clientInfo, inputs, ssAnalysis, ssBreakevenResults,
               <div
                 onClick={() => onUpdatePartnerSSStartAge(outcome.age)}
                 key={outcome.age}
-                className={`p-4 rounded-lg border cursor-pointer hover:shadow-md transition-all relative ${isWinner ? 'border-yellow-500 bg-yellow-50' : isSelected ? 'border-blue-500 bg-blue-50' : 'border-slate-200 bg-slate-50 hover:border-yellow-300'}`}
+                className={`p-3 rounded-lg border cursor-pointer hover:shadow-md transition-all relative ${isWinner ? 'border-yellow-500 bg-yellow-50' : isSelected ? 'border-blue-500 bg-blue-50' : 'border-slate-200 bg-slate-50 hover:border-yellow-300'}`}
               >
-                <div className="absolute top-2 right-2 flex items-center gap-1">
+                <div className="flex items-center gap-1 mb-1">
                   {isSelected && (
-                    <span className="bg-blue-600 text-white text-[10px] font-bold px-1.5 py-0.5 rounded">Selected</span>
+                    <span className="bg-blue-600 text-white text-[9px] font-bold px-1 py-0.5 rounded">Selected</span>
                   )}
-                  {!isSelected && (
-                    <MousePointerClick className="w-4 h-4 text-yellow-600 opacity-50" />
+                  {isWinner && !isSelected && (
+                    <span className="bg-yellow-600 text-white text-[9px] font-bold px-1 py-0.5 rounded">Best</span>
                   )}
                 </div>
-                <p className="text-xs font-bold text-slate-500 uppercase">Claim at {outcome.age}</p>
-                <p className={`text-xl font-bold ${isWinner ? 'text-yellow-700' : isSelected ? 'text-blue-700' : 'text-slate-700'}`}>
+                <p className="text-xs font-bold text-slate-500">Age {outcome.age}</p>
+                <p className={`text-sm font-bold ${isWinner ? 'text-yellow-700' : isSelected ? 'text-blue-700' : 'text-slate-700'}`}>
                   ${Math.round(outcome.balance).toLocaleString()}
                 </p>
-                <p className="text-[12px] text-slate-400">Projected Portfolio @ Age {targetMaxPortfolioAge}</p>
+                <p className="text-[10px] text-slate-400">@ Age {targetMaxPortfolioAge}</p>
               </div>
               );
             })}
@@ -4756,7 +4736,7 @@ const PrintPageWrapper = ({ pageNumber, totalPages, title, subtitle, children })
         <h2 className="text-2xl font-bold text-slate-900">{title}</h2>
         <p className="text-[13px] text-slate-500">{subtitle}</p>
       </div>
-      <img src={LOGO_URL} alt="Logo" className="h-10" />
+      <img src={LOGO_URL} alt="Logo" className="h-14" />
     </div>
     <div className="w-full h-0.5 bg-emerald-600 mb-4"></div>
     <div className="flex-1">

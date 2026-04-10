@@ -184,9 +184,9 @@ export default function BucketPortfolioBuilder() {
     monthlySpending: 0,
     ssPIA: 2500,
     partnerSSPIA: 2500,
-    ssStartAge: 67,
+    ssStartAge: 65,
     ssCurrentlyReceiving: false,
-    partnerSSStartAge: 67,
+    partnerSSStartAge: 65,
     partnerSSCurrentlyReceiving: false,
     monthlyPension: 0,
     pensionStartAge: 65,
@@ -486,50 +486,13 @@ export default function BucketPortfolioBuilder() {
 
   const di = debouncedCalcInputs;
 
-  // SS Optimizer: deterministic simulations for each claiming age (no MC — too much variation)
-  const ssSimResults = useMemo(() => {
-    const { inputs: dInputs, assumptions: dAssumptions, clientInfo: dClientInfo, rebalanceTargets: dRebTargets } = di;
-
-    let strategies = [62, 67, 70];
-    if (dClientInfo.retirementAge > 62 && dClientInfo.retirementAge < 67) {
-      strategies.push(dClientInfo.retirementAge);
-    }
-    strategies = [...new Set(strategies)].sort((a, b) => a - b);
-
-    return strategies.map(age => {
-      const modInputs = { ...dInputs, ssStartAge: age };
-      let plan = calculateBasePlan(modInputs, dAssumptions, dClientInfo);
-      if (useManualAllocation) {
-        plan = { ...plan, b1Val: manualAllocations.b1, b2Val: manualAllocations.b2, b3Val: manualAllocations.b3, b4Val: manualAllocations.b4, b5Val: manualAllocations.b5 };
-      }
-      const proj = runSimulation(plan, dAssumptions, modInputs, rebalanceFreq, false, null, dRebTargets);
-      const targetRow = proj.find(r => r.age === targetMaxPortfolioAge);
-      return { age, deterministicBalance: targetRow?.total || 0 };
-    });
-  }, [di, rebalanceFreq, targetMaxPortfolioAge, useManualAllocation, manualAllocations]);
-
-  // Partner SS Optimizer: deterministic simulations for each partner claiming age
-  const ssPartnerSimResults = useMemo(() => {
-    const { inputs: dInputs, assumptions: dAssumptions, clientInfo: dClientInfo, rebalanceTargets: dRebTargets } = di;
-    if (!dClientInfo.isMarried) return null;
-
-    let strategies = [62, 67, 70];
-    if (dClientInfo.partnerRetirementAge > 62 && dClientInfo.partnerRetirementAge < 67) {
-      strategies.push(dClientInfo.partnerRetirementAge);
-    }
-    strategies = [...new Set(strategies)].sort((a, b) => a - b);
-
-    return strategies.map(age => {
-      const modInputs = { ...dInputs, partnerSSStartAge: age };
-      let plan = calculateBasePlan(modInputs, dAssumptions, dClientInfo);
-      if (useManualAllocation) {
-        plan = { ...plan, b1Val: manualAllocations.b1, b2Val: manualAllocations.b2, b3Val: manualAllocations.b3, b4Val: manualAllocations.b4, b5Val: manualAllocations.b5 };
-      }
-      const proj = runSimulation(plan, dAssumptions, modInputs, rebalanceFreq, false, null, dRebTargets);
-      const targetRow = proj.find(r => r.age === targetMaxPortfolioAge);
-      return { age, deterministicBalance: targetRow?.total || 0 };
-    });
-  }, [di, rebalanceFreq, targetMaxPortfolioAge, useManualAllocation, manualAllocations]);
+  // SS Optimizer: use the simplified blended-return analysis (same methodology as breakeven chart).
+  // The full bucket simulation introduces per-bucket return artifacts — sequential depletion of
+  // low-return B1 creates a bias toward strategies with larger early withdrawals (later claiming),
+  // since emptying B1 faster raises the effective portfolio return. The blended-return model
+  // avoids this artifact and matches the breakeven analysis results.
+  const ssSimResults = null;
+  const ssPartnerSimResults = null;
 
   // Projection uses immediate values for snappy chart updates (single run, fast)
   const projectionData = useMemo(() => runSimulation(basePlan, assumptions, inputs, rebalanceFreq, false, null, rebalanceTargets), [basePlan, assumptions, inputs, rebalanceFreq, rebalanceTargets]);
@@ -665,6 +628,29 @@ export default function BucketPortfolioBuilder() {
     }
     prevPartnerIsRetired.current = clientInfo.partnerIsRetired;
   }, [clientInfo.partnerIsRetired, clientInfo.partnerAge]);
+
+  // Default SS start ages: client = retirement age, partner = 62 if already retired else retirement age
+  // Only set on initial load or when retirement age changes (don't override user's manual selection)
+  const prevRetAge = useRef(clientInfo.retirementAge);
+  const prevPartnerRetAge = useRef(clientInfo.partnerRetirementAge);
+  const prevPartnerRetiredForSS = useRef(clientInfo.partnerIsRetired);
+  useEffect(() => {
+    if (clientInfo.retirementAge !== prevRetAge.current) {
+      const clampedAge = Math.max(62, Math.min(70, clientInfo.retirementAge));
+      setInputs(prev => ({ ...prev, ssStartAge: clampedAge }));
+      prevRetAge.current = clientInfo.retirementAge;
+    }
+  }, [clientInfo.retirementAge]);
+  useEffect(() => {
+    const isRetired = clientInfo.partnerIsRetired;
+    const retAge = clientInfo.partnerRetirementAge;
+    if (retAge !== prevPartnerRetAge.current || isRetired !== prevPartnerRetiredForSS.current) {
+      const defaultAge = isRetired ? 62 : Math.max(62, Math.min(70, retAge));
+      setInputs(prev => ({ ...prev, partnerSSStartAge: defaultAge }));
+      prevPartnerRetAge.current = retAge;
+      prevPartnerRetiredForSS.current = isRetired;
+    }
+  }, [clientInfo.partnerRetirementAge, clientInfo.partnerIsRetired]);
 
   // --- Handlers ---
   const handleClientChange = (e) => {

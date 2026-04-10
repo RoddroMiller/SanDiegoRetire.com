@@ -2,7 +2,7 @@ import { initializeApp } from 'firebase/app';
 import { getAuth } from 'firebase/auth';
 import { getFirestore } from 'firebase/firestore';
 
-export const LOGO_URL = "Black on WhiteBackground - small.jpg";
+export const LOGO_URL = "mwm-logo.png";
 export const MASTER_EMAIL = import.meta.env.VITE_MASTER_EMAIL || "rmiller@millerwm.com";
 
 // Firebase Configuration
