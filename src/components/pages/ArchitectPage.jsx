@@ -1197,52 +1197,47 @@ export const ArchitectPage = ({
 
       {/* PRINT PAGE: Social Security Optimization */}
       <PrintPageWrapper pageNumber={6 + cashFlowPageCount} totalPages={totalPrintPages} title="Social Security Optimization" subtitle="Optimal claiming strategy analysis">
-        {/* Primary Recommendation */}
-        <div className="bg-black text-white p-4 rounded-lg mb-4">
-          <div className="flex items-center gap-3">
-            <CheckCircle className="w-8 h-8 text-emerald-400" />
-            <div>
-              <p className="text-[13px] text-slate-400">Primary Client Recommendation</p>
-              <p className="text-xl font-bold">
-                Claim at Age <span className="text-emerald-400">{ssWinnerForDisplay.age}</span> to maximize portfolio at age {targetMaxPortfolioAge}
-              </p>
-            </div>
+        {/* Primary Recommendation — compact */}
+        <div className="bg-black text-white p-3 rounded-lg mb-3 flex items-center gap-3">
+          <CheckCircle className="w-6 h-6 text-emerald-400 flex-shrink-0" />
+          <div>
+            <p className="text-[11px] text-slate-400">Client Recommendation</p>
+            <p className="text-base font-bold">
+              Claim at Age <span className="text-emerald-400">{ssWinnerForDisplay.age}</span> to maximize portfolio at age {targetMaxPortfolioAge}
+            </p>
           </div>
         </div>
 
-        {/* Claiming Scenarios */}
-        <div className="grid grid-cols-4 gap-3 mb-4">
+        {/* Claiming Scenarios — 9 cards compact */}
+        <div className="grid grid-cols-9 gap-1.5 mb-3">
           {ssOutcomesForDisplay.map((outcome) => (
-            <div key={outcome.age} className={`p-3 rounded-lg border ${outcome.age === ssWinnerForDisplay.age ? 'border-emerald-500 bg-emerald-50' : 'border-slate-200 bg-slate-50'}`}>
-              <p className="text-xs font-bold text-slate-500">Claim at {outcome.age}</p>
-              <p className={`text-base font-bold ${outcome.age === ssWinnerForDisplay.age ? 'text-emerald-700' : 'text-slate-700'}`}>
-                ${Math.round(outcome.balance).toLocaleString()}
+            <div key={outcome.age} className={`p-1.5 rounded border text-center ${outcome.age === ssWinnerForDisplay.age ? 'border-emerald-500 bg-emerald-50' : 'border-slate-200 bg-slate-50'}`}>
+              <p className="text-[10px] font-bold text-slate-500">Age {outcome.age}</p>
+              <p className={`text-[11px] font-bold ${outcome.age === ssWinnerForDisplay.age ? 'text-emerald-700' : 'text-slate-700'}`}>
+                ${Math.round(outcome.balance / 1000).toLocaleString()}k
               </p>
-              <p className="text-[11px] text-slate-400">Portfolio @ Age {targetMaxPortfolioAge}</p>
             </div>
           ))}
         </div>
 
-        {/* Partner Section if married */}
+        {/* Partner Section if married — compact */}
         {clientInfo.isMarried && ssPartnerOutcomesForDisplay.length > 0 && ssPartnerWinnerForDisplay && (
           <>
-            <div className="bg-slate-800 text-white p-4 rounded-lg mb-4">
-              <div className="flex items-center gap-3">
-                <Users className="w-8 h-8 text-yellow-500" />
-                <div>
-                  <p className="text-[13px] text-slate-400">Partner Recommendation</p>
-                  <p className="text-xl font-bold">
-                    Claim at Age <span className="text-yellow-500">{ssPartnerWinnerForDisplay.age}</span>
-                  </p>
-                </div>
+            <div className="bg-slate-800 text-white p-3 rounded-lg mb-3 flex items-center gap-3">
+              <Users className="w-6 h-6 text-yellow-500 flex-shrink-0" />
+              <div>
+                <p className="text-[11px] text-slate-400">Partner Recommendation</p>
+                <p className="text-base font-bold">
+                  Claim at Age <span className="text-yellow-500">{ssPartnerWinnerForDisplay.age}</span>
+                </p>
               </div>
             </div>
-            <div className="grid grid-cols-4 gap-3 mb-4">
+            <div className="grid grid-cols-9 gap-1.5 mb-3">
               {ssPartnerOutcomesForDisplay.map((outcome) => (
-                <div key={outcome.age} className={`p-3 rounded-lg border ${outcome.age === ssPartnerWinnerForDisplay.age ? 'border-yellow-500 bg-yellow-50' : 'border-slate-200 bg-slate-50'}`}>
-                  <p className="text-xs font-bold text-slate-500">Claim at {outcome.age}</p>
-                  <p className={`text-base font-bold ${outcome.age === ssPartnerWinnerForDisplay.age ? 'text-yellow-700' : 'text-slate-700'}`}>
-                    ${Math.round(outcome.balance).toLocaleString()}
+                <div key={outcome.age} className={`p-1.5 rounded border text-center ${outcome.age === ssPartnerWinnerForDisplay.age ? 'border-yellow-500 bg-yellow-50' : 'border-slate-200 bg-slate-50'}`}>
+                  <p className="text-[10px] font-bold text-slate-500">Age {outcome.age}</p>
+                  <p className={`text-[11px] font-bold ${outcome.age === ssPartnerWinnerForDisplay.age ? 'text-yellow-700' : 'text-slate-700'}`}>
+                    ${Math.round(outcome.balance / 1000).toLocaleString()}k
                   </p>
                 </div>
               ))}
@@ -1250,10 +1245,10 @@ export const ArchitectPage = ({
           </>
         )}
 
-        {/* Claiming Strategy Rationale */}
-        <div className="border border-slate-200 rounded-lg p-4 mb-3">
-          <h3 className="font-bold text-[13px] text-slate-800 mb-2">Claiming Strategy Rationale</h3>
-          <p className="text-[11px] text-slate-700 leading-relaxed">
+        {/* Claiming Strategy Rationale — tighter */}
+        <div className="border border-slate-200 rounded-lg p-3 mb-2">
+          <h3 className="font-bold text-[12px] text-slate-800 mb-1">Claiming Strategy Rationale</h3>
+          <p className="text-[10px] text-slate-700 leading-relaxed">
             Delaying Social Security requires funding living expenses from the portfolio. With IRA withdrawals, each $1.00 of spending
             costs ${inputs.ssMarginalTaxRate > 0 ? `$${(1 / (1 - inputs.ssMarginalTaxRate / 100)).toFixed(2)}` : '$1.00'} after
             tax gross-up. At {inputs.ssReinvestRate || 4.5}% growth with {inputs.ssBridgeNqPercent}% NQ / {100 - inputs.ssBridgeNqPercent}% IRA
@@ -1264,10 +1259,10 @@ export const ArchitectPage = ({
           </p>
         </div>
 
-        {/* Scenarios for Further Exploration */}
-        <div className="border border-amber-200 bg-amber-50 rounded-lg p-4">
-          <h3 className="font-bold text-[12px] text-amber-900 mb-1">When Delayed Claiming May Be Worth Exploring</h3>
-          <ul className="text-[11px] text-amber-800 space-y-0.5 list-disc pl-4">
+        {/* Scenarios for Further Exploration — tighter */}
+        <div className="border border-amber-200 bg-amber-50 rounded-lg p-3">
+          <h3 className="font-bold text-[11px] text-amber-900 mb-1">When Delayed Claiming May Be Worth Exploring</h3>
+          <ul className="text-[10px] text-amber-800 space-y-0 list-disc pl-4">
             <li><strong>Survivor protection:</strong> Higher earner has limited life expectancy but spouse may live much longer — delaying to 70 locks in a 24% larger survivor benefit.</li>
             <li><strong>Large age gap:</strong> A younger surviving spouse could collect the enhanced survivor benefit for decades.</li>
             <li><strong>Guaranteed income covers bridge years:</strong> Pensions or other income eliminate the need for portfolio withdrawals, reducing opportunity cost.</li>
