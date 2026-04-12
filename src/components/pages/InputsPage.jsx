@@ -971,11 +971,24 @@ export const InputsPage = ({
           {['b1', 'b2', 'b3', 'b4', 'b5'].map((key) => {
             const data = assumptions[key];
             if (!data) return null;
+            const forwardNotes = {
+              b1: 'Forward 4.0%: Higher rate environment is structural — T-Bills yield 4.2%, ultra-short bonds 4.5–5.2%, merger arbitrage 3.5–5.5%. Backtested period included zero-rate years (2020–21) that dragged returns down.',
+              b2: 'Forward 5.5%: Starting bond yields are the strongest predictor of future returns (JP Morgan GTR). PIMCO Income yields 5.89%, unconstrained bond strategies benefit from wider credit spreads. Backtested included the 2022 bond crash.',
+              b3: 'Forward 8.0%: Equity beta reduced from bull market, but tactical mandate (0–100% equity) provides asymmetric returns. Long/short and go-anywhere value mandates generate alpha in moderate return environments.',
+              b4: 'Forward 7.0%: Preferred securities yield 5.95% providing an income floor. International dividend valuations are cheaper than US large cap, supporting the capital rotation thesis.',
+              b5: 'Forward 9.0%: Consensus global equity 7–10%. Portfolio is 29% international with small/mid cap tilt for diversification. Active selection (JPGSX top 4% of peers over 5yr) adds alpha over passive.',
+            };
             return (
-            <div key={key} className="p-4 bg-slate-50 rounded-lg">
-              <div className="flex items-baseline justify-between mb-2">
-                <p className="font-bold text-sm text-slate-700">{data.name}</p>
+            <div key={key} className="p-4 bg-slate-50 rounded-lg relative group">
+              <div className="flex items-baseline justify-between mb-1">
+                <p className="font-bold text-sm text-slate-700 flex items-center gap-1">
+                  {data.name}
+                  <Info className="w-3 h-3 text-slate-400 cursor-help" />
+                </p>
                 {data.subtitle && <p className="text-[10px] text-slate-400 font-medium">{data.subtitle}</p>}
+              </div>
+              <div className="absolute left-4 bottom-full mb-1 hidden group-hover:block w-80 bg-slate-800 text-white text-[11px] p-3 rounded shadow-lg z-20 leading-relaxed">
+                {forwardNotes[key]}
               </div>
               {data.historical && (
                 <p className="text-[10px] text-mwm-gold/80 mb-2">Backtested avg: {data.historical}% ann. (2016–2026)</p>
