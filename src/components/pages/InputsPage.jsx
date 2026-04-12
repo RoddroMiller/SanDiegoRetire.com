@@ -961,11 +961,11 @@ export const InputsPage = ({
             onClick={onApplyForwardLooking}
             className="text-xs flex items-center justify-center gap-1 bg-mwm-gold/10 text-mwm-gold py-2 rounded border border-mwm-gold/30 hover:bg-mwm-gold/20 transition-colors font-medium"
           >
-            <TrendingUp className="w-3.5 h-3.5" /> Forward-Looking (-18%)
+            <TrendingUp className="w-3.5 h-3.5" /> Forward-Looking
           </button>
         </div>
         <p className="text-[10px] text-slate-400 mb-3 -mt-2">
-          Backtested uses actual MWM portfolio returns (2016–2026). Forward-looking applies an 18% reduction to returns for normalized market expectations. Standard deviation is unchanged. Manual override available below.
+          Backtested uses actual MWM portfolio returns (2016–2026). Forward-looking adjusts per bucket based on capital market assumptions — B1/B2 supported by higher rate environment, B3–B5 reduced for normalized equity outlook. Standard deviation unchanged. Manual override below.
         </p>
         <div className="space-y-3">
           {['b1', 'b2', 'b3', 'b4', 'b5'].map((key) => {

@@ -227,11 +227,11 @@ export default function BucketPortfolioBuilder() {
 
   // Return Assumptions
   const [assumptions, setAssumptions] = useState({
-    b1: { return: 3.0, stdDev: 1.7, name: "B1 - Liquidity", subtitle: "Market-Neutral · Yrs 1–3", historical: 3.4 },
-    b2: { return: 4.5, stdDev: 6.0, name: "B2 - Bridge", subtitle: "Conservative Flexible · Yrs 4–6", historical: 5.1 },
+    b1: { return: 4.0, stdDev: 1.7, name: "B1 - Liquidity", subtitle: "Market-Neutral · Yrs 1–3", historical: 3.4 },
+    b2: { return: 5.5, stdDev: 6.0, name: "B2 - Bridge", subtitle: "Conservative Flexible · Yrs 4–6", historical: 5.1 },
     b3: { return: 8.0, stdDev: 9.5, name: "B3 - Tactical Balanced", subtitle: "Active Tactical · Yrs 7–14", historical: 10.1 },
-    b4: { return: 6.5, stdDev: 12.0, name: "B4 - Income & Growth", subtitle: "Income-Oriented Equity · Yrs 13+", historical: 7.8 },
-    b5: { return: 10.0, stdDev: 15.0, name: "B5 - Permanent Equity", subtitle: "100% Equity · Growth & Legacy", historical: 11.9 },
+    b4: { return: 7.0, stdDev: 12.0, name: "B4 - Income & Growth", subtitle: "Income-Oriented Equity · Yrs 13+", historical: 7.8 },
+    b5: { return: 9.0, stdDev: 15.0, name: "B5 - Permanent Equity", subtitle: "100% Equity · Growth & Legacy", historical: 11.9 },
   });
 
   // --- Scenario Action Wrappers ---
@@ -298,11 +298,11 @@ export default function BucketPortfolioBuilder() {
       });
       // Migrate assumptions: apply current forward-looking defaults if saved data uses old values
       const CURRENT_DEFAULTS = {
-        b1: { return: 3.0, stdDev: 1.7, name: "B1 - Liquidity", subtitle: "Market-Neutral · Yrs 1–3", historical: 3.4 },
-        b2: { return: 4.5, stdDev: 6.0, name: "B2 - Bridge", subtitle: "Conservative Flexible · Yrs 4–6", historical: 5.1 },
+        b1: { return: 4.0, stdDev: 1.7, name: "B1 - Liquidity", subtitle: "Market-Neutral · Yrs 1–3", historical: 3.4 },
+        b2: { return: 5.5, stdDev: 6.0, name: "B2 - Bridge", subtitle: "Conservative Flexible · Yrs 4–6", historical: 5.1 },
         b3: { return: 8.0, stdDev: 9.5, name: "B3 - Tactical Balanced", subtitle: "Active Tactical · Yrs 7–14", historical: 10.1 },
-        b4: { return: 6.5, stdDev: 12.0, name: "B4 - Income & Growth", subtitle: "Income-Oriented Equity · Yrs 13+", historical: 7.8 },
-        b5: { return: 10.0, stdDev: 15.0, name: "B5 - Permanent Equity", subtitle: "100% Equity · Growth & Legacy", historical: 11.9 },
+        b4: { return: 7.0, stdDev: 12.0, name: "B4 - Income & Growth", subtitle: "Income-Oriented Equity · Yrs 13+", historical: 7.8 },
+        b5: { return: 9.0, stdDev: 15.0, name: "B5 - Permanent Equity", subtitle: "100% Equity · Growth & Legacy", historical: 11.9 },
       };
       const migratedAssumptions = {};
       Object.keys(CURRENT_DEFAULTS).forEach(k => {
@@ -863,12 +863,15 @@ export default function BucketPortfolioBuilder() {
   };
 
   const applyForwardLookingEstimates = () => {
-    // Apply ~18% reduction to backtested returns for forward-looking market expectations
-    // StdDev remains unchanged (risk characteristics are structural, not bull-market inflated)
+    // Forward-looking estimates justified by capital market assumptions (2026):
+    // B1/B2: higher rate environment supports at/above backtested (structural, not cyclical)
+    // B3: tactical alpha offsets equity beta reduction; B4: income floor + intl value
+    // B5: diversified global equity reduced from bull market peak
+    const FORWARD_RETURNS = { b1: 4.0, b2: 5.5, b3: 8.0, b4: 7.0, b5: 9.0 };
     setAssumptions(prev => {
       const next = { ...prev };
-      Object.keys(next).forEach(k => {
-        next[k].return = Math.round(next[k].historical * 0.82 * 10) / 10; // 18% haircut, round to 1 decimal
+      Object.keys(FORWARD_RETURNS).forEach(k => {
+        if (next[k]) next[k].return = FORWARD_RETURNS[k];
       });
       return next;
     });
