@@ -1167,7 +1167,10 @@ export const ArchitectPage = ({
       })()}
 
       {/* PRINT PAGE 5: Portfolio Sustainability */}
-      <PrintPageWrapper pageNumber={5} totalPages={totalPrintPages} title="Portfolio Sustainability" subtitle={inputs.taxEnabled ? 'Projected portfolio balance and cash flow (with estimated taxes)' : 'Projected portfolio balance and annual cash flow detail'}>
+      <PrintPageWrapper pageNumber={5} totalPages={totalPrintPages} title="Portfolio Sustainability" subtitle={
+        (printOptions?.mode === 'montecarlo' ? 'Monte Carlo median projection' : 'Deterministic projection') +
+        (inputs.taxEnabled ? ' with estimated taxes' : '')
+      }>
         {/* Chart */}
         <div className="border border-slate-200 rounded-lg p-3 mb-4">
           <ComposedChart width={670} height={180} data={printData}>
@@ -1199,7 +1202,7 @@ export const ArchitectPage = ({
               </tr>
             </thead>
             <tbody>
-              {projectionData
+              {printData
                 .filter((row, i) => {
                   const yearNum = i + 1; // 1-indexed year
                   return yearNum <= 15 || yearNum % 5 === 0;
@@ -1417,8 +1420,8 @@ export const ArchitectPage = ({
         })()}
       </PrintPageWrapper>
 
-      {/* PRINT PAGE: Monte Carlo Simulation */}
-      <PrintPageWrapper pageNumber={7 + cashFlowPageCount} totalPages={totalPrintPages} title="Monte Carlo Simulation" subtitle="Probability analysis based on 1,000 market scenarios">
+      {/* PRINT PAGE: Monte Carlo Simulation (hidden when Monte Carlo is already the print mode) */}
+      {printOptions?.mode !== 'montecarlo' && <PrintPageWrapper pageNumber={7 + cashFlowPageCount} totalPages={totalPrintPages} title="Monte Carlo Simulation" subtitle="Probability analysis based on 1,000 market scenarios">
         {/* Success Rate */}
         <div className={`${monteCarloData.successRate >= 85 ? 'bg-mwm-green' : monteCarloData.successRate >= 65 ? 'bg-orange-500' : 'bg-red-500'} text-white p-6 rounded-lg mb-4`}>
           <div className="flex items-center justify-between">
@@ -1452,7 +1455,7 @@ export const ArchitectPage = ({
             A success rate above 85% indicates a robust retirement plan.
           </p>
         </div>
-      </PrintPageWrapper>
+      </PrintPageWrapper>}
 
       {/* PRINT PAGE: Strategy Comparison */}
       <PrintPageWrapper pageNumber={8 + cashFlowPageCount} totalPages={totalPrintPages} title="Strategy Comparison" subtitle="Alternative allocation strategies analyzed">
