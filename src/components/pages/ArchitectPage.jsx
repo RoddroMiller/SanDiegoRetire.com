@@ -457,6 +457,36 @@ export const ArchitectPage = ({
         </div>
       </div>
 
+      {/* PRINT PAGE: Table of Contents */}
+      <div className="hidden print:flex flex-col min-h-[10in] break-after-page p-12 bg-white">
+        <h2 className="text-3xl font-bold text-slate-900 mb-2">Table of Contents</h2>
+        <div className="w-20 h-1 bg-mwm-green mb-8"></div>
+        <div className="space-y-0 text-lg">
+          {[
+            !printOptions?.excludeAccumulation && { title: 'Phase 1 — Accumulation', desc: 'Building your retirement portfolio' },
+            { title: 'Bucket Architecture', desc: 'Time-segmented allocation strategy' },
+            { title: 'Phase 2 — Distribution Strategy', desc: 'Bucket-based withdrawal sequence' },
+            { title: 'Portfolio Sustainability', desc: printOptions?.mode === 'montecarlo' ? 'Monte Carlo simulation with probability analysis' : 'Projected portfolio balance and cash flow' },
+            cashFlowPageCount > 0 && { title: 'Detailed Cash Flows', desc: `Year-by-year income, expenses, and portfolio detail (${cashFlowPageCount} ${cashFlowPageCount === 1 ? 'page' : 'pages'})` },
+            { title: 'Social Security Optimization', desc: 'Optimal claiming strategy analysis' },
+            printOptions?.mode !== 'montecarlo' && { title: 'Monte Carlo Simulation', desc: 'Probability analysis based on 1,000 market scenarios' },
+            !printOptions?.excludeStrategyComparison && { title: 'Strategy Comparison', desc: 'Alternative allocation strategies analyzed' },
+            { title: 'Important Disclosures', desc: 'Assumptions, methodology, and limitations' },
+          ].filter(Boolean).map((item, idx) => (
+            <div key={idx} className="flex items-baseline border-b border-slate-100 py-3">
+              <span className="w-8 text-mwm-green font-bold text-base">{idx + 1}.</span>
+              <div>
+                <span className="font-semibold text-slate-800">{item.title}</span>
+                <span className="text-sm text-slate-400 ml-3">{item.desc}</span>
+              </div>
+            </div>
+          ))}
+        </div>
+        <div className="mt-auto pt-8 text-xs text-slate-400 text-center">
+          <p>This illustration is for informational purposes only and does not constitute investment advice.</p>
+        </div>
+      </div>
+
       {/* ACTION BAR */}
       <div className="max-w-7xl mx-auto mb-4 sm:mb-6 md:mb-8 print:hidden no-print">
         <div className="flex flex-wrap items-center gap-1.5 sm:gap-2">
