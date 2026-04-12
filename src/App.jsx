@@ -296,7 +296,25 @@ export default function BucketPortfolioBuilder() {
         advisoryFee: s.inputs.advisoryFee ?? 1.0,
         showBenchmark: s.inputs.showBenchmark ?? false,
       });
-      setAssumptions(s.assumptions);
+      // Migrate assumptions: apply current forward-looking defaults if saved data uses old values
+      const CURRENT_DEFAULTS = {
+        b1: { return: 3.0, stdDev: 1.7, name: "B1 - Liquidity", subtitle: "Market-Neutral · Yrs 1–3", historical: 3.4 },
+        b2: { return: 4.5, stdDev: 6.0, name: "B2 - Bridge", subtitle: "Conservative Flexible · Yrs 4–6", historical: 5.1 },
+        b3: { return: 8.0, stdDev: 9.5, name: "B3 - Tactical Balanced", subtitle: "Active Tactical · Yrs 7–14", historical: 10.1 },
+        b4: { return: 6.5, stdDev: 12.0, name: "B4 - Income & Growth", subtitle: "Income-Oriented Equity · Yrs 13+", historical: 7.8 },
+        b5: { return: 10.0, stdDev: 15.0, name: "B5 - Permanent Equity", subtitle: "100% Equity · Growth & Legacy", historical: 11.9 },
+      };
+      const migratedAssumptions = {};
+      Object.keys(CURRENT_DEFAULTS).forEach(k => {
+        const saved = s.assumptions[k] || {};
+        const def = CURRENT_DEFAULTS[k];
+        // If saved assumptions lack historical field or have old bucket names, apply current defaults
+        const needsMigration = !saved.historical || saved.name !== def.name;
+        migratedAssumptions[k] = needsMigration
+          ? { ...def }
+          : { ...saved, subtitle: def.subtitle, historical: def.historical, name: def.name };
+      });
+      setAssumptions(migratedAssumptions);
       if (s.targetMaxPortfolioAge) setTargetMaxPortfolioAge(s.targetMaxPortfolioAge);
       if (s.rebalanceFreq !== undefined) setRebalanceFreq(s.rebalanceFreq);
       // Load VA settings if present
