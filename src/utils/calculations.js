@@ -1089,6 +1089,7 @@ export const calculateBasePlan = (inputs, assumptions, clientInfo, vaEnabled = f
       ssIncome,
       pensionIncome,
       otherIncome,
+      nonTaxableAdditionalIncome,
       vaIncome
     };
   };
@@ -1338,7 +1339,7 @@ export const runSimulation = (basePlan, assumptions, inputs, rebalanceFreq, isMo
 
       const {
         expenses, income, gap, surplus, simAge, currentPartnerAge, oneTimeContributions,
-        ssIncome, pensionIncome, otherIncome, vaIncome, employmentIncome
+        ssIncome, pensionIncome, otherIncome, nonTaxableAdditionalIncome, vaIncome, employmentIncome
       } = getAnnualDetails(i - 1);
 
       balances.b1 *= (1 + rates.b1);
@@ -1835,7 +1836,7 @@ export const runSimulation = (basePlan, assumptions, inputs, rebalanceFreq, isMo
         // Income breakdown (for detailed views)
         ssIncomeDetail: Math.round(ssIncome),
         pensionIncomeDetail: Math.round(pensionIncome),
-        otherIncomeDetail: Math.round(otherIncome),
+        otherIncomeDetail: Math.round(otherIncome + nonTaxableAdditionalIncome),
         vaIncomeDetail: Math.round(vaIncome || 0),
         employmentIncomeDetail: Math.round(employmentIncome || 0),
         taxableSS: Math.round(taxData.taxableSS || 0),
