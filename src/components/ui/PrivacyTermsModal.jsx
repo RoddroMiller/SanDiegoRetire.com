@@ -10,7 +10,7 @@ export const PrivacyTermsModal = ({ isOpen, onAccept, onClose }) => {
         {/* Header */}
         <div className="bg-slate-900 text-white p-4 sm:p-6 flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <Shield className="w-6 h-6 sm:w-8 sm:h-8 text-emerald-400" />
+            <Shield className="w-6 h-6 sm:w-8 sm:h-8 text-mwm-green/60" />
             <div>
               <h2 className="text-lg sm:text-xl font-bold">Privacy & Terms</h2>
               <p className="text-slate-400 text-xs sm:text-sm">Please review before continuing</p>
@@ -30,7 +30,7 @@ export const PrivacyTermsModal = ({ isOpen, onAccept, onClose }) => {
           {/* Privacy Policy Section */}
           <div>
             <h3 className="flex items-center gap-2 text-lg font-bold text-slate-800 mb-3">
-              <Shield className="w-5 h-5 text-emerald-600" /> Privacy Disclosure
+              <Shield className="w-5 h-5 text-mwm-green" /> Privacy Disclosure
             </h3>
             <div className="bg-slate-50 rounded-lg p-4 text-sm text-slate-600 space-y-3">
               <p>
@@ -60,7 +60,7 @@ export const PrivacyTermsModal = ({ isOpen, onAccept, onClose }) => {
           {/* Terms of Use Section */}
           <div>
             <h3 className="flex items-center gap-2 text-lg font-bold text-slate-800 mb-3">
-              <FileText className="w-5 h-5 text-emerald-600" /> Terms of Use
+              <FileText className="w-5 h-5 text-mwm-green" /> Terms of Use
             </h3>
             <div className="bg-slate-50 rounded-lg p-4 text-sm text-slate-600 space-y-3">
               <p>
@@ -100,8 +100,8 @@ export const PrivacyTermsModal = ({ isOpen, onAccept, onClose }) => {
           </div>
 
           {/* Regulatory Disclosure */}
-          <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
-            <p className="text-xs text-yellow-800">
+          <div className="bg-mwm-gold/10 border border-mwm-gold/30 rounded-lg p-4">
+            <p className="text-xs text-mwm-black">
               Securities offered through LPL Financial, Member FINRA/SIPC. Investment advice offered through
               Miller Wealth Management, a Registered Investment Advisor and separate entity from LPL Financial.
             </p>
@@ -123,7 +123,7 @@ export const PrivacyTermsModal = ({ isOpen, onAccept, onClose }) => {
             </button>
             <button
               onClick={onAccept}
-              className="flex-1 px-6 py-3 bg-emerald-600 text-white font-bold rounded-xl hover:bg-emerald-700 transition-colors"
+              className="flex-1 px-6 py-3 bg-mwm-green text-white font-bold rounded-xl hover:bg-mwm-green/80 transition-colors"
             >
               I Accept
             </button>

@@ -78,8 +78,8 @@ export const PasswordExpiryModal = ({ onSuccess, onCancel, userEmail }) => {
     <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
       <div className="bg-white rounded-xl shadow-2xl max-w-md w-full p-6">
         <div className="flex items-center gap-3 mb-4">
-          <div className="p-2 bg-amber-100 rounded-full">
-            <Lock className="w-6 h-6 text-amber-600" />
+          <div className="p-2 bg-mwm-gold/20 rounded-full">
+            <Lock className="w-6 h-6 text-mwm-gold" />
           </div>
           <div>
             <h2 className="text-xl font-bold text-slate-800">Password Expired</h2>
@@ -162,7 +162,7 @@ export const PasswordExpiryModal = ({ onSuccess, onCancel, userEmail }) => {
             </button>
           </div>
 
-          <div className="p-3 bg-amber-50 rounded-lg text-xs text-amber-800 border border-amber-200">
+          <div className="p-3 bg-mwm-gold/10 rounded-lg text-xs text-mwm-gold border border-mwm-gold/30">
             <div className="flex items-start gap-2">
               <AlertCircle className="w-4 h-4 flex-shrink-0 mt-0.5" />
               <div>
@@ -184,7 +184,7 @@ export const PasswordExpiryModal = ({ onSuccess, onCancel, userEmail }) => {
             <button
               type="submit"
               disabled={isLoading || !currentPassword || !newPassword || !confirmPassword}
-              className="flex-1 p-3 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 disabled:opacity-50 disabled:cursor-not-allowed font-medium transition-colors"
+              className="flex-1 p-3 bg-mwm-green text-white rounded-lg hover:bg-mwm-green/80 disabled:opacity-50 disabled:cursor-not-allowed font-medium transition-colors"
             >
               {isLoading ? 'Updating...' : 'Update Password'}
             </button>

@@ -63,7 +63,7 @@ export const InputsPage = ({
       </div>
 
       {/* Retirement Inputs Card */}
-      <Card className="p-6 border-t-4 border-emerald-500">
+      <Card className="p-6 border-t-4 border-mwm-green">
         <h3 className="font-semibold text-slate-800 mb-5 flex items-center gap-2 text-lg">
           <Briefcase className="w-5 h-5" /> Retirement Inputs
         </h3>
@@ -73,7 +73,7 @@ export const InputsPage = ({
               Starting Portfolio <Info className="w-3 h-3 text-slate-400" />
             </label>
             <div className="text-xs text-slate-400 mb-1">(From Accumulation Phase)</div>
-            <div className="w-full px-3 py-2 border rounded-md text-sm font-bold text-emerald-700 bg-emerald-50 cursor-not-allowed">
+            <div className="w-full px-3 py-2 border rounded-md text-sm font-bold text-mwm-green/80 bg-mwm-green/10 cursor-not-allowed">
               ${inputs.totalPortfolio.toLocaleString()}
             </div>
           </div>
@@ -85,7 +85,7 @@ export const InputsPage = ({
               </label>
               <button
                 onClick={onApplyFourPercentRule}
-                className="text-[12px] bg-yellow-50 text-yellow-700 px-1.5 py-0.5 rounded border border-yellow-200 hover:bg-yellow-100 transition-colors font-medium"
+                className="text-[12px] bg-mwm-gold/10 text-mwm-gold px-1.5 py-0.5 rounded border border-mwm-gold/30 hover:bg-mwm-gold/20 transition-colors font-medium"
               >
                 Set to 4% Rule
               </button>
@@ -99,7 +99,7 @@ export const InputsPage = ({
 
         {/* Advanced Settings */}
         <div className="mt-6">
-          <button onClick={onToggleSettings} className="text-sm text-emerald-600 underline flex items-center gap-1">
+          <button onClick={onToggleSettings} className="text-sm text-mwm-green underline flex items-center gap-1">
             <Settings className="w-4 h-4" />
             {showSettings ? "Hide Advanced Settings" : "Advanced Settings"}
           </button>
@@ -137,8 +137,8 @@ export const InputsPage = ({
                     onClick={() => onInputChange({ target: { name: 'taxEnabled', type: 'checkbox', checked: !inputs.taxEnabled } })}
                     className={`px-3 py-1 text-xs rounded font-medium transition-all ${
                       inputs.taxEnabled
-                        ? 'bg-emerald-600 text-white'
-                        : 'bg-white text-slate-600 border border-slate-300 hover:border-emerald-400'
+                        ? 'bg-mwm-green text-white'
+                        : 'bg-white text-slate-600 border border-slate-300 hover:border-mwm-green/60'
                     }`}
                   >
                     {inputs.taxEnabled ? 'Enabled' : 'Disabled'}
@@ -212,8 +212,8 @@ export const InputsPage = ({
                       <label className="text-xs text-slate-400 uppercase font-semibold">Account Type Mix</label>
                       {inputs.accounts && inputs.accounts.length > 0 ? (
                         /* Accounts defined on Accumulation page — show read-only summary */
-                        <div className="mt-1 px-2 py-1.5 bg-emerald-50 rounded border border-emerald-200 text-xs font-medium">
-                          <span className="text-emerald-800">
+                        <div className="mt-1 px-2 py-1.5 bg-mwm-green/10 rounded border border-mwm-green/30 text-xs font-medium">
+                          <span className="text-mwm-emerald">
                             Traditional {inputs.traditionalPercent}% | Roth {inputs.rothPercent}% | NQ {inputs.nqPercent}%
                           </span>
                           <span className="text-slate-500 ml-2">(from {inputs.accounts.length} account{inputs.accounts.length > 1 ? 's' : ''} on Accumulation page)</span>
@@ -265,7 +265,7 @@ export const InputsPage = ({
                               />
                             </div>
                           </div>
-                          <div className={`text-xs mt-1 font-medium ${inputs.traditionalPercent + inputs.rothPercent + inputs.nqPercent === 100 ? 'text-emerald-600' : 'text-red-500'}`}>
+                          <div className={`text-xs mt-1 font-medium ${inputs.traditionalPercent + inputs.rothPercent + inputs.nqPercent === 100 ? 'text-mwm-green' : 'text-red-500'}`}>
                             Sum: {inputs.traditionalPercent + inputs.rothPercent + inputs.nqPercent}%{inputs.traditionalPercent + inputs.rothPercent + inputs.nqPercent !== 100 ? ' (must equal 100%)' : ''}
                           </div>
                         </div>
@@ -331,11 +331,11 @@ export const InputsPage = ({
                       <button
                         type="button"
                         onClick={() => setShowWithdrawalOverrides(true)}
-                        className="w-full mt-1 flex items-center justify-center gap-1.5 px-3 py-2 text-sm bg-amber-50 text-amber-700 rounded border border-amber-200 hover:bg-amber-100 transition-colors font-medium"
+                        className="w-full mt-1 flex items-center justify-center gap-1.5 px-3 py-2 text-sm bg-mwm-gold/10 text-mwm-gold rounded border border-mwm-gold/30 hover:bg-mwm-gold/20 transition-colors font-medium"
                       >
                         <TableIcon className="w-4 h-4" /> Withdrawal Strategy by Year
                         {Object.keys(inputs.withdrawalOverrides || {}).length > 0 && (
-                          <span className="bg-amber-200 text-amber-800 text-xs px-2 rounded-full ml-1">
+                          <span className="bg-mwm-gold/30 text-mwm-gold text-xs px-2 rounded-full ml-1">
                             {Object.keys(inputs.withdrawalOverrides).length}
                           </span>
                         )}
@@ -397,7 +397,7 @@ export const InputsPage = ({
         <div className="flex justify-end mb-4">
           <button
             onClick={() => onSetActiveTab('ss')}
-            className="text-sm bg-yellow-50 text-yellow-700 px-3 py-1.5 rounded border border-yellow-200 hover:bg-yellow-100 transition-colors font-medium"
+            className="text-sm bg-mwm-gold/10 text-mwm-gold px-3 py-1.5 rounded border border-mwm-gold/30 hover:bg-mwm-gold/20 transition-colors font-medium"
           >
             Get Recommendation
           </button>
@@ -436,7 +436,7 @@ export const InputsPage = ({
               name="ssCurrentlyReceiving"
               checked={inputs.ssCurrentlyReceiving || false}
               onChange={onInputChange}
-              className="w-4 h-4 rounded border-slate-300 text-emerald-600"
+              className="w-4 h-4 rounded border-slate-300 text-mwm-green"
             />
             Currently receiving benefits (amount above is today's monthly benefit)
           </label>
@@ -489,7 +489,7 @@ export const InputsPage = ({
                   name="partnerSSCurrentlyReceiving"
                   checked={inputs.partnerSSCurrentlyReceiving || false}
                   onChange={onInputChange}
-                  className="w-4 h-4 rounded border-slate-300 text-emerald-600"
+                  className="w-4 h-4 rounded border-slate-300 text-mwm-green"
                 />
                 Currently receiving benefits (amount above is today's monthly benefit)
               </label>
@@ -549,8 +549,8 @@ export const InputsPage = ({
                   onClick={() => onInputChange({ target: { name: 'pensionCOLA', type: 'checkbox', checked: !inputs.pensionCOLA } })}
                   className={`w-full px-3 py-2 rounded-md text-sm font-medium transition-all ${
                     inputs.pensionCOLA
-                      ? 'bg-emerald-600 text-white'
-                      : 'bg-white text-slate-600 border border-slate-300 hover:border-emerald-400'
+                      ? 'bg-mwm-green text-white'
+                      : 'bg-white text-slate-600 border border-slate-300 hover:border-mwm-green/60'
                   }`}
                 >
                   {inputs.pensionCOLA ? '✓ Yes' : 'No'}
@@ -605,8 +605,8 @@ export const InputsPage = ({
                     onClick={() => onInputChange({ target: { name: 'partnerPensionCOLA', type: 'checkbox', checked: !inputs.partnerPensionCOLA } })}
                     className={`w-full px-3 py-2 rounded-md text-sm font-medium transition-all ${
                       inputs.partnerPensionCOLA
-                        ? 'bg-emerald-600 text-white'
-                        : 'bg-white text-slate-600 border border-slate-300 hover:border-emerald-400'
+                        ? 'bg-mwm-green text-white'
+                        : 'bg-white text-slate-600 border border-slate-300 hover:border-mwm-green/60'
                     }`}
                   >
                     {inputs.partnerPensionCOLA ? '✓ Yes' : 'No'}
@@ -635,7 +635,7 @@ export const InputsPage = ({
           </h3>
           <button
             onClick={onAddAdditionalIncome}
-            className="flex items-center gap-1 px-3 py-1.5 text-sm bg-emerald-50 text-emerald-700 rounded border border-emerald-200 hover:bg-emerald-100"
+            className="flex items-center gap-1 px-3 py-1.5 text-sm bg-mwm-green/10 text-mwm-green/80 rounded border border-mwm-green/30 hover:bg-mwm-green/20"
           >
             <Plus className="w-4 h-4" /> Add
           </button>
@@ -779,7 +779,7 @@ export const InputsPage = ({
           </h3>
           <button
             onClick={onAddCashFlowAdjustment}
-            className="flex items-center gap-1 px-3 py-1.5 text-sm bg-amber-50 text-amber-700 rounded border border-amber-200 hover:bg-amber-100"
+            className="flex items-center gap-1 px-3 py-1.5 text-sm bg-mwm-gold/10 text-mwm-gold rounded border border-mwm-gold/30 hover:bg-mwm-gold/20"
           >
             <Plus className="w-4 h-4" /> Add
           </button>
@@ -793,7 +793,7 @@ export const InputsPage = ({
 
         <div className="space-y-3">
           {(inputs.cashFlowAdjustments || []).map((adj) => (
-            <div key={adj.id} className="p-4 bg-amber-50/50 rounded-lg border border-amber-200">
+            <div key={adj.id} className="p-4 bg-mwm-gold/5 rounded-lg border border-mwm-gold/30">
               <div className="flex justify-between items-center mb-3 gap-2">
                 <select
                   value={adj.name}
@@ -922,7 +922,7 @@ export const InputsPage = ({
         </h3>
         <button
           onClick={onApplyHistoricalAverages}
-          className="w-full text-sm flex items-center justify-center gap-1 bg-yellow-50 text-yellow-700 py-2 rounded border border-yellow-200 hover:bg-yellow-100 transition-colors mb-4 font-medium"
+          className="w-full text-sm flex items-center justify-center gap-1 bg-mwm-gold/10 text-mwm-gold py-2 rounded border border-mwm-gold/30 hover:bg-mwm-gold/20 transition-colors mb-4 font-medium"
         >
           <RefreshCcw className="w-4 h-4" /> Use Historical Averages
         </button>

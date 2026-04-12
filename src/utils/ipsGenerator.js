@@ -248,28 +248,28 @@ BUCKET ALLOCATION:
 --------------------------------------------------------------------------------
 Bucket    | Name             | Allocation | Amount          | Time Horizon
 --------------------------------------------------------------------------------
-B1        | Short-Term       | ${allocPcts.b1.padStart(6)}%   | ${formatCurrency(allocation.b1Val || 0).padStart(15)} | Years 1-3
-B2        | Mid-Term         | ${allocPcts.b2.padStart(6)}%   | ${formatCurrency(allocation.b2Val || 0).padStart(15)} | Years 4-6
-B3        | Balanced 60/40   | ${allocPcts.b3.padStart(6)}%   | ${formatCurrency(allocation.b3Val || 0).padStart(15)} | Years 7-15
+B1        | Liquidity        | ${allocPcts.b1.padStart(6)}%   | ${formatCurrency(allocation.b1Val || 0).padStart(15)} | Years 1-3
+B2        | Bridge           | ${allocPcts.b2.padStart(6)}%   | ${formatCurrency(allocation.b2Val || 0).padStart(15)} | Years 4-6
+B3        | Tactical Balanced| ${allocPcts.b3.padStart(6)}%   | ${formatCurrency(allocation.b3Val || 0).padStart(15)} | Years 7-15
 B4        | Income & Growth  | ${allocPcts.b4.padStart(6)}%   | ${formatCurrency(allocation.b4Val || 0).padStart(15)} | Years 16-20
-B5        | Long-Term Growth | ${allocPcts.b5.padStart(6)}%   | ${formatCurrency(allocation.b5Val || 0).padStart(15)} | Years 21+
+B5        | Long Term Growth | ${allocPcts.b5.padStart(6)}%   | ${formatCurrency(allocation.b5Val || 0).padStart(15)} | Years 21+
 --------------------------------------------------------------------------------
 Total                        | 100.0%   | ${formatCurrency(totalPortfolio).padStart(15)}
 --------------------------------------------------------------------------------
 
 BUCKET DESCRIPTIONS:
 
-B1 - Short-Term (${allocPcts.b1}%):
+B1 - Liquidity (${allocPcts.b1}%):
    Investment Types: Cash, Money Market, Short-Term Treasury Bills
    Expected Return: ${assumptions.b1.return}% | Volatility: ${assumptions.b1.stdDev}%
    Purpose: Immediate liquidity for years 1-3 distributions
 
-B2 - Mid-Term (${allocPcts.b2}%):
+B2 - Bridge (${allocPcts.b2}%):
    Investment Types: Short-Term Bonds, Investment Grade Corporate Bonds
    Expected Return: ${assumptions.b2.return}% | Volatility: ${assumptions.b2.stdDev}%
    Purpose: Near-term stability for years 4-6 distributions
 
-B3 - Balanced 60/40 (${allocPcts.b3}%):
+B3 - Tactical Balanced (${allocPcts.b3}%):
    Investment Types: Balanced Funds, 60% Equity / 40% Fixed Income
    Expected Return: ${assumptions.b3.return}% | Volatility: ${assumptions.b3.stdDev}%
    Purpose: Moderate growth with reduced volatility for mid-term needs
@@ -279,7 +279,7 @@ B4 - Income & Growth (${allocPcts.b4}%):
    Expected Return: ${assumptions.b4.return}% | Volatility: ${assumptions.b4.stdDev}%
    Purpose: Income generation with capital appreciation potential
 
-B5 - Long-Term Growth (${allocPcts.b5}%):
+B5 - Long Term Growth (${allocPcts.b5}%):
    Investment Types: Domestic Equity, International Equity, Small Cap
    Expected Return: ${assumptions.b5.return}% | Volatility: ${assumptions.b5.stdDev}%
    Purpose: Maximum long-term growth for late-stage distributions and legacy
@@ -342,7 +342,7 @@ SECTION 8: INVESTMENT GUIDELINES
 Permitted Investments:
 - Money Market Funds and Treasury Bills (B1)
 - Investment Grade Bonds and Bond Funds (B1, B2)
-- Balanced Mutual Funds and ETFs (B3)
+- Tactical Balanced Funds and ETFs (B3)
 - Dividend-focused Equity Funds (B4)
 - Diversified Equity Funds - Domestic and International (B4, B5)
 - Real Estate Investment Trusts (B4)
@@ -377,7 +377,7 @@ Review Elements:
 Benchmark Comparisons:
 - B1: 3-Month Treasury Bill Rate
 - B2: Bloomberg U.S. Aggregate Bond Index (1-3 Year)
-- B3: Balanced Index (60% S&P 500 / 40% Bloomberg Aggregate)
+- B3: Tactical Balanced Index (60% S&P 500 / 40% Bloomberg Aggregate)
 - B4: MSCI USA High Dividend Yield Index
 - B5: MSCI All Country World Index
 

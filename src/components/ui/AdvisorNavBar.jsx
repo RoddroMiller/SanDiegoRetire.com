@@ -28,14 +28,14 @@ export const AdvisorNavBar = ({ activeView, onNavigate, userRole, onLogout }) =>
                   onClick={() => onNavigate(key)}
                   className={`relative flex items-center gap-1.5 px-2.5 sm:px-4 py-2 sm:py-2.5 rounded-lg text-xs sm:text-sm font-medium transition-all ${
                     isActive
-                      ? 'text-emerald-700 bg-emerald-50'
+                      ? 'text-mwm-green/80 bg-mwm-green/10'
                       : 'text-slate-500 hover:text-slate-700 hover:bg-slate-50'
                   }`}
                 >
                   <Icon className="w-4 h-4" />
                   <span className="hidden sm:inline">{label}</span>
                   {isActive && (
-                    <span className="absolute bottom-0 left-2 right-2 h-0.5 bg-emerald-600 rounded-full" />
+                    <span className="absolute bottom-0 left-2 right-2 h-0.5 bg-mwm-green rounded-full" />
                   )}
                 </button>
               );
@@ -48,20 +48,20 @@ export const AdvisorNavBar = ({ activeView, onNavigate, userRole, onLogout }) =>
               onClick={() => onNavigate('management')}
               className={`relative flex items-center gap-1.5 px-2.5 sm:px-4 py-2 sm:py-2.5 rounded-lg text-xs sm:text-sm font-medium transition-all ${
                 activeView === 'management'
-                  ? 'text-emerald-700 bg-emerald-50'
+                  ? 'text-mwm-green/80 bg-mwm-green/10'
                   : 'text-slate-500 hover:text-slate-700 hover:bg-slate-50'
               }`}
             >
               <FolderOpen className="w-4 h-4" />
               <span className="hidden sm:inline">Plans</span>
               {activeView === 'management' && (
-                <span className="absolute bottom-0 left-2 right-2 h-0.5 bg-emerald-600 rounded-full" />
+                <span className="absolute bottom-0 left-2 right-2 h-0.5 bg-mwm-green rounded-full" />
               )}
             </button>
             <span className={`hidden sm:inline-flex items-center px-2.5 py-1 rounded-full text-xs font-bold uppercase tracking-wider ${
               userRole === 'master'
                 ? 'bg-purple-100 text-purple-700'
-                : 'bg-emerald-100 text-emerald-700'
+                : 'bg-mwm-green/20 text-mwm-green/80'
             }`}>
               {userRole === 'master' ? 'Master' : 'Advisor'}
             </span>

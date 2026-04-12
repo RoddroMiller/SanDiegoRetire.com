@@ -57,14 +57,14 @@ export const AccumulationPage = ({
           <div className="space-y-4 sm:space-y-6">
             {/* Personal Details */}
             <h3 className="text-lg font-bold text-slate-800 border-b pb-2 flex items-center gap-2">
-              <User className="w-5 h-5 text-emerald-600" /> Personal Details
+              <User className="w-5 h-5 text-mwm-green" /> Personal Details
             </h3>
             <div className="grid grid-cols-2 gap-4">
               <input
                 type="text"
                 name="name"
                 placeholder="Full Name"
-                className="p-3 border rounded-lg w-full focus:ring-emerald-500 focus:border-emerald-500"
+                className="p-3 border rounded-lg w-full focus:ring-mwm-green focus:border-mwm-green"
                 value={clientInfo.name}
                 onChange={onClientChange}
               />
@@ -72,7 +72,7 @@ export const AccumulationPage = ({
                 type="email"
                 name="email"
                 placeholder="Email"
-                className="p-3 border rounded-lg w-full focus:ring-emerald-500 focus:border-emerald-500"
+                className="p-3 border rounded-lg w-full focus:ring-mwm-green focus:border-mwm-green"
                 value={clientInfo.email}
                 onChange={onClientChange}
               />
@@ -80,7 +80,7 @@ export const AccumulationPage = ({
                 type="text"
                 name="phone"
                 placeholder="Phone"
-                className="p-3 border rounded-lg w-full focus:ring-emerald-500 focus:border-emerald-500"
+                className="p-3 border rounded-lg w-full focus:ring-mwm-green focus:border-mwm-green"
                 value={clientInfo.phone}
                 onChange={(e) => {
                   const formatted = formatPhoneNumber(e.target.value);
@@ -93,7 +93,7 @@ export const AccumulationPage = ({
                   name="isMarried"
                   checked={clientInfo.isMarried}
                   onChange={onClientChange}
-                  className="w-5 h-5 text-emerald-600"
+                  className="w-5 h-5 text-mwm-green"
                 />
                 <label className="text-sm text-slate-600">Married / Partner?</label>
               </div>
@@ -175,7 +175,7 @@ export const AccumulationPage = ({
 
             {/* Financial Inputs */}
             <h3 className="text-lg font-bold text-slate-800 border-b pb-2 pt-4 flex items-center gap-2">
-              <DollarSign className="w-5 h-5 text-emerald-600" /> Financial Inputs
+              <DollarSign className="w-5 h-5 text-mwm-green" /> Financial Inputs
             </h3>
             <div className="space-y-4">
               {/* Advanced toggle */}
@@ -189,7 +189,7 @@ export const AccumulationPage = ({
                     <button
                       type="button"
                       onClick={onAddAccount}
-                      className="flex items-center gap-1 text-xs text-emerald-600 hover:text-emerald-700 font-medium"
+                      className="flex items-center gap-1 text-xs text-mwm-green hover:text-mwm-green/80 font-medium"
                     >
                       <Plus className="w-3 h-3" /> Add Account
                     </button>
@@ -259,13 +259,13 @@ export const AccumulationPage = ({
                     </div>
                   ))}
                   {/* Summary */}
-                  <div className="px-2 py-1.5 bg-emerald-50 rounded border border-emerald-200 text-xs font-medium space-y-0.5">
-                    <div className="flex justify-between text-emerald-800">
+                  <div className="px-2 py-1.5 bg-mwm-green/10 rounded border border-mwm-green/30 text-xs font-medium space-y-0.5">
+                    <div className="flex justify-between text-mwm-emerald">
                       <span>Today: ${inputs.accounts.reduce((s, a) => s + (a.balance || 0), 0).toLocaleString()}</span>
                       <span>Annual Savings: ${inputs.accounts.reduce((s, a) => s + (a.annualContribution || 0), 0).toLocaleString()}</span>
                     </div>
                     {accumulationData.length > 0 && (
-                      <div className="flex justify-between text-emerald-600">
+                      <div className="flex justify-between text-mwm-green">
                         <span>Projected at retirement: ${accumulationData[accumulationData.length - 1].balance.toLocaleString()}</span>
                         <span>Trad {inputs.traditionalPercent}% | Roth {inputs.rothPercent}% | NQ {inputs.nqPercent}%</span>
                       </div>
@@ -292,7 +292,7 @@ export const AccumulationPage = ({
                   <button
                     type="button"
                     onClick={onAddAccount}
-                    className="w-full flex items-center justify-center gap-1.5 px-3 py-1.5 text-xs text-slate-500 rounded border border-dashed border-slate-300 hover:border-emerald-400 hover:text-emerald-600 transition-colors"
+                    className="w-full flex items-center justify-center gap-1.5 px-3 py-1.5 text-xs text-slate-500 rounded border border-dashed border-slate-300 hover:border-mwm-green/60 hover:text-mwm-green transition-colors"
                   >
                     <Settings className="w-3 h-3" /> Advanced — enter individual accounts
                   </button>
@@ -426,7 +426,7 @@ export const AccumulationPage = ({
 
             {/* Tax-Implied Spending Comparison */}
             {impliedSpending && impliedSpending.impliedMonthly > 0 && (
-              <div className={`p-4 rounded-xl border ${Math.abs(spendingDifference) > 500 ? 'bg-amber-50 border-amber-200' : 'bg-emerald-50 border-emerald-200'}`}>
+              <div className={`p-4 rounded-xl border ${Math.abs(spendingDifference) > 500 ? 'bg-mwm-gold/10 border-mwm-gold/30' : 'bg-mwm-green/10 border-mwm-green/30'}`}>
                 <h4 className="text-sm font-bold text-slate-700 mb-3">Tax-Implied Spending Analysis</h4>
                 <div className="grid grid-cols-2 gap-4 mb-3">
                   <div className="text-center">
@@ -439,9 +439,9 @@ export const AccumulationPage = ({
                   </div>
                 </div>
                 {Math.abs(spendingDifference) > 500 && (
-                  <div className="flex items-start gap-2 p-2 bg-amber-100 rounded-lg mb-3">
-                    <AlertTriangle className="w-4 h-4 text-amber-600 mt-0.5 flex-shrink-0" />
-                    <p className="text-xs text-amber-800">
+                  <div className="flex items-start gap-2 p-2 bg-mwm-gold/20 rounded-lg mb-3">
+                    <AlertTriangle className="w-4 h-4 text-mwm-gold mt-0.5 flex-shrink-0" />
+                    <p className="text-xs text-mwm-gold">
                       Difference of <strong>${Math.abs(spendingDifference).toLocaleString()}/mo</strong>.
                       {spendingDifference > 0
                         ? ' Client may be underreporting spending or has additional income not captured.'
@@ -526,14 +526,14 @@ export const AccumulationPage = ({
               </div>
               <div className="mt-4 text-center">
                 <p className="text-sm text-slate-500">Projected Portfolio at Retirement</p>
-                <p className="text-3xl font-bold text-emerald-700">
+                <p className="text-3xl font-bold text-mwm-green/80">
                   ${accumulationData[accumulationData.length - 1]?.balance.toLocaleString() || 0}
                 </p>
               </div>
             </div>
             <button
               onClick={onProceed}
-              className="mt-6 w-full bg-emerald-700 hover:bg-emerald-800 text-white text-lg font-bold py-4 rounded-xl shadow-lg flex items-center justify-center gap-2 transition-all"
+              className="mt-6 w-full bg-mwm-green/80 hover:bg-mwm-emerald text-white text-lg font-bold py-4 rounded-xl shadow-lg flex items-center justify-center gap-2 transition-all"
             >
               Proceed to Portfolio Architect <ArrowRight className="w-5 h-5" />
             </button>

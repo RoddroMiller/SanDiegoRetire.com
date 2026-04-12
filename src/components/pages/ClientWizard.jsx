@@ -325,7 +325,7 @@ export const ClientWizard = ({
   const renderPage1 = () => (
     <div className="space-y-6">
       <div className="text-center mb-8">
-        <p className="text-emerald-600 font-semibold text-lg mb-2">Visualize Your Retirement</p>
+        <p className="text-mwm-green font-semibold text-lg mb-2">Visualize Your Retirement</p>
         <h2 className="text-2xl font-bold text-slate-800">Let's Get Started</h2>
         <p className="text-slate-500 mt-2">See how your savings today can support your retirement lifestyle tomorrow</p>
       </div>
@@ -340,7 +340,7 @@ export const ClientWizard = ({
       {/* Personal Details */}
       <div className="space-y-4">
         <h3 className="text-lg font-bold text-slate-800 border-b pb-2 flex items-center gap-2">
-          <User className="w-5 h-5 text-emerald-600" /> Personal Details
+          <User className="w-5 h-5 text-mwm-green" /> Personal Details
         </h3>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <div>
@@ -351,7 +351,7 @@ export const ClientWizard = ({
               type="text"
               name="name"
               placeholder="Full Name"
-              className={`p-3 border rounded-lg w-full focus:ring-emerald-500 focus:border-emerald-500 ${validationError && !clientInfo.name?.trim() ? 'border-red-300 bg-red-50' : ''}`}
+              className={`p-3 border rounded-lg w-full focus:ring-mwm-green focus:border-mwm-green ${validationError && !clientInfo.name?.trim() ? 'border-red-300 bg-red-50' : ''}`}
               value={clientInfo.name}
               onChange={(e) => {
                 if (containsSSN(e.target.value)) {
@@ -370,7 +370,7 @@ export const ClientWizard = ({
               type="email"
               name="email"
               placeholder="Email"
-              className={`p-3 border rounded-lg w-full focus:ring-emerald-500 focus:border-emerald-500 ${validationError && !clientInfo.email?.trim() ? 'border-red-300 bg-red-50' : ''}`}
+              className={`p-3 border rounded-lg w-full focus:ring-mwm-green focus:border-mwm-green ${validationError && !clientInfo.email?.trim() ? 'border-red-300 bg-red-50' : ''}`}
               value={clientInfo.email}
               onChange={onClientChange}
             />
@@ -381,7 +381,7 @@ export const ClientWizard = ({
               name="isMarried"
               checked={clientInfo.isMarried}
               onChange={onClientChange}
-              className="w-5 h-5 text-emerald-600"
+              className="w-5 h-5 text-mwm-green"
             />
             <label className="text-sm text-slate-600">Married / Partner?</label>
           </div>
@@ -391,7 +391,7 @@ export const ClientWizard = ({
       {/* Age Inputs */}
       <div className="space-y-4">
         <h3 className="text-lg font-bold text-slate-800 border-b pb-2 flex items-center gap-2">
-          <Clock className="w-5 h-5 text-emerald-600" /> Retirement Timeline
+          <Clock className="w-5 h-5 text-mwm-green" /> Retirement Timeline
         </h3>
         {/* Your Info Row */}
         <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
@@ -418,8 +418,8 @@ export const ClientWizard = ({
               onClick={() => onClientChange({ target: { name: 'isRetired', type: 'checkbox', checked: !clientInfo.isRetired } })}
               className={`w-full p-3 rounded-lg font-bold transition-all ${
                 clientInfo.isRetired
-                  ? 'bg-emerald-600 text-white border-2 border-emerald-600'
-                  : 'bg-white text-slate-600 border-2 border-slate-300 hover:border-emerald-400'
+                  ? 'bg-mwm-green text-white border-2 border-mwm-green'
+                  : 'bg-white text-slate-600 border-2 border-slate-300 hover:border-mwm-green/60'
               }`}
             >
               {clientInfo.isRetired ? '✓ Retired/Not Employed' : 'Already Retired/Not Employed?'}
@@ -479,8 +479,8 @@ export const ClientWizard = ({
                 onClick={() => onClientChange({ target: { name: 'partnerIsRetired', type: 'checkbox', checked: !clientInfo.partnerIsRetired } })}
                 className={`w-full p-3 rounded-lg font-bold transition-all ${
                   clientInfo.partnerIsRetired
-                    ? 'bg-emerald-600 text-white border-2 border-emerald-600'
-                    : 'bg-white text-slate-600 border-2 border-slate-300 hover:border-emerald-400'
+                    ? 'bg-mwm-green text-white border-2 border-mwm-green'
+                    : 'bg-white text-slate-600 border-2 border-slate-300 hover:border-mwm-green/60'
                 }`}
               >
                 {clientInfo.partnerIsRetired ? '✓ Retired/Not Employed' : 'Already Retired/Not Employed?'}
@@ -510,7 +510,7 @@ export const ClientWizard = ({
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
         <div className="space-y-4">
           <h3 className="text-lg font-bold text-slate-800 border-b pb-2 flex items-center gap-2">
-            <DollarSign className="w-5 h-5 text-emerald-600" /> Today's Financial Inputs
+            <DollarSign className="w-5 h-5 text-mwm-green" /> Today's Financial Inputs
           </h3>
 
           <div className="relative group">
@@ -524,7 +524,7 @@ export const ClientWizard = ({
               name="currentPortfolio"
               value={clientInfo.currentPortfolio}
               onChange={onClientChange}
-              className="p-3 border rounded-lg w-full text-lg font-bold text-emerald-700"
+              className="p-3 border rounded-lg w-full text-lg font-bold text-mwm-green/80"
             />
           </div>
 
@@ -609,9 +609,9 @@ export const ClientWizard = ({
             />
           </div>
 
-          <div className="mt-6 p-4 bg-emerald-50 rounded-lg border border-emerald-200">
+          <div className="mt-6 p-4 bg-mwm-green/10 rounded-lg border border-mwm-green/30">
             <p className="text-sm text-slate-600">Projected Portfolio at Retirement</p>
-            <p className="text-3xl font-bold text-emerald-700">
+            <p className="text-3xl font-bold text-mwm-green/80">
               ${accumulationData[accumulationData.length - 1]?.balance.toLocaleString() || 0}
             </p>
           </div>
@@ -659,19 +659,19 @@ export const ClientWizard = ({
         <p className="text-xs font-bold text-slate-500 uppercase mb-2">Projection Assumptions</p>
         <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-xs text-slate-600">
           <div className="flex items-start gap-2">
-            <span className="text-emerald-500 mt-0.5">•</span>
+            <span className="text-mwm-green mt-0.5">•</span>
             <span>Annual savings increase with inflation each year</span>
           </div>
           <div className="flex items-start gap-2">
-            <span className="text-emerald-500 mt-0.5">•</span>
+            <span className="text-mwm-green mt-0.5">•</span>
             <span>Contributions made at start of year, then growth applied</span>
           </div>
           <div className="flex items-start gap-2">
-            <span className="text-emerald-500 mt-0.5">•</span>
+            <span className="text-mwm-green mt-0.5">•</span>
             <span>No withdrawals from portfolio before retirement</span>
           </div>
           <div className="flex items-start gap-2">
-            <span className="text-emerald-500 mt-0.5">•</span>
+            <span className="text-mwm-green mt-0.5">•</span>
             <span>Continuous savings until retirement date</span>
           </div>
         </div>
@@ -692,7 +692,7 @@ export const ClientWizard = ({
       {/* Social Security */}
       <Card className="p-6">
         <h3 className="text-lg font-bold text-slate-800 border-b pb-2 mb-4 flex items-center gap-2">
-          <Shield className="w-5 h-5 text-emerald-600" /> Social Security
+          <Shield className="w-5 h-5 text-mwm-green" /> Social Security
         </h3>
 
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
@@ -895,15 +895,15 @@ export const ClientWizard = ({
 
       {/* Social Security Claiming Age Analysis - Collapsible factual narrative */}
       {clientInfo.currentAge < 67 && (
-        <div className="p-4 bg-yellow-50 rounded-lg border border-yellow-200">
+        <div className="p-4 bg-mwm-gold/10 rounded-lg border border-mwm-gold/30">
           <button
             onClick={() => setShowSSAbout(!showSSAbout)}
             className="w-full flex items-center justify-between text-left"
           >
-            <p className="text-xs font-bold text-yellow-800 uppercase flex items-center gap-1">
+            <p className="text-xs font-bold text-mwm-gold uppercase flex items-center gap-1">
               About Social Security Claiming Age
             </p>
-            {showSSAbout ? <ChevronDown className="w-4 h-4 text-yellow-600" /> : <ChevronRight className="w-4 h-4 text-yellow-600" />}
+            {showSSAbout ? <ChevronDown className="w-4 h-4 text-mwm-gold" /> : <ChevronRight className="w-4 h-4 text-mwm-gold" />}
           </button>
 
           {showSSAbout && <div className="text-sm text-slate-700 space-y-3 mt-3">
@@ -922,7 +922,7 @@ export const ClientWizard = ({
             </p>
 
             {inputs.ssPIA > 0 && (
-              <div className="p-3 bg-white rounded-lg border border-yellow-200">
+              <div className="p-3 bg-white rounded-lg border border-mwm-gold/30">
                 <p className="font-bold text-slate-800 mb-2">Your Benefit at Different Claiming Ages</p>
                 <div className="grid grid-cols-3 gap-2 text-center text-xs">
                   <div className="p-2 bg-slate-50 rounded">
@@ -945,7 +945,7 @@ export const ClientWizard = ({
             )}
 
             {ssAnalysis?.outcomes && (
-              <div className="p-3 bg-white rounded-lg border border-yellow-200">
+              <div className="p-3 bg-white rounded-lg border border-mwm-gold/30">
                 <p className="font-bold text-slate-800 mb-1">Portfolio Impact by Claiming Age</p>
                 <p className="text-xs text-slate-600 mb-2">
                   This analysis simulates your full retirement plan under each claiming age, accounting for your spending,
@@ -954,10 +954,10 @@ export const ClientWizard = ({
                 </p>
                 <div className={`grid grid-cols-${ssAnalysis.outcomes.length} gap-2 text-center text-xs`}>
                   {ssAnalysis.outcomes.map(outcome => (
-                    <div key={outcome.age} className={`p-2 rounded ${inputs.ssStartAge === outcome.age ? 'bg-emerald-50 border border-emerald-300' : 'bg-slate-50'}`}>
+                    <div key={outcome.age} className={`p-2 rounded ${inputs.ssStartAge === outcome.age ? 'bg-mwm-green/10 border border-mwm-green/40' : 'bg-slate-50'}`}>
                       <p className="text-slate-500">Claim at {outcome.age}</p>
                       <p className="font-bold text-slate-800">${(outcome.balance / 1000000).toFixed(2)}M</p>
-                      {inputs.ssStartAge === outcome.age && <p className="text-emerald-600 text-[10px] font-bold">CURRENT SELECTION</p>}
+                      {inputs.ssStartAge === outcome.age && <p className="text-mwm-green text-[10px] font-bold">CURRENT SELECTION</p>}
                     </div>
                   ))}
                 </div>
@@ -970,7 +970,7 @@ export const ClientWizard = ({
             </p>
 
             {clientInfo.isMarried && clientInfo.partnerAge < 67 && ssPartnerAnalysis && (
-              <div className="mt-2 pt-3 border-t border-yellow-200">
+              <div className="mt-2 pt-3 border-t border-mwm-gold/30">
                 <p className="font-bold text-slate-800 text-xs mb-1">Partner's Claiming Age Analysis</p>
                 <p className="text-xs text-slate-600">
                   Based on the same portfolio simulation, your partner's projected portfolio balance at age {targetMaxPortfolioAge || 80} by claiming age:{' '}
@@ -994,7 +994,7 @@ export const ClientWizard = ({
             className="w-full text-left flex items-center justify-between"
           >
             <h3 className="text-lg font-bold text-slate-800 flex items-center gap-2">
-              <DollarSign className="w-5 h-5 text-emerald-600" /> Additional Income, Expenses & Life Events
+              <DollarSign className="w-5 h-5 text-mwm-green" /> Additional Income, Expenses & Life Events
             </h3>
             {showPensionIncome ? <ChevronDown className="w-5 h-5 text-slate-400" /> : <ChevronRight className="w-5 h-5 text-slate-400" />}
           </button>
@@ -1046,8 +1046,8 @@ export const ClientWizard = ({
                   onClick={() => onInputChange({ target: { name: 'pensionCOLA', type: 'checkbox', checked: !inputs.pensionCOLA } })}
                   className={`w-full p-3 rounded-lg font-bold transition-all ${
                     inputs.pensionCOLA
-                      ? 'bg-emerald-600 text-white border-2 border-emerald-600'
-                      : 'bg-white text-slate-600 border-2 border-slate-300 hover:border-emerald-400'
+                      ? 'bg-mwm-green text-white border-2 border-mwm-green'
+                      : 'bg-white text-slate-600 border-2 border-slate-300 hover:border-mwm-green/60'
                   }`}
                 >
                   {inputs.pensionCOLA ? '✓ Yes' : 'No'}
@@ -1103,8 +1103,8 @@ export const ClientWizard = ({
                       onClick={() => onInputChange({ target: { name: 'partnerPensionCOLA', type: 'checkbox', checked: !inputs.partnerPensionCOLA } })}
                       className={`w-full p-3 rounded-lg font-bold transition-all ${
                         inputs.partnerPensionCOLA
-                          ? 'bg-emerald-600 text-white border-2 border-emerald-600'
-                          : 'bg-white text-slate-600 border-2 border-slate-300 hover:border-emerald-400'
+                          ? 'bg-mwm-green text-white border-2 border-mwm-green'
+                          : 'bg-white text-slate-600 border-2 border-slate-300 hover:border-mwm-green/60'
                       }`}
                     >
                       {inputs.partnerPensionCOLA ? '✓ Yes' : 'No'}
@@ -1120,7 +1120,7 @@ export const ClientWizard = ({
                 <h4 className="text-sm font-bold text-slate-700">Additional Retirement Income & One-Time Events</h4>
                 <button
                   onClick={onAddAdditionalIncome}
-                  className="flex items-center gap-1 px-3 py-1.5 text-xs bg-emerald-50 text-emerald-700 rounded-lg border border-emerald-200 hover:bg-emerald-100 transition-colors"
+                  className="flex items-center gap-1 px-3 py-1.5 text-xs bg-mwm-green/10 text-mwm-green/80 rounded-lg border border-mwm-green/30 hover:bg-mwm-green/20 transition-colors"
                 >
                   <Plus className="w-3 h-3" /> Add Income
                 </button>
@@ -1267,7 +1267,7 @@ export const ClientWizard = ({
                 </div>
                 <button
                   onClick={onAddCashFlowAdjustment}
-                  className="flex items-center gap-1 px-3 py-1.5 text-xs bg-amber-50 text-amber-700 rounded-lg border border-amber-200 hover:bg-amber-100 transition-colors"
+                  className="flex items-center gap-1 px-3 py-1.5 text-xs bg-mwm-gold/10 text-mwm-gold rounded-lg border border-mwm-gold/30 hover:bg-mwm-gold/20 transition-colors"
                 >
                   <Plus className="w-3 h-3" /> Add Adjustment
                 </button>
@@ -1280,7 +1280,7 @@ export const ClientWizard = ({
               )}
 
               {(inputs.cashFlowAdjustments || []).map((adj) => (
-                <div key={adj.id} className="p-3 bg-amber-50/50 rounded-lg border border-amber-200 mb-3">
+                <div key={adj.id} className="p-3 bg-mwm-gold/5 rounded-lg border border-mwm-gold/30 mb-3">
                   <div className="flex justify-between items-start mb-3 gap-2">
                     <select
                       value={adj.name}
@@ -1415,7 +1415,7 @@ export const ClientWizard = ({
       <div className="text-center my-8">
         <h2 className="text-2xl font-bold text-slate-800">Your Retirement Outlook</h2>
         <p className="text-slate-500 mt-2">A personalized projection based on your unique financial situation</p>
-        <p className="text-sm font-bold text-emerald-700 mt-2">This analysis uses Miller Wealth's proprietary methodology to model your retirement trajectory</p>
+        <p className="text-sm font-bold text-mwm-green/80 mt-2">This analysis uses Miller Wealth's proprietary methodology to model your retirement trajectory</p>
       </div>
 
       {/* Stats Row */}
@@ -1429,7 +1429,7 @@ export const ClientWizard = ({
             ? <><span className="line-through opacity-60">${(inputs.totalPortfolio / 1000000).toFixed(2)}M</span> → +${((adjustedProjections.portfolio - inputs.totalPortfolio) / 1000).toFixed(0)}k</>
             : "At Retirement"}
           icon={Briefcase}
-          colorClass={`bg-gray-800 text-white ${adjustedProjections.hasChanges && (selectedImprovements.delay || selectedImprovements.savings) ? 'ring-2 ring-emerald-400' : ''}`}
+          colorClass={`bg-gray-800 text-white ${adjustedProjections.hasChanges && (selectedImprovements.delay || selectedImprovements.savings) ? 'ring-2 ring-mwm-green/60' : ''}`}
         />
         <StatBox
           label="Total Monthly Spend"
@@ -1446,7 +1446,7 @@ export const ClientWizard = ({
             return `$${Math.round(portfolioWithdrawal).toLocaleString()}/mo from portfolio (before taxes)`;
           })()}
           icon={DollarSign}
-          colorClass={`bg-yellow-500 text-white ${adjustedProjections.hasChanges && selectedImprovements.spending ? 'ring-2 ring-emerald-400' : ''}`}
+          colorClass={`bg-mwm-gold text-white ${adjustedProjections.hasChanges && selectedImprovements.spending ? 'ring-2 ring-mwm-green/60' : ''}`}
         />
         <StatBox
           label="Success Probability"
@@ -1457,7 +1457,7 @@ export const ClientWizard = ({
             ? <><span className="line-through opacity-60">{(monteCarloData?.successRate || 0).toFixed(1)}%</span> → +{(adjustedProjections.successRate - (monteCarloData?.successRate || 0)).toFixed(1)}%</>
             : `At age ${Math.min(clientInfo.retirementAge + 30, 95)}`}
           icon={Activity}
-          colorClass={`${(adjustedProjections.hasChanges ? adjustedProjections.successRate : monteCarloData?.successRate) > 80 ? "bg-emerald-600" : "bg-orange-500"} text-white ${adjustedProjections.hasChanges ? 'ring-2 ring-yellow-300' : ''}`}
+          colorClass={`${(adjustedProjections.hasChanges ? adjustedProjections.successRate : monteCarloData?.successRate) > 80 ? "bg-mwm-green" : "bg-orange-500"} text-white ${adjustedProjections.hasChanges ? 'ring-2 ring-mwm-gold/40' : ''}`}
         />
         <StatBox
           label="Legacy Balance"
@@ -1474,7 +1474,7 @@ export const ClientWizard = ({
               })()
             : `Median outcome at age ${cappedProjectionData[cappedProjectionData.length - 1]?.age || Math.min(clientInfo.retirementAge + 30, 95)}`}
           icon={Shield}
-          colorClass={`bg-emerald-800 text-white ${adjustedProjections.hasChanges ? 'ring-2 ring-yellow-300' : ''}`}
+          colorClass={`bg-mwm-emerald text-white ${adjustedProjections.hasChanges ? 'ring-2 ring-mwm-gold/40' : ''}`}
         />
       </div>
 
@@ -1572,7 +1572,7 @@ export const ClientWizard = ({
                 <div className="flex items-center bg-slate-100 p-1 rounded-lg">
                   <button
                     onClick={() => setMcScenario('optimistic')}
-                    className={`px-3 py-1.5 text-xs font-bold rounded transition-all ${mcScenario === 'optimistic' ? 'bg-emerald-500 text-white shadow' : 'text-slate-500 hover:text-slate-700'}`}
+                    className={`px-3 py-1.5 text-xs font-bold rounded transition-all ${mcScenario === 'optimistic' ? 'bg-mwm-green text-white shadow' : 'text-slate-500 hover:text-slate-700'}`}
                   >
                     Optimistic
                   </button>
@@ -1607,7 +1607,7 @@ export const ClientWizard = ({
                       <tr className="bg-slate-100 text-slate-600 font-bold border-b border-slate-200">
                         <th className="p-2 text-left">Age</th>
                         <th className="p-2">Start Balance</th>
-                        <th className="p-2 text-emerald-600">Growth</th>
+                        <th className="p-2 text-mwm-green">Growth</th>
                         <th className="p-2 text-purple-600">Contribution</th>
                         <th className="p-2 text-blue-600">Income</th>
                         <th className="p-2 text-orange-600">Withdrawal</th>
@@ -1620,7 +1620,7 @@ export const ClientWizard = ({
                         <tr key={row.year} className="border-b border-slate-50 hover:bg-slate-50">
                           <td className="p-2 text-left font-bold text-slate-700">{row.age}</td>
                           <td className="p-2 text-slate-500">${(row.startBalance || 0).toLocaleString()}</td>
-                          <td className={`p-2 ${(row.growth || 0) >= 0 ? 'text-emerald-600' : 'text-red-600'}`}>{(row.growth || 0) >= 0 ? `+$${row.growth.toLocaleString()}` : `($${Math.abs(row.growth).toLocaleString()})`}</td>
+                          <td className={`p-2 ${(row.growth || 0) >= 0 ? 'text-mwm-green' : 'text-red-600'}`}>{(row.growth || 0) >= 0 ? `+$${row.growth.toLocaleString()}` : `($${Math.abs(row.growth).toLocaleString()})`}</td>
                           <td className="p-2 text-purple-600">{(row.contribution || 0) > 0 ? `+$${row.contribution.toLocaleString()}` : '-'}</td>
                           <td className="p-2 text-blue-600">+${(row.ssIncome || 0).toLocaleString()}</td>
                           <td className="p-2 text-orange-600">-${(row.distribution || 0).toLocaleString()}</td>
@@ -1670,16 +1670,16 @@ export const ClientWizard = ({
           )}
 
           {!clientInfo.isRetired && (
-            <div className="p-4 bg-emerald-50 rounded-lg border border-emerald-200 text-center">
-              <PiggyBank className="w-5 h-5 text-emerald-600 mx-auto mb-2" />
-              <h4 className="font-bold text-emerald-800 text-sm">Annual Savings</h4>
+            <div className="p-4 bg-mwm-green/10 rounded-lg border border-mwm-green/30 text-center">
+              <PiggyBank className="w-5 h-5 text-mwm-green mx-auto mb-2" />
+              <h4 className="font-bold text-mwm-emerald text-sm">Annual Savings</h4>
               <div className="mt-3 flex items-center justify-center gap-2">
-                <label className="text-xs font-bold text-emerald-700 uppercase">Per Year</label>
+                <label className="text-xs font-bold text-mwm-green/80 uppercase">Per Year</label>
                 <FormattedNumberInput
                   name="annualSavings"
                   value={clientInfo.annualSavings}
                   onChange={onClientChange}
-                  className="p-2 border border-emerald-300 rounded-lg w-28 text-center font-bold text-emerald-800 bg-white"
+                  className="p-2 border border-mwm-green/40 rounded-lg w-28 text-center font-bold text-mwm-emerald bg-white"
                 />
               </div>
             </div>
@@ -1751,7 +1751,7 @@ export const ClientWizard = ({
                   { num: '7', title: 'Family Stewardship', desc: 'Preparing heirs, establishing shared values, and creating a framework for multi-generational success' },
                 ].map(pillar => (
                   <div key={pillar.num} className="flex items-start gap-3 p-3 bg-slate-50 rounded-lg border border-slate-200">
-                    <div className="w-7 h-7 rounded-full bg-emerald-600 text-white flex items-center justify-center font-bold text-xs flex-shrink-0">
+                    <div className="w-7 h-7 rounded-full bg-mwm-green text-white flex items-center justify-center font-bold text-xs flex-shrink-0">
                       {pillar.num}
                     </div>
                     <div>
@@ -1762,7 +1762,7 @@ export const ClientWizard = ({
                 ))}
               </div>
 
-              <div className="p-4 bg-emerald-50 rounded-lg border border-emerald-200">
+              <div className="p-4 bg-mwm-green/10 rounded-lg border border-mwm-green/30">
                 <p className="text-sm text-slate-700">
                   <strong>The One Process</strong> weaves all seven pillars into a single, coordinated strategy — reviewed and
                   adjusted as your life evolves. It's the difference between a projection on a screen and a plan you can
@@ -1784,7 +1784,7 @@ export const ClientWizard = ({
                   onClientSubmit();
                 }}
                 disabled={saveStatus === 'saving'}
-                className="inline-flex items-center gap-2 px-8 py-4 bg-emerald-600 hover:bg-emerald-700 text-white text-lg font-bold rounded-xl transition-all shadow-lg hover:shadow-xl"
+                className="inline-flex items-center gap-2 px-8 py-4 bg-mwm-green hover:bg-mwm-green/80 text-white text-lg font-bold rounded-xl transition-all shadow-lg hover:shadow-xl"
               >
                 <Send className="w-5 h-5" />
                 {saveStatus === 'saving' ? 'Saving...' : 'Schedule an Intro Call'}
@@ -1796,39 +1796,39 @@ export const ClientWizard = ({
       )}
 
       {/* Risk Factors Warning */}
-      <Card className="p-6 border-t-4 border-amber-400 bg-amber-50">
+      <Card className="p-6 border-t-4 border-mwm-gold/60 bg-mwm-gold/10">
         <h3 className="font-bold text-lg text-slate-800 mb-3 flex items-center gap-2">
-          <AlertCircle className="w-5 h-5 text-amber-600" /> Important Considerations
+          <AlertCircle className="w-5 h-5 text-mwm-gold" /> Important Considerations
         </h3>
         <p className="text-sm text-slate-600 mb-3">
           While this projection provides valuable insights, life rarely follows a straight line. Several factors could impact your retirement:
         </p>
         <div className="grid grid-cols-2 md:grid-cols-3 gap-2 text-xs text-slate-700">
-          <div className="flex items-center gap-2 p-2 bg-white rounded border border-amber-300 col-span-2 md:col-span-3">
-            <span className="text-amber-600 font-bold">•</span>
-            <span className="font-semibold text-amber-800">Taxes are estimated using a conservative assumption (100% pre-tax accounts, 5% state rate) — proactive tax planning could meaningfully improve your outcome</span>
+          <div className="flex items-center gap-2 p-2 bg-white rounded border border-mwm-gold/40 col-span-2 md:col-span-3">
+            <span className="text-mwm-gold font-bold">•</span>
+            <span className="font-semibold text-mwm-gold">Taxes are estimated using a conservative assumption (100% pre-tax accounts, 5% state rate) — proactive tax planning could meaningfully improve your outcome</span>
           </div>
-          <div className="flex items-center gap-2 p-2 bg-white rounded border border-amber-300 col-span-2 md:col-span-3">
-            <span className="text-amber-600 font-bold">•</span>
-            <span className="font-semibold text-amber-800">Asset Location, Distribution Strategy & Tax Management strategies can improve outcomes beyond the illustration</span>
+          <div className="flex items-center gap-2 p-2 bg-white rounded border border-mwm-gold/40 col-span-2 md:col-span-3">
+            <span className="text-mwm-gold font-bold">•</span>
+            <span className="font-semibold text-mwm-gold">Asset Location, Distribution Strategy & Tax Management strategies can improve outcomes beyond the illustration</span>
           </div>
-          <div className="flex items-center gap-2 p-2 bg-white rounded border border-amber-200">
-            <span className="text-amber-500">•</span> Unexpected healthcare needs
+          <div className="flex items-center gap-2 p-2 bg-white rounded border border-mwm-gold/30">
+            <span className="text-mwm-gold/80">•</span> Unexpected healthcare needs
           </div>
-          <div className="flex items-center gap-2 p-2 bg-white rounded border border-amber-200">
-            <span className="text-amber-500">•</span> Market volatility
+          <div className="flex items-center gap-2 p-2 bg-white rounded border border-mwm-gold/30">
+            <span className="text-mwm-gold/80">•</span> Market volatility
           </div>
-          <div className="flex items-center gap-2 p-2 bg-white rounded border border-amber-200">
-            <span className="text-amber-500">•</span> Leaving workforce early
+          <div className="flex items-center gap-2 p-2 bg-white rounded border border-mwm-gold/30">
+            <span className="text-mwm-gold/80">•</span> Leaving workforce early
           </div>
-          <div className="flex items-center gap-2 p-2 bg-white rounded border border-amber-200">
-            <span className="text-amber-500">•</span> Family elder-care obligations
+          <div className="flex items-center gap-2 p-2 bg-white rounded border border-mwm-gold/30">
+            <span className="text-mwm-gold/80">•</span> Family elder-care obligations
           </div>
-          <div className="flex items-center gap-2 p-2 bg-white rounded border border-amber-200">
-            <span className="text-amber-500">•</span> Supporting children financially
+          <div className="flex items-center gap-2 p-2 bg-white rounded border border-mwm-gold/30">
+            <span className="text-mwm-gold/80">•</span> Supporting children financially
           </div>
-          <div className="flex items-center gap-2 p-2 bg-white rounded border border-amber-200">
-            <span className="text-amber-500">•</span> Inflation exceeding projections
+          <div className="flex items-center gap-2 p-2 bg-white rounded border border-mwm-gold/30">
+            <span className="text-mwm-gold/80">•</span> Inflation exceeding projections
           </div>
         </div>
         <p className="text-xs text-slate-500 mt-3 italic">
@@ -1849,7 +1849,7 @@ export const ClientWizard = ({
         <button
           onClick={onClientSubmit}
           disabled={saveStatus === 'saving'}
-          className="inline-flex items-center gap-2 px-8 py-4 bg-emerald-600 hover:bg-emerald-700 text-white text-lg font-bold rounded-xl transition-all shadow-lg hover:shadow-xl"
+          className="inline-flex items-center gap-2 px-8 py-4 bg-mwm-green hover:bg-mwm-green/80 text-white text-lg font-bold rounded-xl transition-all shadow-lg hover:shadow-xl"
         >
           <Send className="w-5 h-5" />
           {saveStatus === 'saving' ? 'Saving...' : 'Talk to a Miller Wealth Management Advisor About My Plan'}
@@ -1875,9 +1875,9 @@ export const ClientWizard = ({
           }}
           className={`w-8 h-8 sm:w-10 sm:h-10 rounded-full flex items-center justify-center font-bold text-xs sm:text-sm transition-all ${
             wizardStep === num
-              ? 'bg-emerald-600 text-white scale-110'
+              ? 'bg-mwm-green text-white scale-110'
               : wizardStep > num
-              ? 'bg-emerald-200 text-emerald-800 cursor-pointer hover:bg-emerald-300'
+              ? 'bg-mwm-green/30 text-mwm-emerald cursor-pointer hover:bg-mwm-green/40'
               : 'bg-slate-200 text-slate-500'
           } ${num <= wizardStep ? 'cursor-pointer' : ''}`}
         >
@@ -1896,7 +1896,7 @@ export const ClientWizard = ({
             <img src={LOGO_URL} alt="Logo" className="h-16 sm:h-20 md:h-[96px] w-auto bg-white p-1 sm:p-2 rounded-lg flex-shrink-0" />
             <div>
               <h1 className="text-lg sm:text-xl md:text-2xl font-bold">Retirement Planning</h1>
-              <p className="text-yellow-500 text-xs sm:text-sm mt-1">Step {wizardStep} of 2</p>
+              <p className="text-mwm-gold text-xs sm:text-sm mt-1">Step {wizardStep} of 2</p>
             </div>
           </div>
           {isRegisteredClient && onLogout && (
@@ -1935,7 +1935,7 @@ export const ClientWizard = ({
                 href="https://www.millerwm.com"
                 target="_blank"
                 rel="noopener noreferrer"
-                className="flex items-center gap-1 sm:gap-2 px-3 sm:px-4 py-2 text-emerald-700 hover:text-emerald-800 hover:bg-emerald-50 rounded-lg transition-all text-sm sm:text-base"
+                className="flex items-center gap-1 sm:gap-2 px-3 sm:px-4 py-2 text-mwm-green/80 hover:text-mwm-emerald hover:bg-mwm-green/10 rounded-lg transition-all text-sm sm:text-base"
               >
                 <ExternalLink className="w-4 h-4" /> Visit Miller Wealth Management Website
               </a>
@@ -1944,7 +1944,7 @@ export const ClientWizard = ({
             {wizardStep < 2 && (
               <button
                 onClick={handleNext}
-                className="flex items-center gap-1 sm:gap-2 px-4 sm:px-8 py-2 sm:py-3 bg-emerald-700 hover:bg-emerald-800 text-white font-bold rounded-lg transition-all text-sm sm:text-base"
+                className="flex items-center gap-1 sm:gap-2 px-4 sm:px-8 py-2 sm:py-3 bg-mwm-green/80 hover:bg-mwm-emerald text-white font-bold rounded-lg transition-all text-sm sm:text-base"
               >
                 Next <ArrowRight className="w-4 h-4 sm:w-5 sm:h-5" />
               </button>

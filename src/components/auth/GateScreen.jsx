@@ -27,11 +27,11 @@ const WORKER_SS_PIA = 3384;
 const SPOUSE_SS_PIA = 1692;
 
 const SAMPLE_ASSUMPTIONS = {
-  b1: { return: 2.0, stdDev: 2.0, name: "B1 - Short Term", historical: 2.8 },
-  b2: { return: 4.0, stdDev: 5.0, name: "B2 - Mid Term", historical: 5.2 },
-  b3: { return: 5.5, stdDev: 8.0, name: "B3 - Balanced 60/40", historical: 7.5 },
+  b1: { return: 2.0, stdDev: 2.0, name: "B1 - Liquidity", historical: 2.8 },
+  b2: { return: 4.0, stdDev: 5.0, name: "B2 - Bridge", historical: 5.2 },
+  b3: { return: 5.5, stdDev: 8.0, name: "B3 - Tactical Balanced", historical: 7.5 },
   b4: { return: 6.0, stdDev: 12.0, name: "B4 - Inc & Growth", historical: 9.1 },
-  b5: { return: 8.0, stdDev: 18.0, name: "B5 - Long Term", historical: 10.2 },
+  b5: { return: 8.0, stdDev: 18.0, name: "B5 - Long Term Growth", historical: 10.2 },
 };
 
 const SAMPLE_INPUTS_BASE = {
@@ -133,8 +133,8 @@ export const GateScreen = ({ onAdvisorClick, onClientLoginClick, onProspectEntry
           {/* Page 1 Preview — Accumulation */}
           <div className="border border-slate-200 rounded-xl p-4 sm:p-5 text-left">
             <div className="flex items-center gap-2 mb-1">
-              <TrendingUp className="w-4 h-4 text-emerald-600" />
-              <p className="text-xs font-semibold text-emerald-600 uppercase tracking-wide">Step 1</p>
+              <TrendingUp className="w-4 h-4 text-mwm-green" />
+              <p className="text-xs font-semibold text-mwm-green uppercase tracking-wide">Step 1</p>
             </div>
             <h3 className="text-base sm:text-lg font-bold text-slate-800 mb-3">Enter Your Details</h3>
             <div className="h-36 sm:h-40 -mx-2">
@@ -167,8 +167,8 @@ export const GateScreen = ({ onAdvisorClick, onClientLoginClick, onProspectEntry
           {/* Page 2 Preview — Projections */}
           <div className="border border-slate-200 rounded-xl p-4 sm:p-5 text-left">
             <div className="flex items-center gap-2 mb-1">
-              <BarChart3 className="w-4 h-4 text-emerald-600" />
-              <p className="text-xs font-semibold text-emerald-600 uppercase tracking-wide">Step 2</p>
+              <BarChart3 className="w-4 h-4 text-mwm-green" />
+              <p className="text-xs font-semibold text-mwm-green uppercase tracking-wide">Step 2</p>
             </div>
             <h3 className="text-base sm:text-lg font-bold text-slate-800 mb-3">See Your Projections</h3>
             <div className="h-36 sm:h-40 -mx-2">
@@ -188,8 +188,8 @@ export const GateScreen = ({ onAdvisorClick, onClientLoginClick, onProspectEntry
               </ResponsiveContainer>
             </div>
             <div className="flex items-center justify-center gap-2 mt-3">
-              <CheckCircle className="w-4 h-4 text-emerald-500" />
-              <span className="text-sm font-bold text-emerald-700">{sample.successRate}% Success Rate</span>
+              <CheckCircle className="w-4 h-4 text-mwm-green" />
+              <span className="text-sm font-bold text-mwm-green/80">{sample.successRate}% Success Rate</span>
             </div>
           </div>
         </div>
@@ -199,8 +199,8 @@ export const GateScreen = ({ onAdvisorClick, onClientLoginClick, onProspectEntry
           {[
             { label: 'Retirement Portfolio', value: formatDollarM(sample.retirementBalance), icon: DollarSign, color: 'text-slate-700', bg: 'bg-slate-50' },
             { label: 'Monthly Spending', value: `$${sample.futureSpending.toLocaleString()}`, icon: Wallet, color: 'text-blue-700', bg: 'bg-blue-50' },
-            { label: 'Success Probability', value: `${sample.successRate}%`, icon: ShieldCheck, color: 'text-emerald-700', bg: 'bg-emerald-50' },
-            { label: 'Legacy at Age 95', value: formatDollarM(sample.legacy), icon: Landmark, color: 'text-amber-700', bg: 'bg-amber-50' },
+            { label: 'Success Probability', value: `${sample.successRate}%`, icon: ShieldCheck, color: 'text-mwm-green/80', bg: 'bg-mwm-green/10' },
+            { label: 'Legacy at Age 95', value: formatDollarM(sample.legacy), icon: Landmark, color: 'text-mwm-gold', bg: 'bg-mwm-gold/10' },
           ].map(({ label, value, icon: Icon, color, bg }) => (
             <div key={label} className={`${bg} rounded-xl p-3 sm:p-4 text-center`}>
               <Icon className={`w-5 h-5 ${color} mx-auto mb-1.5`} />
@@ -249,7 +249,7 @@ export const GateScreen = ({ onAdvisorClick, onClientLoginClick, onProspectEntry
         <div className="max-w-sm mx-auto">
           <button
             onClick={onAdvisorClick}
-            className="w-full flex items-center justify-center gap-2 p-3 bg-white text-emerald-800 rounded-xl hover:bg-emerald-50 transition-all font-semibold text-sm"
+            className="w-full flex items-center justify-center gap-2 p-3 bg-white text-mwm-emerald rounded-xl hover:bg-mwm-green/10 transition-all font-semibold text-sm"
           >
             <Briefcase className="w-4 h-4" /> Advisor Login
           </button>

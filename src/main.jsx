@@ -18,13 +18,13 @@ const PasswordApp = () => {
           type="password"
           value={input}
           onChange={(e) => setInput(e.target.value)}
-          className="border border-slate-300 p-2 rounded-lg w-full mb-4 focus:ring-2 focus:ring-indigo-500 outline-none"
+          className="border border-slate-300 p-2 rounded-lg w-full mb-4 focus:ring-2 focus:ring-mwm-green outline-none"
           placeholder="Enter Password"
           onKeyDown={(e) => e.key === 'Enter' && (input === PASSWORD ? setIsAuthenticated(true) : alert('Incorrect Password'))}
         />
         <button
           onClick={() => input === PASSWORD ? setIsAuthenticated(true) : alert('Incorrect Password')}
-          className="w-full bg-indigo-600 hover:bg-indigo-700 text-white py-2 rounded-lg font-bold transition-all"
+          className="w-full bg-mwm-green hover:bg-mwm-green/80 text-white py-2 rounded-lg font-bold transition-all"
         >
           Unlock
         </button>

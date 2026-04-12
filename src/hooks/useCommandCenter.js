@@ -213,9 +213,9 @@ export const useCommandCenter = ({ currentUser }) => {
 
       // Bucket strategy details (our actual allocation)
       bucketAllocation: {
-        b1: { value: basePlan?.b1Val || 0, percent: b1Pct, name: 'Short Term (1-3 yrs)' },
-        b2: { value: basePlan?.b2Val || 0, percent: b2Pct, name: 'Mid Term (4-6 yrs)' },
-        b3: { value: basePlan?.b3Val || 0, percent: b3Pct, name: 'Balanced 60/40 (7-15 yrs)' },
+        b1: { value: basePlan?.b1Val || 0, percent: b1Pct, name: 'Liquidity (1-3 yrs)' },
+        b2: { value: basePlan?.b2Val || 0, percent: b2Pct, name: 'Bridge (4-6 yrs)' },
+        b3: { value: basePlan?.b3Val || 0, percent: b3Pct, name: 'Tactical Balanced (7-15 yrs)' },
         b4: { value: basePlan?.b4Val || 0, percent: b4Pct, name: 'Income & Growth' },
         b5: { value: basePlan?.b5Val || 0, percent: b5Pct, name: 'Long Term Growth' }
       },

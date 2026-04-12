@@ -106,8 +106,8 @@ export const MfaEnrollModal = ({ onStartEnrollment, onComplete, onCancel, error 
     <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50">
       <div className="bg-white rounded-xl shadow-xl max-w-md w-full p-6">
         <div className="flex justify-between items-start mb-4">
-          <div className="w-12 h-12 bg-emerald-100 rounded-full flex items-center justify-center">
-            <Shield className="w-6 h-6 text-emerald-600" />
+          <div className="w-12 h-12 bg-mwm-green/20 rounded-full flex items-center justify-center">
+            <Shield className="w-6 h-6 text-mwm-green" />
           </div>
           <button
             onClick={onCancel}
@@ -122,8 +122,8 @@ export const MfaEnrollModal = ({ onStartEnrollment, onComplete, onCancel, error 
         </h2>
 
         {/* Compliance Notice */}
-        <div className="mb-4 p-3 bg-amber-50 border border-amber-200 rounded-lg">
-          <p className="text-amber-800 text-sm">
+        <div className="mb-4 p-3 bg-mwm-gold/10 border border-mwm-gold/30 rounded-lg">
+          <p className="text-mwm-gold text-sm">
             <strong>Required:</strong> Per LPL security policy, all users must enable two-factor authentication.
           </p>
         </div>
@@ -170,7 +170,7 @@ export const MfaEnrollModal = ({ onStartEnrollment, onComplete, onCancel, error 
             <button
               onClick={() => setStep(2)}
               disabled={!qrData}
-              className="w-full bg-emerald-600 text-white py-3 rounded-lg font-semibold hover:bg-emerald-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+              className="w-full bg-mwm-green text-white py-3 rounded-lg font-semibold hover:bg-mwm-green/80 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
             >
               I've Scanned the Code
             </button>
@@ -187,7 +187,7 @@ export const MfaEnrollModal = ({ onStartEnrollment, onComplete, onCancel, error 
                 value={code}
                 onChange={(e) => setCode(e.target.value.replace(/\D/g, '').slice(0, 6))}
                 placeholder="000000"
-                className="w-full text-center text-3xl tracking-[0.5em] font-mono p-4 border-2 border-slate-200 rounded-lg focus:border-emerald-500 focus:outline-none"
+                className="w-full text-center text-3xl tracking-[0.5em] font-mono p-4 border-2 border-slate-200 rounded-lg focus:border-mwm-green focus:outline-none"
                 autoFocus
                 inputMode="numeric"
                 autoComplete="one-time-code"
@@ -195,7 +195,7 @@ export const MfaEnrollModal = ({ onStartEnrollment, onComplete, onCancel, error 
               <button
                 type="submit"
                 disabled={code.length !== 6 || isSubmitting}
-                className="w-full mt-4 bg-emerald-600 text-white py-3 rounded-lg font-semibold hover:bg-emerald-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                className="w-full mt-4 bg-mwm-green text-white py-3 rounded-lg font-semibold hover:bg-mwm-green/80 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
               >
                 {isSubmitting ? 'Verifying...' : 'Complete Setup'}
               </button>

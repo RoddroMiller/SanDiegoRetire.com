@@ -55,15 +55,15 @@ export const ClientLoginScreen = ({ onBack, onLogin, onSignup, onPasswordReset, 
           </p>
 
           {resetStatus === 'sent' ? (
-            <div className="p-4 bg-emerald-50 border border-emerald-200 rounded-lg text-center">
-              <CheckCircle className="w-12 h-12 text-emerald-500 mx-auto mb-3" />
-              <p className="text-emerald-700 font-medium mb-2">Email Sent!</p>
-              <p className="text-sm text-emerald-600">
+            <div className="p-4 bg-mwm-green/10 border border-mwm-green/30 rounded-lg text-center">
+              <CheckCircle className="w-12 h-12 text-mwm-green mx-auto mb-3" />
+              <p className="text-mwm-green/80 font-medium mb-2">Email Sent!</p>
+              <p className="text-sm text-mwm-green">
                 Check your inbox for a password reset link. It may take a few minutes to arrive.
               </p>
               <button
                 onClick={() => setShowResetForm(false)}
-                className="mt-4 text-sm text-emerald-700 hover:text-emerald-800 underline"
+                className="mt-4 text-sm text-mwm-green/80 hover:text-mwm-emerald underline"
               >
                 Return to login
               </button>
@@ -162,7 +162,7 @@ export const ClientLoginScreen = ({ onBack, onLogin, onSignup, onPasswordReset, 
                 className="w-full p-3 border rounded-lg outline-none focus:ring-2 focus:ring-blue-500"
                 required
               />
-              <div className="flex items-start gap-2 p-2 bg-amber-50 rounded-lg text-xs text-amber-700">
+              <div className="flex items-start gap-2 p-2 bg-mwm-gold/10 rounded-lg text-xs text-mwm-gold">
                 <AlertCircle className="w-4 h-4 flex-shrink-0 mt-0.5" />
                 <span>{getPasswordRequirements()}</span>
               </div>

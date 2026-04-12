@@ -303,9 +303,9 @@ Your Financial Advisor`;
 
   // Status dropdown styles
   const statusStyles = {
-    client: 'bg-emerald-100 text-emerald-700 border-emerald-200',
+    client: 'bg-mwm-green/20 text-mwm-green/80 border-mwm-green/30',
     prospect: 'bg-blue-100 text-blue-700 border-blue-200',
-    in_progress: 'bg-yellow-100 text-yellow-700 border-yellow-200'
+    in_progress: 'bg-mwm-gold/20 text-mwm-gold border-mwm-gold/30'
   };
 
   // Handle status change
@@ -363,11 +363,11 @@ Your Financial Advisor`;
             </Card>
             <Card className="p-4">
               <div className="flex items-center gap-3">
-                <div className="p-2 bg-emerald-100 rounded-lg">
-                  <UserCheck className="w-5 h-5 text-emerald-600" />
+                <div className="p-2 bg-mwm-green/20 rounded-lg">
+                  <UserCheck className="w-5 h-5 text-mwm-green" />
                 </div>
                 <div>
-                  <p className="text-2xl font-bold text-emerald-700">{stats.clients}</p>
+                  <p className="text-2xl font-bold text-mwm-green/80">{stats.clients}</p>
                   <p className="text-xs text-slate-500">Clients</p>
                 </div>
               </div>
@@ -385,11 +385,11 @@ Your Financial Advisor`;
             </Card>
             <Card className="p-4">
               <div className="flex items-center gap-3">
-                <div className="p-2 bg-yellow-100 rounded-lg">
-                  <TrendingUp className="w-5 h-5 text-yellow-600" />
+                <div className="p-2 bg-mwm-gold/20 rounded-lg">
+                  <TrendingUp className="w-5 h-5 text-mwm-gold" />
                 </div>
                 <div>
-                  <p className="text-2xl font-bold text-yellow-700">{stats.inProgress}</p>
+                  <p className="text-2xl font-bold text-mwm-gold">{stats.inProgress}</p>
                   <p className="text-xs text-slate-500">In Progress</p>
                 </div>
               </div>
@@ -417,7 +417,7 @@ Your Financial Advisor`;
               </h3>
               <button
                 onClick={() => setShowAddAdvisor(!showAddAdvisor)}
-                className="flex items-center gap-1 px-3 py-1.5 text-sm bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg transition-all"
+                className="flex items-center gap-1 px-3 py-1.5 text-sm bg-mwm-green hover:bg-mwm-green/80 text-white rounded-lg transition-all"
               >
                 <UserPlus className="w-4 h-4" /> Add Advisor
               </button>
@@ -440,7 +440,7 @@ Your Financial Advisor`;
                       placeholder="John Smith"
                       value={newAdvisorName}
                       onChange={(e) => { setNewAdvisorName(e.target.value); setAddAdvisorError(''); }}
-                      className="w-full px-3 py-2 border rounded-lg text-sm focus:ring-emerald-500 focus:border-emerald-500"
+                      className="w-full px-3 py-2 border rounded-lg text-sm focus:ring-mwm-green focus:border-mwm-green"
                     />
                   </div>
                   <div className="flex-1 min-w-[200px]">
@@ -450,14 +450,14 @@ Your Financial Advisor`;
                       placeholder="john@example.com"
                       value={addAdvisorEmail}
                       onChange={(e) => { setAddAdvisorEmail(e.target.value); setAddAdvisorError(''); }}
-                      className="w-full px-3 py-2 border rounded-lg text-sm focus:ring-emerald-500 focus:border-emerald-500"
+                      className="w-full px-3 py-2 border rounded-lg text-sm focus:ring-mwm-green focus:border-mwm-green"
                     />
                   </div>
                   <div className="flex gap-2">
                     <button
                       onClick={handleAddAdvisor}
                       disabled={!newAdvisorName || !addAdvisorEmail || isAddingAdvisor}
-                      className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-sm font-medium transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1"
+                      className="px-4 py-2 bg-mwm-green hover:bg-mwm-green/80 text-white rounded-lg text-sm font-medium transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1"
                     >
                       {isAddingAdvisor ? (
                         <>Saving...</>
@@ -518,7 +518,7 @@ Your Financial Advisor`;
                   <select
                     value={planFilter}
                     onChange={(e) => onPlanFilterChange && onPlanFilterChange(e.target.value)}
-                    className="px-3 py-1.5 text-sm font-medium rounded-lg border border-slate-200 bg-white focus:ring-emerald-500 focus:border-emerald-500 mr-2"
+                    className="px-3 py-1.5 text-sm font-medium rounded-lg border border-slate-200 bg-white focus:ring-mwm-green focus:border-mwm-green mr-2"
                   >
                     <option value="mine">My Plans</option>
                     {hasTeams && <option value="team">Team Plans</option>}
@@ -526,7 +526,7 @@ Your Financial Advisor`;
                   </select>
                 )}
                 {planFilter === 'team' && (
-                  <span className="flex items-center gap-1 text-xs text-emerald-600 bg-emerald-50 px-2 py-1 rounded mr-2">
+                  <span className="flex items-center gap-1 text-xs text-mwm-green bg-mwm-green/10 px-2 py-1 rounded mr-2">
                     <Users className="w-3 h-3" /> Team View
                   </span>
                 )}
@@ -538,7 +538,7 @@ Your Financial Advisor`;
                 </button>
                 <button
                   onClick={() => setFilterType('client')}
-                  className={`px-3 py-1.5 text-sm font-medium rounded-lg transition-all ${filterType === 'client' ? 'bg-emerald-600 text-white' : 'bg-emerald-50 text-emerald-700 hover:bg-emerald-100'}`}
+                  className={`px-3 py-1.5 text-sm font-medium rounded-lg transition-all ${filterType === 'client' ? 'bg-mwm-green text-white' : 'bg-mwm-green/10 text-mwm-green/80 hover:bg-mwm-green/20'}`}
                 >
                   Client ({stats.clients})
                 </button>
@@ -550,7 +550,7 @@ Your Financial Advisor`;
                 </button>
                 <button
                   onClick={() => setFilterType('in_progress')}
-                  className={`px-3 py-1.5 text-sm font-medium rounded-lg transition-all ${filterType === 'in_progress' ? 'bg-yellow-500 text-white' : 'bg-yellow-50 text-yellow-700 hover:bg-yellow-100'}`}
+                  className={`px-3 py-1.5 text-sm font-medium rounded-lg transition-all ${filterType === 'in_progress' ? 'bg-mwm-gold text-white' : 'bg-mwm-gold/10 text-mwm-gold hover:bg-mwm-gold/20'}`}
                 >
                   In Progress ({stats.inProgress})
                 </button>
@@ -563,7 +563,7 @@ Your Financial Advisor`;
                   placeholder="Search by name, email, phone..."
                   value={searchTerm}
                   onChange={(e) => setSearchTerm(e.target.value)}
-                  className="w-full pl-10 pr-4 py-2 border rounded-lg text-sm focus:ring-emerald-500 focus:border-emerald-500"
+                  className="w-full pl-10 pr-4 py-2 border rounded-lg text-sm focus:ring-mwm-green focus:border-mwm-green"
                 />
               </div>
             </div>
@@ -610,7 +610,7 @@ Your Financial Advisor`;
         {clientAssignMessage.text && (
           <div className={`mb-4 p-4 rounded-lg ${
             clientAssignMessage.type === 'success'
-              ? 'bg-emerald-50 border border-emerald-200 text-emerald-700'
+              ? 'bg-mwm-green/10 border border-mwm-green/30 text-mwm-green/80'
               : 'bg-red-50 border border-red-200 text-red-700'
           }`}>
             <div className="flex items-center gap-2">
@@ -624,16 +624,16 @@ Your Financial Advisor`;
               </button>
             </div>
             {clientAssignMessage.type === 'success' && clientAssignMessage.email && (
-              <div className="mt-3 pt-3 border-t border-emerald-200">
-                <p className="text-xs text-emerald-600 mb-2">
+              <div className="mt-3 pt-3 border-t border-mwm-green/30">
+                <p className="text-xs text-mwm-green mb-2">
                   Copy the invite message below to send to your client via email:
                 </p>
                 <button
                   onClick={handleCopyInvite}
                   className={`flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-medium transition-all ${
                     copiedInvite
-                      ? 'bg-emerald-600 text-white'
-                      : 'bg-emerald-100 text-emerald-700 hover:bg-emerald-200'
+                      ? 'bg-mwm-green text-white'
+                      : 'bg-mwm-green/20 text-mwm-green/80 hover:bg-mwm-green/30'
                   }`}
                 >
                   {copiedInvite ? (
@@ -655,7 +655,7 @@ Your Financial Advisor`;
         <Card className="overflow-hidden">
           {isLoadingScenarios ? (
             <div className="flex items-center justify-center p-12">
-              <Loader className="w-8 h-8 animate-spin text-emerald-600" />
+              <Loader className="w-8 h-8 animate-spin text-mwm-green" />
               <span className="ml-3 text-slate-500">Loading plans...</span>
             </div>
           ) : filteredScenarios.length === 0 ? (
@@ -766,7 +766,7 @@ Your Financial Advisor`;
                         </td>
                       )}
                       <td className="p-3">
-                        <div className="font-bold text-emerald-700">
+                        <div className="font-bold text-mwm-green/80">
                           ${((scenario.inputs?.totalPortfolio || 0) / 1000000).toFixed(2)}M
                         </div>
                         <div className="text-xs text-slate-500">

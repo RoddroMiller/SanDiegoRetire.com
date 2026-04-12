@@ -47,8 +47,8 @@ export const LoginScreen = ({ onBack, onLogin, onPasswordReset, authError, reset
         <div className="bg-white p-6 sm:p-8 rounded-xl shadow-lg w-full max-w-sm">
           <div className="text-center">
             <img src={LOGO_URL} alt="Logo" className="h-24 sm:h-32 mx-auto mb-4" />
-            <div className="mx-auto w-12 h-12 bg-emerald-100 rounded-full flex items-center justify-center mb-4">
-              <CheckCircle className="w-6 h-6 text-emerald-600" />
+            <div className="mx-auto w-12 h-12 bg-mwm-green/20 rounded-full flex items-center justify-center mb-4">
+              <CheckCircle className="w-6 h-6 text-mwm-green" />
             </div>
             <h2 className="text-xl sm:text-2xl font-bold text-slate-800 mb-2">
               Check Your Email
@@ -57,10 +57,10 @@ export const LoginScreen = ({ onBack, onLogin, onPasswordReset, authError, reset
               We've sent a password reset link to <strong>{email}</strong>
             </p>
 
-            <div className="bg-amber-50 border border-amber-200 rounded-lg p-4 mb-6 text-left">
+            <div className="bg-mwm-gold/10 border border-mwm-gold/30 rounded-lg p-4 mb-6 text-left">
               <div className="flex items-start gap-2">
-                <AlertCircle className="w-5 h-5 text-amber-600 flex-shrink-0 mt-0.5" />
-                <div className="text-sm text-amber-800">
+                <AlertCircle className="w-5 h-5 text-mwm-gold flex-shrink-0 mt-0.5" />
+                <div className="text-sm text-mwm-gold">
                   <strong>Important:</strong> For seamless access across Miller Wealth tools,
                   use the same password for both Portfolio Architect and The One Process.
                 </div>
@@ -72,7 +72,7 @@ export const LoginScreen = ({ onBack, onLogin, onPasswordReset, authError, reset
                 setIsResetMode(false);
                 setEmail('');
               }}
-              className="w-full bg-emerald-700 text-white p-3 rounded-lg font-bold hover:bg-emerald-800 transition-all"
+              className="w-full bg-mwm-green/80 text-white p-3 rounded-lg font-bold hover:bg-mwm-emerald transition-all"
             >
               Return to Login
             </button>
@@ -100,8 +100,8 @@ export const LoginScreen = ({ onBack, onLogin, onPasswordReset, authError, reset
           </button>
 
           <div className="flex items-center gap-3 mb-4">
-            <div className="w-10 h-10 bg-emerald-100 rounded-full flex items-center justify-center">
-              <Mail className="w-5 h-5 text-emerald-600" />
+            <div className="w-10 h-10 bg-mwm-green/20 rounded-full flex items-center justify-center">
+              <Mail className="w-5 h-5 text-mwm-green" />
             </div>
             <h2 className="text-xl sm:text-2xl font-bold text-slate-800">
               Reset Password
@@ -134,13 +134,13 @@ export const LoginScreen = ({ onBack, onLogin, onPasswordReset, authError, reset
               placeholder="Email address"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
-              className="w-full p-3 border rounded-lg outline-none focus:ring-2 focus:ring-emerald-500"
+              className="w-full p-3 border rounded-lg outline-none focus:ring-2 focus:ring-mwm-green"
               required
             />
             <button
               type="submit"
               disabled={resetStatus === 'sending'}
-              className="w-full bg-emerald-700 text-white p-3 rounded-lg font-bold hover:bg-emerald-800 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+              className="w-full bg-mwm-green/80 text-white p-3 rounded-lg font-bold hover:bg-mwm-emerald transition-all disabled:opacity-50 disabled:cursor-not-allowed"
             >
               {resetStatus === 'sending' ? 'Sending...' : 'Send Reset Link'}
             </button>
@@ -191,7 +191,7 @@ export const LoginScreen = ({ onBack, onLogin, onPasswordReset, authError, reset
             placeholder="Email"
             value={email}
             onChange={(e) => setEmail(e.target.value)}
-            className="w-full p-3 border rounded-lg outline-none focus:ring-2 focus:ring-emerald-500"
+            className="w-full p-3 border rounded-lg outline-none focus:ring-2 focus:ring-mwm-green"
             required
           />
           <input
@@ -199,7 +199,7 @@ export const LoginScreen = ({ onBack, onLogin, onPasswordReset, authError, reset
             placeholder="Password"
             value={password}
             onChange={(e) => setPassword(e.target.value)}
-            className="w-full p-3 border rounded-lg outline-none focus:ring-2 focus:ring-emerald-500"
+            className="w-full p-3 border rounded-lg outline-none focus:ring-2 focus:ring-mwm-green"
             required
           />
           {isSignupMode && (
@@ -209,10 +209,10 @@ export const LoginScreen = ({ onBack, onLogin, onPasswordReset, authError, reset
                 placeholder="Confirm Password"
                 value={confirmPassword}
                 onChange={(e) => setConfirmPassword(e.target.value)}
-                className="w-full p-3 border rounded-lg outline-none focus:ring-2 focus:ring-emerald-500"
+                className="w-full p-3 border rounded-lg outline-none focus:ring-2 focus:ring-mwm-green"
                 required
               />
-              <div className="flex items-start gap-2 p-2 bg-amber-50 rounded-lg text-xs text-amber-700">
+              <div className="flex items-start gap-2 p-2 bg-mwm-gold/10 rounded-lg text-xs text-mwm-gold">
                 <AlertCircle className="w-4 h-4 flex-shrink-0 mt-0.5" />
                 <span>{getPasswordRequirements()}</span>
               </div>
@@ -220,7 +220,7 @@ export const LoginScreen = ({ onBack, onLogin, onPasswordReset, authError, reset
           )}
           <button
             type="submit"
-            className="w-full bg-emerald-700 text-white p-3 rounded-lg font-bold hover:bg-emerald-800 transition-all"
+            className="w-full bg-mwm-green/80 text-white p-3 rounded-lg font-bold hover:bg-mwm-emerald transition-all"
           >
             {isSignupMode ? 'Create Account' : 'Log In'}
           </button>
@@ -233,7 +233,7 @@ export const LoginScreen = ({ onBack, onLogin, onPasswordReset, authError, reset
                 setIsResetMode(true);
                 setPasswordError('');
               }}
-              className="text-sm text-emerald-600 hover:text-emerald-700 font-medium"
+              className="text-sm text-mwm-green hover:text-mwm-green/80 font-medium"
             >
               Forgot password?
             </button>

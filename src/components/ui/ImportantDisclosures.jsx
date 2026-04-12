@@ -11,7 +11,7 @@ export const ImportantDisclosures = ({ className = '' }) => {
         className="w-full flex items-center justify-between text-left group"
       >
         <span className="flex items-center gap-2 text-xs sm:text-sm font-bold text-slate-600">
-          <AlertTriangle className="w-4 h-4 text-yellow-600" />
+          <AlertTriangle className="w-4 h-4 text-mwm-gold" />
           Important Disclosures
         </span>
         {isExpanded ? (
@@ -27,8 +27,8 @@ export const ImportantDisclosures = ({ className = '' }) => {
             <p className="font-bold text-slate-600 text-[12px] mb-1">Broker-Dealer & Investment Advisor Disclosure</p>
             <p>
               Securities offered through LPL Financial, Member{' '}
-              <a href="https://www.finra.org" target="_blank" rel="noopener noreferrer" className="underline hover:text-emerald-600">FINRA</a>/
-              <a href="https://www.sipc.org" target="_blank" rel="noopener noreferrer" className="underline hover:text-emerald-600">SIPC</a>.
+              <a href="https://www.finra.org" target="_blank" rel="noopener noreferrer" className="underline hover:text-mwm-green">FINRA</a>/
+              <a href="https://www.sipc.org" target="_blank" rel="noopener noreferrer" className="underline hover:text-mwm-green">SIPC</a>.
               Investment advice offered through Miller Wealth Management, a Registered Investment Advisor
               and separate entity from LPL Financial.
             </p>

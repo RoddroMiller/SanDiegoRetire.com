@@ -224,11 +224,11 @@ export default function BucketPortfolioBuilder() {
 
   // Return Assumptions
   const [assumptions, setAssumptions] = useState({
-    b1: { return: 2.0, stdDev: 2.0, name: "B1 - Short Term", historical: 2.8 },
-    b2: { return: 4.0, stdDev: 5.0, name: "B2 - Mid Term", historical: 5.2 },
-    b3: { return: 5.5, stdDev: 8.0, name: "B3 - Balanced 60/40", historical: 7.5 },
+    b1: { return: 2.0, stdDev: 2.0, name: "B1 - Liquidity", historical: 2.8 },
+    b2: { return: 4.0, stdDev: 5.0, name: "B2 - Bridge", historical: 5.2 },
+    b3: { return: 5.5, stdDev: 8.0, name: "B3 - Tactical Balanced", historical: 7.5 },
     b4: { return: 6.0, stdDev: 12.0, name: "B4 - Inc & Growth", historical: 9.1 },
-    b5: { return: 8.0, stdDev: 18.0, name: "B5 - Long Term", historical: 10.2 },
+    b5: { return: 8.0, stdDev: 18.0, name: "B5 - Long Term Growth", historical: 10.2 },
   });
 
   // --- Scenario Action Wrappers ---
@@ -937,7 +937,7 @@ export default function BucketPortfolioBuilder() {
   const SessionWarningModal = () => (
     <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[9999]">
       <div className="bg-white p-6 rounded-xl shadow-xl max-w-sm mx-4 text-center">
-        <div className="text-amber-500 text-4xl mb-3">⚠️</div>
+        <div className="text-mwm-gold text-4xl mb-3">⚠️</div>
         <h3 className="text-lg font-bold text-slate-800 mb-2">Session Expiring</h3>
         <p className="text-slate-600 mb-4">
           Your session will expire in 60 seconds due to inactivity.
@@ -945,7 +945,7 @@ export default function BucketPortfolioBuilder() {
         </p>
         <button
           onClick={() => setShowSessionWarning(false)}
-          className="w-full bg-emerald-600 text-white py-2 px-4 rounded-lg font-semibold hover:bg-emerald-700 transition-colors"
+          className="w-full bg-mwm-green text-white py-2 px-4 rounded-lg font-semibold hover:bg-mwm-green/80 transition-colors"
         >
           Stay Logged In
         </button>
