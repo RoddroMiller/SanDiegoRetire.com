@@ -1158,7 +1158,7 @@ export const ArchitectPage = ({
             <YAxis yAxisId="right" orientation="right" tickFormatter={(val) => `${val.toFixed(1)}%`} domain={[0, 'auto']} tick={{ fontSize: 10 }} />
             <Legend wrapperStyle={{ fontSize: '11px' }} />
             <Area type="monotone" dataKey="total" name="Bucket Strategy" fill={COLORS.areaFill} stroke={COLORS.areaFill} fillOpacity={0.8} />
-            <Line type="monotone" dataKey="benchmark" name="VBIAX 60/40" stroke={COLORS.benchmark} strokeDasharray="5 5" strokeWidth={2} dot={false} />
+            <Line type="monotone" dataKey="benchmark" name="Passive 60/40" stroke={COLORS.benchmark} strokeDasharray="5 5" strokeWidth={2} dot={false} />
             <Line yAxisId="right" type="monotone" dataKey="distRate" name="Distribution Rate" stroke={COLORS.distRate} strokeWidth={2} dot={false} />
           </ComposedChart>
         </div>

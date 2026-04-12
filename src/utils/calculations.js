@@ -1238,14 +1238,16 @@ export const runSimulation = (basePlan, assumptions, inputs, rebalanceFreq, isMo
   let results = [];
   let failureCount = 0;
   const iterations = isMonteCarlo ? 1000 : 1;
-  // Benchmark: VBIAX (Vanguard Balanced Index Admiral — 60/40)
-  // Forward-looking consensus: 5-7% nominal return, 8-11% stddev (midpoints used)
-  // Sources: State Street, BofA, Yahoo Finance market outlook 2026+
-  const VBIAX_RETURN = 6.0; // Forward-looking return estimate % (midpoint of 5-7% consensus)
-  const VBIAX_STDDEV = 10.0; // Forward-looking stddev % (midpoint of 8-11%)
-  const benchmarkReturn = VBIAX_RETURN / 100;
-  const benchmarkStdDev = VBIAX_STDDEV / 100;
-  // Advisory fee applied annually to the managed bucket portfolio (not the passive VBIAX benchmark)
+  // Benchmark: Passive 60/40 Balanced Portfolio (60% US Equity / 40% US Aggregate Bond)
+  // Forward-looking consensus from major capital market assumptions (2026):
+  //   Vanguard VCMM: 6.0-6.5%, JP Morgan LTCMA: 5.7-6.4%, Schwab 10yr: 6.2%
+  //   Historical 50yr avg ~8.7%, reduced by forward P/E compression & lower real growth
+  //   StdDev: historical ~9.6%, increased stock-bond correlation pushes forward to 9-11%
+  const BENCHMARK_RETURN = 6.0; // Forward-looking nominal return %
+  const BENCHMARK_STDDEV = 10.0; // Forward-looking annualized std dev %
+  const benchmarkReturn = BENCHMARK_RETURN / 100;
+  const benchmarkStdDev = BENCHMARK_STDDEV / 100;
+  // Advisory fee applied annually to the managed bucket portfolio (not the passive 60/40 benchmark)
   const advisoryFeeRate = (inputs.advisoryFee ?? 1.0) / 100;
 
   // Calculate VA allocation if enabled

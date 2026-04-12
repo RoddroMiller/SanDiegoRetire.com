@@ -1557,7 +1557,7 @@ export const ClientWizard = ({
                     />
                     <Legend verticalAlign="bottom" wrapperStyle={{ paddingTop: '30px', paddingBottom: '0px' }} />
                     <Area type="monotone" dataKey="total" name="Miller Portfolio Architect Strategy" fill={COLORS.areaFill} stroke={COLORS.areaFill} fillOpacity={0.8} />
-                    <Line type="monotone" dataKey="benchmark" name="VBIAX 60/40 (No Advisory Fee)" stroke={COLORS.benchmark} strokeDasharray="5 5" strokeWidth={2} dot={false} />
+                    <Line type="monotone" dataKey="benchmark" name="Passive 60/40 (No Advisory Fee)" stroke={COLORS.benchmark} strokeDasharray="5 5" strokeWidth={2} dot={false} />
                     <Line yAxisId="right" type="monotone" dataKey="distRate" name="Distribution Rate" stroke={COLORS.distRate} strokeWidth={2} dot={false} />
                   </ComposedChart>
                 </ResponsiveContainer>

@@ -464,7 +464,7 @@ export const AllocationTab = ({
                       <Area type="monotone" dataKey="median" name="50th Percentile (Median)" fill="#bfdbfe" stroke="#3b82f6" fillOpacity={0.5} />
                       <Area type="monotone" dataKey="p10" name="10th Percentile (Pessimistic)" fill="#fee2e2" stroke="#ef4444" fillOpacity={0.4} />
                       <Line type="monotone" dataKey="total" name="Deterministic Projection" stroke={COLORS.areaFill} strokeWidth={2} dot={false} strokeDasharray="5 5" />
-                      <Line type="monotone" dataKey="benchmark" name="VBIAX 60/40" stroke={COLORS.benchmark} strokeDasharray="3 3" strokeWidth={1.5} dot={false} />
+                      <Line type="monotone" dataKey="benchmark" name="Passive 60/40" stroke={COLORS.benchmark} strokeDasharray="3 3" strokeWidth={1.5} dot={false} />
                     </ComposedChart>
                   </ResponsiveContainer>
                 </div>
@@ -496,7 +496,7 @@ export const AllocationTab = ({
                     />
                     <Legend />
                     <Area type="monotone" dataKey="total" name="Miller Portfolio Architect Strategy" fill={COLORS.areaFill} stroke={COLORS.areaFill} fillOpacity={0.8} />
-                    <Line type="monotone" dataKey="benchmark" name="VBIAX 60/40 (Annual Rebalance)" stroke={COLORS.benchmark} strokeDasharray="5 5" strokeWidth={2} dot={false} />
+                    <Line type="monotone" dataKey="benchmark" name="Passive 60/40 (Annual Rebalance)" stroke={COLORS.benchmark} strokeDasharray="5 5" strokeWidth={2} dot={false} />
                     <Line yAxisId="right" type="monotone" dataKey="distRate" name="Distribution Rate" stroke={COLORS.distRate} strokeWidth={2} dot={false} />
                   </ComposedChart>
                 </ResponsiveContainer>
@@ -505,7 +505,7 @@ export const AllocationTab = ({
                 <Activity className="w-4 h-4 mt-0.5" />
                 <p>
                   <strong>Grey Area:</strong> Miller Portfolio Architect Strategy - dynamic bucket allocation optimized for retirement income. <br />
-                  <strong>Gold Line:</strong> VBIAX 60/40 with annual rebalance for comparison. <br />
+                  <strong>Gold Line:</strong> Passive 60/40 with annual rebalance for comparison. <br />
                   <strong>Red Line:</strong> Distribution rate - annual withdrawal as % of portfolio.
                 </p>
               </div>
