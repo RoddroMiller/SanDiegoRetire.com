@@ -1177,7 +1177,7 @@ export const ArchitectPage = ({
         <div className="border border-slate-200 rounded-lg p-3 mb-4">
           {printOptions?.mode === 'montecarlo' && monteCarloData?.data ? (
             /* Monte Carlo fan chart: 90th, 50th, 10th percentile bands */
-            <ComposedChart width={670} height={180} data={monteCarloData.data.map((mc, idx) => ({
+            <ComposedChart width={670} height={240} data={monteCarloData.data.map((mc, idx) => ({
               year: idx + 1,
               p90: Math.round(mc.p90),
               median: Math.round(mc.median),
@@ -1195,7 +1195,7 @@ export const ArchitectPage = ({
             </ComposedChart>
           ) : (
             /* Deterministic single-line chart */
-            <ComposedChart width={670} height={180} data={printData}>
+            <ComposedChart width={670} height={240} data={printData}>
               <CartesianGrid strokeDasharray="3 3" vertical={false} />
               <XAxis dataKey="year" tick={{ fontSize: 10 }} label={{ value: 'Year', position: 'insideBottom', offset: -2, fontSize: 10 }} />
               <YAxis tickFormatter={(val) => val >= 2000000 ? `$${Math.round(val / 1000000)}M` : `$${Math.round(val / 1000)}k`} tick={{ fontSize: 10 }} />
@@ -1228,7 +1228,7 @@ export const ArchitectPage = ({
               {printData
                 .filter((row, i) => {
                   const yearNum = i + 1; // 1-indexed year
-                  return yearNum <= 15 || yearNum % 5 === 0;
+                  return yearNum <= 20 || yearNum % 5 === 0;
                 })
                 .map((row, i) => (
                 <tr key={row.year} className={i % 2 === 0 ? 'bg-white' : 'bg-slate-50'}>
@@ -1480,8 +1480,8 @@ export const ArchitectPage = ({
         </div>
       </PrintPageWrapper>}
 
-      {/* PRINT PAGE: Strategy Comparison */}
-      <PrintPageWrapper pageNumber={8 + cashFlowPageCount} totalPages={totalPrintPages} title="Strategy Comparison" subtitle="Alternative allocation strategies analyzed">
+      {/* PRINT PAGE: Strategy Comparison (optional) */}
+      {!printOptions?.excludeStrategyComparison && <PrintPageWrapper pageNumber={8 + cashFlowPageCount} totalPages={totalPrintPages} title="Strategy Comparison" subtitle="Alternative allocation strategies analyzed">
         {/* Strategy Comparison Table */}
         <div className="border border-slate-200 rounded-lg overflow-hidden mb-4">
           <table className="w-full text-[12px]">
@@ -1588,7 +1588,7 @@ export const ArchitectPage = ({
         <div className="mt-4 bg-slate-100 p-3 rounded-lg text-[13px] text-slate-500">
           <p><strong>Note:</strong> Success rates are based on 1,000-iteration Monte Carlo simulations. Legacy values represent median outcomes. Actual results will vary based on market conditions and personal circumstances.</p>
         </div>
-      </PrintPageWrapper>
+      </PrintPageWrapper>}
 
       {/* PRINT PAGE: Disclosures */}
       <PrintPageWrapper pageNumber={9 + cashFlowPageCount} totalPages={totalPrintPages} title="Important Disclosures" subtitle="Assumptions, methodology, and limitations">

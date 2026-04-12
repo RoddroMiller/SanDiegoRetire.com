@@ -980,6 +980,7 @@ export default function BucketPortfolioBuilder() {
   const [printOptions, setPrintOptions] = useState({
     mode: 'deterministic', // 'deterministic' | 'montecarlo'
     excludeAccumulation: false,
+    excludeStrategyComparison: false,
   });
 
   const generateReport = () => {
@@ -1021,15 +1022,26 @@ export default function BucketPortfolioBuilder() {
               {printOptions.mode === 'deterministic' ? 'Fixed returns based on assumptions — no randomness.' : 'Median outcome from 1,000 simulated market scenarios.'}
             </p>
           </div>
-          <label className="flex items-center gap-2 cursor-pointer">
-            <input
-              type="checkbox"
-              checked={!printOptions.excludeAccumulation}
-              onChange={() => setPrintOptions(p => ({ ...p, excludeAccumulation: !p.excludeAccumulation }))}
-              className="w-4 h-4 rounded border-slate-300 text-mwm-green focus:ring-mwm-green"
-            />
-            <span className="text-sm text-slate-700">Include Accumulation Page</span>
-          </label>
+          <div className="space-y-2">
+            <label className="flex items-center gap-2 cursor-pointer">
+              <input
+                type="checkbox"
+                checked={!printOptions.excludeAccumulation}
+                onChange={() => setPrintOptions(p => ({ ...p, excludeAccumulation: !p.excludeAccumulation }))}
+                className="w-4 h-4 rounded border-slate-300 text-mwm-green focus:ring-mwm-green"
+              />
+              <span className="text-sm text-slate-700">Include Accumulation Page</span>
+            </label>
+            <label className="flex items-center gap-2 cursor-pointer">
+              <input
+                type="checkbox"
+                checked={!printOptions.excludeStrategyComparison}
+                onChange={() => setPrintOptions(p => ({ ...p, excludeStrategyComparison: !p.excludeStrategyComparison }))}
+                className="w-4 h-4 rounded border-slate-300 text-mwm-green focus:ring-mwm-green"
+              />
+              <span className="text-sm text-slate-700">Include Strategy Comparison Page</span>
+            </label>
+          </div>
         </div>
         <div className="flex gap-2 mt-6">
           <button onClick={() => setShowPrintOptions(false)} className="flex-1 px-4 py-2 text-sm text-slate-600 font-medium hover:bg-slate-100 rounded-lg transition-colors">
