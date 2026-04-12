@@ -6,15 +6,21 @@ import { Card } from '../../ui';
 export const SSOptimizationTab = ({ clientInfo, inputs, assumptions, basePlan, rebalanceFreq, rebalanceTargets, useManualAllocation, manualAllocations, ssAnalysis, ssBreakevenResults, clientOutcomes, clientWinner, partnerOutcomes, partnerWinner, targetMaxPortfolioAge, onSetTargetMaxPortfolioAge, onUpdateSSStartAge, onUpdatePartnerSSStartAge, onInputChange, matrixData, isRunningMatrix, onSetMatrixData, onSetIsRunningMatrix }) => {
   const [showBenefitDetails, setShowBenefitDetails] = useState(false);
 
+  const clientLocked = inputs.ssCurrentlyReceiving;
+  const partnerLocked = inputs.partnerSSCurrentlyReceiving;
+
   const runMatrixOptimization = () => {
     onSetIsRunningMatrix(true);
     setTimeout(() => {
-      const ages = [62, 63, 64, 65, 66, 67, 68, 69, 70];
+      // If already receiving, lock to current claiming age — that decision is made
+      const clientAges = clientLocked ? [inputs.ssStartAge] : [62, 63, 64, 65, 66, 67, 68, 69, 70];
+      const partnerAges = partnerLocked ? [inputs.partnerSSStartAge] : [62, 63, 64, 65, 66, 67, 68, 69, 70];
+      const ages = [62, 63, 64, 65, 66, 67, 68, 69, 70]; // full range for display grid
       const matrix = [];
-      let winner = { clientAge: 67, partnerAge: 67, balance: -1 };
+      let winner = { clientAge: clientAges[0], partnerAge: partnerAges[0], balance: -1 };
 
-      for (const cAge of ages) {
-        for (const pAge of ages) {
+      for (const cAge of clientAges) {
+        for (const pAge of partnerAges) {
           const testInputs = { ...inputs, ssStartAge: cAge, partnerSSStartAge: pAge };
           let testBasePlan = calculateBasePlan(testInputs, assumptions, clientInfo);
           if (useManualAllocation) {
@@ -283,12 +289,18 @@ export const SSOptimizationTab = ({ clientInfo, inputs, assumptions, basePlan, r
             <div>
               <h4 className="font-bold text-slate-800">Claiming Age Optimization Matrix</h4>
               <p className="text-xs text-slate-500 mt-1">
-                81 scenarios — Primary claiming age (columns) vs. Spouse claiming age (rows). Portfolio balance at age {targetMaxPortfolioAge}.
+                {clientLocked && partnerLocked
+                  ? 'Both spouses are already receiving benefits — claiming ages are locked.'
+                  : clientLocked
+                  ? `${clientInfo.name || 'Primary'} is already receiving (locked at age ${inputs.ssStartAge}). Optimizing ${clientInfo.partnerName || 'Spouse'} claiming age.`
+                  : partnerLocked
+                  ? `${clientInfo.partnerName || 'Spouse'} is already receiving (locked at age ${inputs.partnerSSStartAge}). Optimizing ${clientInfo.name || 'Primary'} claiming age.`
+                  : `81 scenarios — Primary claiming age (columns) vs. Spouse claiming age (rows). Portfolio balance at age ${targetMaxPortfolioAge}.`}
               </p>
             </div>
             <button
               onClick={runMatrixOptimization}
-              disabled={isRunningMatrix}
+              disabled={isRunningMatrix || (clientLocked && partnerLocked)}
               className="px-5 py-2.5 bg-black hover:bg-slate-800 disabled:bg-slate-400 text-white font-bold rounded-lg transition-all flex items-center gap-2"
             >
               {isRunningMatrix ? (
@@ -407,51 +419,74 @@ export const SSOptimizationTab = ({ clientInfo, inputs, assumptions, basePlan, r
           ) : (
             <div className="border-2 border-dashed border-slate-300 rounded-xl p-12 text-center">
               <Calculator className="w-12 h-12 text-slate-300 mx-auto mb-3" />
-              <p className="text-sm text-slate-500 font-medium">Click "Run Optimization" to calculate all 81 claiming age combinations</p>
-              <p className="text-xs text-slate-400 mt-1">Primary ages 62-70 vs. Spouse ages 62-70</p>
+              <p className="text-sm text-slate-500 font-medium">
+                {clientLocked && partnerLocked
+                  ? 'Both spouses are already receiving — no optimization available.'
+                  : 'Click "Run Optimization" to calculate claiming age combinations'}
+              </p>
+              <p className="text-xs text-slate-400 mt-1">
+                {clientLocked && partnerLocked ? '' :
+                  clientLocked ? `Optimizing ${clientInfo.partnerName || 'Spouse'} ages 62-70 (${clientInfo.name || 'Primary'} locked at ${inputs.ssStartAge})` :
+                  partnerLocked ? `Optimizing ${clientInfo.name || 'Primary'} ages 62-70 (${clientInfo.partnerName || 'Spouse'} locked at ${inputs.partnerSSStartAge})` :
+                  'Primary ages 62-70 vs. Spouse ages 62-70'}
+              </p>
             </div>
           )}
         </div>
       ) : (
         /* Single client — keep original linear display */
         <div className="mb-12">
-          <div className="bg-black text-white p-6 rounded-xl mb-6 flex items-center gap-4">
-            <CheckCircle className="w-10 h-10 text-mwm-green" />
-            <div>
-              <h4 className="text-lg font-bold">Claiming Recommendation</h4>
-              <p className="text-gray-400 text-sm mt-1">
-                Claim at Age <strong className="text-mwm-green text-lg">{clientWinner.age}</strong> to maximize portfolio balance at age {targetMaxPortfolioAge}.
-              </p>
-            </div>
-          </div>
-
-          <div className="grid grid-cols-3 md:grid-cols-9 gap-3 mb-8">
-            {clientOutcomes.map((outcome) => {
-              const isWinner = outcome.age === clientWinner.age;
-              const isSelected = outcome.age === inputs.ssStartAge;
-              return (
-              <div
-                onClick={() => onUpdateSSStartAge(outcome.age)}
-                key={outcome.age}
-                className={`p-3 rounded-lg border cursor-pointer hover:shadow-md transition-all relative ${isWinner ? 'border-mwm-green bg-mwm-green/10' : isSelected ? 'border-blue-500 bg-blue-50' : 'border-slate-200 bg-slate-50 hover:border-mwm-green/40'}`}
-              >
-                <div className="flex items-center gap-1 mb-1">
-                  {isSelected && (
-                    <span className="bg-blue-600 text-white text-[9px] font-bold px-1 py-0.5 rounded">Selected</span>
-                  )}
-                  {isWinner && !isSelected && (
-                    <span className="bg-mwm-green text-white text-[9px] font-bold px-1 py-0.5 rounded">Best</span>
-                  )}
-                </div>
-                <p className="text-xs font-bold text-slate-500">Age {outcome.age}</p>
-                <p className={`text-sm font-bold ${isWinner ? 'text-mwm-green/80' : isSelected ? 'text-blue-700' : 'text-slate-700'}`}>
-                  ${Math.round(outcome.balance).toLocaleString()}
+          {clientLocked ? (
+            <div className="bg-slate-100 p-6 rounded-xl mb-6 flex items-center gap-4 border border-slate-300">
+              <Shield className="w-10 h-10 text-slate-400" />
+              <div>
+                <h4 className="text-lg font-bold text-slate-700">Benefits Already in Effect</h4>
+                <p className="text-slate-500 text-sm mt-1">
+                  {clientInfo.name || 'Client'} is already receiving Social Security at age <strong className="text-slate-800">{inputs.ssStartAge}</strong> — claiming age is locked.
                 </p>
-                <p className="text-[10px] text-slate-400">@ Age {targetMaxPortfolioAge}</p>
               </div>
-              );
-            })}
-          </div>
+            </div>
+          ) : (
+            <>
+              <div className="bg-black text-white p-6 rounded-xl mb-6 flex items-center gap-4">
+                <CheckCircle className="w-10 h-10 text-mwm-green" />
+                <div>
+                  <h4 className="text-lg font-bold">Claiming Recommendation</h4>
+                  <p className="text-gray-400 text-sm mt-1">
+                    Claim at Age <strong className="text-mwm-green text-lg">{clientWinner.age}</strong> to maximize portfolio balance at age {targetMaxPortfolioAge}.
+                  </p>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-3 md:grid-cols-9 gap-3 mb-8">
+                {clientOutcomes.map((outcome) => {
+                  const isWinner = outcome.age === clientWinner.age;
+                  const isSelected = outcome.age === inputs.ssStartAge;
+                  return (
+                  <div
+                    onClick={() => onUpdateSSStartAge(outcome.age)}
+                    key={outcome.age}
+                    className={`p-3 rounded-lg border cursor-pointer hover:shadow-md transition-all relative ${isWinner ? 'border-mwm-green bg-mwm-green/10' : isSelected ? 'border-blue-500 bg-blue-50' : 'border-slate-200 bg-slate-50 hover:border-mwm-green/40'}`}
+                  >
+                    <div className="flex items-center gap-1 mb-1">
+                      {isSelected && (
+                        <span className="bg-blue-600 text-white text-[9px] font-bold px-1 py-0.5 rounded">Selected</span>
+                      )}
+                      {isWinner && !isSelected && (
+                        <span className="bg-mwm-green text-white text-[9px] font-bold px-1 py-0.5 rounded">Best</span>
+                      )}
+                    </div>
+                    <p className="text-xs font-bold text-slate-500">Age {outcome.age}</p>
+                    <p className={`text-sm font-bold ${isWinner ? 'text-mwm-green/80' : isSelected ? 'text-blue-700' : 'text-slate-700'}`}>
+                      ${Math.round(outcome.balance).toLocaleString()}
+                    </p>
+                    <p className="text-[10px] text-slate-400">@ Age {targetMaxPortfolioAge}</p>
+                  </div>
+                  );
+                })}
+              </div>
+            </>
+          )}
         </div>
       )}
 
