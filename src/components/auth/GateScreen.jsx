@@ -27,11 +27,11 @@ const WORKER_SS_PIA = 3384;
 const SPOUSE_SS_PIA = 1692;
 
 const SAMPLE_ASSUMPTIONS = {
-  b1: { return: 2.0, stdDev: 2.0, name: "B1 - Liquidity", historical: 2.8 },
-  b2: { return: 4.0, stdDev: 5.0, name: "B2 - Bridge", historical: 5.2 },
-  b3: { return: 5.5, stdDev: 8.0, name: "B3 - Tactical Balanced", historical: 7.5 },
-  b4: { return: 6.0, stdDev: 12.0, name: "B4 - Inc & Growth", historical: 9.1 },
-  b5: { return: 8.0, stdDev: 18.0, name: "B5 - Long Term Growth", historical: 10.2 },
+  b1: { return: 3.0, stdDev: 1.7, name: "B1 - Liquidity", historical: 3.4 },
+  b2: { return: 4.5, stdDev: 6.0, name: "B2 - Bridge", historical: 5.1 },
+  b3: { return: 8.0, stdDev: 9.5, name: "B3 - Tactical Balanced", historical: 10.1 },
+  b4: { return: 6.5, stdDev: 12.0, name: "B4 - Inc & Growth", historical: 7.8 },
+  b5: { return: 10.0, stdDev: 15.0, name: "B5 - Long Term Growth", historical: 11.9 },
 };
 
 const SAMPLE_INPUTS_BASE = {

@@ -1238,7 +1238,14 @@ export const runSimulation = (basePlan, assumptions, inputs, rebalanceFreq, isMo
   let results = [];
   let failureCount = 0;
   const iterations = isMonteCarlo ? 1000 : 1;
-  const benchmarkReturn = assumptions.b3.return / 100;
+  // Benchmark: VBIAX (Vanguard Balanced Index Admiral — 60/40)
+  // Forward-looking estimates with ~18% haircut from 10yr backtested (9.8% / 10.0%)
+  const VBIAX_RETURN = 8.0; // Forward-looking return estimate %
+  const VBIAX_STDDEV = 10.0; // 10yr annualized std dev %
+  const benchmarkReturn = VBIAX_RETURN / 100;
+  const benchmarkStdDev = VBIAX_STDDEV / 100;
+  // Advisory fee applied annually to the managed bucket portfolio (not the passive VBIAX benchmark)
+  const advisoryFeeRate = (inputs.advisoryFee ?? 1.0) / 100;
 
   // Calculate VA allocation if enabled
   let vaAllocationAmount = 0;
@@ -1336,6 +1343,16 @@ export const runSimulation = (basePlan, assumptions, inputs, rebalanceFreq, isMo
       balances.b4 *= (1 + rates.b4);
       balances.b5 *= (1 + rates.b5);
 
+      // Deduct advisory fee proportionally from all buckets
+      if (advisoryFeeRate > 0) {
+        const feeMultiplier = 1 - advisoryFeeRate;
+        balances.b1 *= feeMultiplier;
+        balances.b2 *= feeMultiplier;
+        balances.b3 *= feeMultiplier;
+        balances.b4 *= feeMultiplier;
+        balances.b5 *= feeMultiplier;
+      }
+
       // Add one-time contributions to b5 (long-term bucket)
       if (oneTimeContributions > 0) {
         balances.b5 += oneTimeContributions;
@@ -1348,7 +1365,7 @@ export const runSimulation = (basePlan, assumptions, inputs, rebalanceFreq, isMo
       const annualGrowth = postGrowthTotal - startTotal - oneTimeContributions;
 
       const appliedBench = isMonteCarlo
-        ? (benchmarkReturn + (assumptions.b3.stdDev / 100) * randn_bm())
+        ? (benchmarkReturn + benchmarkStdDev * randn_bm())
         : benchmarkReturn;
       benchmarkBalance *= (1 + appliedBench);
 

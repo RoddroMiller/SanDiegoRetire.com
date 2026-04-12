@@ -126,6 +126,19 @@ export const InputsPage = ({
                 </div>
               </div>
 
+              {/* Advisory Fee */}
+              <div className="grid grid-cols-1 gap-3 mt-3">
+                <div className="relative group">
+                  <label className="text-xs font-bold text-slate-500 uppercase flex items-center gap-1">
+                    Advisory Fee (% / year) <Info className="w-3 h-3 text-slate-400" />
+                  </label>
+                  <div className="absolute left-0 bottom-full mb-1 hidden group-hover:block w-56 bg-slate-800 text-white text-xs p-2 rounded shadow-lg z-10">
+                    Annual advisory management fee as a percentage of portfolio value. Deducted from the managed portfolio each year. The VBIAX benchmark is shown without this fee for comparison.
+                  </div>
+                  <input type="number" step="0.1" min="0" max="3" name="advisoryFee" value={inputs.advisoryFee} onChange={onInputChange} className="w-full px-3 py-2 text-sm border rounded-md" />
+                </div>
+              </div>
+
               {/* Tax Settings Section */}
               <div className="border-t border-slate-200 pt-4 mt-4">
                 <div className="flex items-center justify-between mb-3">
