@@ -1168,21 +1168,44 @@ export const ArchitectPage = ({
 
       {/* PRINT PAGE 5: Portfolio Sustainability */}
       <PrintPageWrapper pageNumber={5} totalPages={totalPrintPages} title="Portfolio Sustainability" subtitle={
-        (printOptions?.mode === 'montecarlo' ? 'Monte Carlo median projection' : 'Deterministic projection') +
+        (printOptions?.mode === 'montecarlo'
+          ? `Monte Carlo simulation — ${(monteCarloData?.successRate || 0).toFixed(0)}% success rate (1,000 scenarios)`
+          : 'Deterministic projection') +
         (inputs.taxEnabled ? ' with estimated taxes' : '')
       }>
         {/* Chart */}
         <div className="border border-slate-200 rounded-lg p-3 mb-4">
-          <ComposedChart width={670} height={180} data={printData}>
-            <CartesianGrid strokeDasharray="3 3" vertical={false} />
-            <XAxis dataKey="year" tick={{ fontSize: 10 }} label={{ value: 'Year', position: 'insideBottom', offset: -2, fontSize: 10 }} />
-            <YAxis tickFormatter={(val) => val >= 2000000 ? `$${Math.round(val / 1000000)}M` : `$${Math.round(val / 1000)}k`} tick={{ fontSize: 10 }} />
-            <YAxis yAxisId="right" orientation="right" tickFormatter={(val) => `${val.toFixed(1)}%`} domain={[0, 'auto']} tick={{ fontSize: 10 }} />
-            <Legend wrapperStyle={{ fontSize: '11px' }} />
-            <Area type="monotone" dataKey="total" name="Bucket Strategy" fill={COLORS.areaFill} stroke={COLORS.areaFill} fillOpacity={0.8} />
-            {inputs.showBenchmark && <Line type="monotone" dataKey="benchmark" name="Passive 60/40" stroke={COLORS.benchmark} strokeDasharray="5 5" strokeWidth={2} dot={false} />}
-            <Line yAxisId="right" type="monotone" dataKey="distRate" name="Distribution Rate" stroke={COLORS.distRate} strokeWidth={2} dot={false} />
-          </ComposedChart>
+          {printOptions?.mode === 'montecarlo' && monteCarloData?.data ? (
+            /* Monte Carlo fan chart: 90th, 50th, 10th percentile bands */
+            <ComposedChart width={670} height={180} data={monteCarloData.data.map((mc, idx) => ({
+              year: idx + 1,
+              p90: Math.round(mc.p90),
+              median: Math.round(mc.median),
+              p10: Math.round(mc.p10),
+              total: Math.round(mc.median),
+            }))}>
+              <CartesianGrid strokeDasharray="3 3" vertical={false} />
+              <XAxis dataKey="year" tick={{ fontSize: 10 }} label={{ value: 'Year', position: 'insideBottom', offset: -2, fontSize: 10 }} />
+              <YAxis tickFormatter={(val) => val >= 2000000 ? `$${Math.round(val / 1000000)}M` : `$${Math.round(val / 1000)}k`} tick={{ fontSize: 10 }} />
+              <Legend wrapperStyle={{ fontSize: '11px' }} />
+              <Area type="monotone" dataKey="p90" name="90th Percentile" fill="#d1fae5" stroke="#10b981" fillOpacity={0.4} />
+              <Area type="monotone" dataKey="median" name="50th Percentile (Median)" fill="#bfdbfe" stroke="#3b82f6" fillOpacity={0.5} />
+              <Area type="monotone" dataKey="p10" name="10th Percentile" fill="#fee2e2" stroke="#ef4444" fillOpacity={0.4} />
+              <Line type="monotone" dataKey="total" name="Deterministic" stroke={COLORS.areaFill} strokeWidth={2} dot={false} strokeDasharray="5 5" />
+            </ComposedChart>
+          ) : (
+            /* Deterministic single-line chart */
+            <ComposedChart width={670} height={180} data={printData}>
+              <CartesianGrid strokeDasharray="3 3" vertical={false} />
+              <XAxis dataKey="year" tick={{ fontSize: 10 }} label={{ value: 'Year', position: 'insideBottom', offset: -2, fontSize: 10 }} />
+              <YAxis tickFormatter={(val) => val >= 2000000 ? `$${Math.round(val / 1000000)}M` : `$${Math.round(val / 1000)}k`} tick={{ fontSize: 10 }} />
+              <YAxis yAxisId="right" orientation="right" tickFormatter={(val) => `${val.toFixed(1)}%`} domain={[0, 'auto']} tick={{ fontSize: 10 }} />
+              <Legend wrapperStyle={{ fontSize: '11px' }} />
+              <Area type="monotone" dataKey="total" name="Bucket Strategy" fill={COLORS.areaFill} stroke={COLORS.areaFill} fillOpacity={0.8} />
+              {inputs.showBenchmark && <Line type="monotone" dataKey="benchmark" name="Passive 60/40" stroke={COLORS.benchmark} strokeDasharray="5 5" strokeWidth={2} dot={false} />}
+              <Line yAxisId="right" type="monotone" dataKey="distRate" name="Distribution Rate" stroke={COLORS.distRate} strokeWidth={2} dot={false} />
+            </ComposedChart>
+          )}
         </div>
 
         {/* Cash Flow Table */}
