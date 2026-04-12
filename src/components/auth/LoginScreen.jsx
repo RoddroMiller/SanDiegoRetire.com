@@ -44,7 +44,7 @@ export const LoginScreen = ({ onBack, onLogin, onPasswordReset, authError, reset
   if (isResetMode && resetStatus === 'sent') {
     return (
       <div className="min-h-screen bg-slate-100 flex items-center justify-center p-4 sm:p-6">
-        <div className="bg-white p-6 sm:p-8 rounded-xl shadow-lg w-full max-w-sm">
+        <div className="bg-white p-6 sm:p-8 rounded-xl shadow-lg w-full max-w-md">
           <div className="text-center">
             <img src={LOGO_URL} alt="Logo" className="h-24 sm:h-32 mx-auto mb-4" />
             <div className="mx-auto w-12 h-12 bg-mwm-green/20 rounded-full flex items-center justify-center mb-4">
@@ -87,7 +87,7 @@ export const LoginScreen = ({ onBack, onLogin, onPasswordReset, authError, reset
   if (isResetMode) {
     return (
       <div className="min-h-screen bg-slate-100 flex items-center justify-center p-4 sm:p-6">
-        <div className="bg-white p-6 sm:p-8 rounded-xl shadow-lg w-full max-w-sm">
+        <div className="bg-white p-6 sm:p-8 rounded-xl shadow-lg w-full max-w-md">
           <img src={LOGO_URL} alt="Logo" className="h-24 sm:h-32 mx-auto mb-4" />
           <button
             onClick={() => {
@@ -155,7 +155,7 @@ export const LoginScreen = ({ onBack, onLogin, onPasswordReset, authError, reset
   // Main Login/Signup View
   return (
     <div className="min-h-screen bg-slate-100 flex items-center justify-center p-4 sm:p-6">
-      <div className="bg-white p-6 sm:p-8 rounded-xl shadow-lg w-full max-w-sm">
+      <div className="bg-white p-6 sm:p-8 rounded-xl shadow-lg w-full max-w-md">
         <img src={LOGO_URL} alt="Logo" className="h-24 sm:h-32 mx-auto mb-4" />
         <button
           onClick={onBack}
