@@ -1096,12 +1096,14 @@ export const calculateBasePlan = (inputs, assumptions, clientInfo, vaEnabled = f
   const getAnnualGap = (yearIndex) => getAnnualDetails(yearIndex).gap;
 
   // Tax-aware gap: estimate the gross withdrawal needed to cover spending + taxes
+  // Even when income covers spending (gap=0), taxes on SS/pension/other income may
+  // require a portfolio withdrawal, so we always compute the tax liability.
   const getTaxAwareGap = (yearIndex) => {
     if (!inputs.taxEnabled) return getAnnualGap(yearIndex);
 
     const details = getAnnualDetails(yearIndex);
     const rawGap = details.gap;
-    if (rawGap <= 0) return 0;
+    const surplus = details.surplus || 0;
 
     // Estimate tax on the withdrawal using account-type split
     const traditionalPct = (inputs.traditionalPercent ?? 60) / 100;
@@ -1136,7 +1138,8 @@ export const calculateBasePlan = (inputs, assumptions, clientInfo, vaEnabled = f
         otherIncome: details.otherIncome,
         employmentIncome: details.employmentIncome
       }, { filingStatus, stateRate, stateCode: inputs.stateCode || '' }, isSenior);
-      withdrawal = rawGap + taxData.totalTax;
+      // Net withdrawal: spending gap + taxes, offset by any income surplus
+      withdrawal = Math.max(0, rawGap + taxData.totalTax - surplus);
     }
 
     return withdrawal;
@@ -1152,17 +1155,14 @@ export const calculateBasePlan = (inputs, assumptions, clientInfo, vaEnabled = f
     return totalPV;
   };
 
-  // Offset bucket years by pre-retirement gap: when the simulation starts before client retirement
-  // (e.g., to capture partner's early SS), the first N years have zero gaps because the client is
-  // still working. Bucket horizons should be relative to when withdrawals actually begin.
-  const retirementYearOffset = Math.max(0, clientInfo.retirementAge - simulationStartAge);
-
-  // Calculate raw bucket targets from spending needs (offset by pre-retirement years)
-  const b1Start = 1 + retirementYearOffset;
+  // Bucket allocation is based on the full illustrated period starting from simulationStartAge.
+  // If the client is still working in early years, those years will have $0 or minimal withdrawal
+  // needs (surplus covers expenses + taxes). The advisor handles transitions via rebalancing.
+  const b1Start = 1;
   const b1Target = Math.round(calculateBucketNeed(b1Start, b1Start + 2, assumptions.b1.return) / 1000) * 1000;
   const b2Start = b1Start + 3;
   const b2Target = Math.round(calculateBucketNeed(b2Start, b2Start + 2, assumptions.b2.return) / 1000) * 1000;
-  // B3 covers years 7-15 of retirement with minimum 20% and maximum 25% allocation
+  // B3 covers years 7-15 with minimum 20% and maximum 25% allocation
   const b3Start = b1Start + 6;
   const b3Calculated = Math.round(calculateBucketNeed(b3Start, b3Start + 8, assumptions.b3.return) / 1000) * 1000;
   // Only apply B3 min/max floors when portfolio can cover B1+B2 spending needs
@@ -1341,25 +1341,20 @@ export const runSimulation = (basePlan, assumptions, inputs, rebalanceFreq, isMo
         balances.b5 += oneTimeContributions;
       }
 
-      // Income surplus (income > expenses) flows into portfolio as savings
-      if (surplus > 0) {
-        balances.b5 += surplus;
-      }
+      // Income surplus handling is deferred until after tax calculation,
+      // so we can net surplus against tax liability before adding to portfolio.
 
       const postGrowthTotal = Object.values(balances).reduce((a, b) => a + b, 0);
-      const annualGrowth = postGrowthTotal - startTotal - oneTimeContributions - (surplus > 0 ? surplus : 0);
+      const annualGrowth = postGrowthTotal - startTotal - oneTimeContributions;
 
       const appliedBench = isMonteCarlo
         ? (benchmarkReturn + (assumptions.b3.stdDev / 100) * randn_bm())
         : benchmarkReturn;
       benchmarkBalance *= (1 + appliedBench);
 
-      // Add one-time contributions and surplus to benchmark as well
+      // Add one-time contributions to benchmark (surplus added after tax netting below)
       if (oneTimeContributions > 0) {
         benchmarkBalance += oneTimeContributions;
-      }
-      if (surplus > 0) {
-        benchmarkBalance += surplus;
       }
 
       // VA GIB: Calculate guaranteed income and update VA account
@@ -1426,11 +1421,14 @@ export const runSimulation = (basePlan, assumptions, inputs, rebalanceFreq, isMo
       const totalRMD = clientRMD + partnerRMD;
 
       // --- Tax-inclusive withdrawal calculation ---
+      // When surplus > 0 (income > expenses), taxes are paid from income first.
+      // Only the net shortfall (if any) requires a portfolio withdrawal.
       let totalWithdrawal = adjustedGap;
       let taxData = { federalTax: 0, stateTax: 0, totalTax: 0, effectiveRate: '0.0', qdivTax: 0, taxableSS: 0, deduction: 0 };
       let nqTaxDetail = {};
       let rmdAmount = totalRMD;
       let rmdExcess = 0;
+      let netSurplus = surplus; // Track surplus after tax netting
 
       if (inputs.taxEnabled) {
         // Resolve per-age override or use defaults
@@ -1461,50 +1459,15 @@ export const runSimulation = (basePlan, assumptions, inputs, rebalanceFreq, isMo
         const filingStatus = (inputs.filingStatus === 'married' && !bothAliveForTax) ? 'single' : (inputs.filingStatus || 'married');
         const stateRate = inputs.stateRate || 0;
 
-        // Iterate to convergence with balance constraints + RMD enforcement
-        // Tax depends on withdrawal amounts, withdrawal depends on tax, and both are
-        // constrained by available account balances
-        let withdrawal = adjustedGap;
-        let finalTradWithdrawal = 0, finalRothWithdrawal = 0, finalNqWithdrawal = 0;
-
-        for (let taxIter = 0; taxIter < 6; taxIter++) {
-          // Step 1: Split by percentage
-          let tradW = withdrawal * traditionalPct;
-          let rothW = withdrawal * rothPct;
-          let nqW = withdrawal * nqPct;
-
-          // Step 2: Enforce RMD floor on Traditional
-          if (totalRMD > tradW) {
-            const rmdForce = totalRMD - tradW;
-            tradW = totalRMD;
-            const nonTrad = rothW + nqW;
-            if (nonTrad > rmdForce) {
-              const ratio = (nonTrad - rmdForce) / nonTrad;
-              rothW *= ratio;
-              nqW *= ratio;
-            } else { rothW = 0; nqW = 0; }
-          }
-
-          // Step 3: Cap each at available account balance, redistribute overflow
-          let ovf = 0;
-          if (tradW > traditionalBalance) { ovf += tradW - traditionalBalance; tradW = traditionalBalance; }
-          if (rothW > rothBalance) { ovf += rothW - rothBalance; rothW = rothBalance; }
-          if (nqW > nqAccountBalance) { ovf += nqW - nqAccountBalance; nqW = nqAccountBalance; }
-          // Redistribute: Traditional → NQ → Roth (least tax-advantaged first)
-          if (ovf > 0) { const add = Math.min(ovf, traditionalBalance - tradW); tradW += add; ovf -= add; }
-          if (ovf > 0) { const add = Math.min(ovf, nqAccountBalance - nqW); nqW += add; ovf -= add; }
-          if (ovf > 0) { const add = Math.min(ovf, rothBalance - rothW); rothW += add; ovf -= add; }
-
-          finalTradWithdrawal = tradW;
-          finalRothWithdrawal = rothW;
-          finalNqWithdrawal = nqW;
-
-          // Step 4: Compute tax on the actual constrained split
+        // When there's an income surplus, first compute tax on income alone (no withdrawal).
+        // Surplus pays taxes before any portfolio withdrawal is needed.
+        if (surplus > 0 && adjustedGap === 0) {
+          // Compute tax on income only — no portfolio withdrawal
           taxData = calculateAnnualTax({
             ssIncome,
             pensionIncome: pensionIncome + (vaIncome || 0),
-            traditionalWithdrawal: tradW,
-            rothWithdrawal: rothW,
+            traditionalWithdrawal: 0,
+            rothWithdrawal: 0,
             nqTaxableGain: nqAnnualCapGains,
             nqQualifiedDividends,
             nqOrdinaryDividends,
@@ -1512,11 +1475,157 @@ export const runSimulation = (basePlan, assumptions, inputs, rebalanceFreq, isMo
             employmentIncome
           }, { filingStatus, stateRate, stateCode: inputs.stateCode || '' }, isSenior);
 
-          const newWithdrawal = adjustedGap + taxData.totalTax;
-          if (Math.abs(newWithdrawal - withdrawal) < 1) break;
-          withdrawal = newWithdrawal;
+          if (surplus >= taxData.totalTax) {
+            // Surplus covers all taxes — net surplus flows to portfolio as contribution
+            netSurplus = surplus - taxData.totalTax;
+            totalWithdrawal = 0;
+            nqTaxDetail = {
+              nqWithdrawal: 0,
+              nqTaxableGain: Math.round(nqAnnualCapGains),
+              nqQualifiedDividends: Math.round(nqQualifiedDividends),
+              nqOrdinaryDividends: Math.round(nqOrdinaryDividends),
+              nqBalanceForTax: Math.round(nqBalanceForTax),
+              traditionalPctUsed: 0, rothPctUsed: 0, nqPctUsed: 0
+            };
+          } else {
+            // Surplus partially covers taxes — need withdrawal for the rest
+            // Re-iterate with the shortfall as the starting withdrawal
+            netSurplus = 0;
+            let withdrawal = taxData.totalTax - surplus;
+            let finalTradW = 0, finalRothW = 0, finalNqW = 0;
+
+            for (let taxIter = 0; taxIter < 6; taxIter++) {
+              let tradW = withdrawal * traditionalPct;
+              let rothW = withdrawal * rothPct;
+              let nqW = withdrawal * nqPct;
+
+              if (totalRMD > tradW) {
+                const rmdForce = totalRMD - tradW;
+                tradW = totalRMD;
+                const nonTrad = rothW + nqW;
+                if (nonTrad > rmdForce) { const ratio = (nonTrad - rmdForce) / nonTrad; rothW *= ratio; nqW *= ratio; }
+                else { rothW = 0; nqW = 0; }
+              }
+
+              let ovf = 0;
+              if (tradW > traditionalBalance) { ovf += tradW - traditionalBalance; tradW = traditionalBalance; }
+              if (rothW > rothBalance) { ovf += rothW - rothBalance; rothW = rothBalance; }
+              if (nqW > nqAccountBalance) { ovf += nqW - nqAccountBalance; nqW = nqAccountBalance; }
+              if (ovf > 0) { const add = Math.min(ovf, traditionalBalance - tradW); tradW += add; ovf -= add; }
+              if (ovf > 0) { const add = Math.min(ovf, nqAccountBalance - nqW); nqW += add; ovf -= add; }
+              if (ovf > 0) { const add = Math.min(ovf, rothBalance - rothW); rothW += add; ovf -= add; }
+
+              finalTradW = tradW; finalRothW = rothW; finalNqW = nqW;
+
+              taxData = calculateAnnualTax({
+                ssIncome, pensionIncome: pensionIncome + (vaIncome || 0),
+                traditionalWithdrawal: tradW, rothWithdrawal: rothW,
+                nqTaxableGain: nqAnnualCapGains, nqQualifiedDividends, nqOrdinaryDividends,
+                otherIncome, employmentIncome
+              }, { filingStatus, stateRate, stateCode: inputs.stateCode || '' }, isSenior);
+
+              const newWithdrawal = Math.max(0, taxData.totalTax - surplus);
+              if (Math.abs(newWithdrawal - withdrawal) < 1) break;
+              withdrawal = newWithdrawal;
+            }
+            totalWithdrawal = withdrawal;
+
+            traditionalBalance = Math.max(0, traditionalBalance - finalTradW);
+            rothBalance = Math.max(0, rothBalance - finalRothW);
+            nqAccountBalance = Math.max(0, nqAccountBalance - finalNqW);
+
+            const totalFinal = finalTradW + finalRothW + finalNqW;
+            nqTaxDetail = {
+              nqWithdrawal: Math.round(finalNqW),
+              nqTaxableGain: Math.round(nqAnnualCapGains),
+              nqQualifiedDividends: Math.round(nqQualifiedDividends),
+              nqOrdinaryDividends: Math.round(nqOrdinaryDividends),
+              nqBalanceForTax: Math.round(nqBalanceForTax),
+              traditionalPctUsed: totalFinal > 0 ? Math.round((finalTradW / totalFinal) * 100) : 0,
+              rothPctUsed: totalFinal > 0 ? Math.round((finalRothW / totalFinal) * 100) : 0,
+              nqPctUsed: totalFinal > 0 ? 100 - Math.round((finalTradW / totalFinal) * 100) - Math.round((finalRothW / totalFinal) * 100) : 0
+            };
+          }
+        } else {
+          // Standard case: spending gap requires portfolio withdrawal
+          // Iterate to convergence with balance constraints + RMD enforcement
+          let withdrawal = adjustedGap;
+          let finalTradWithdrawal = 0, finalRothWithdrawal = 0, finalNqWithdrawal = 0;
+
+          for (let taxIter = 0; taxIter < 6; taxIter++) {
+            // Step 1: Split by percentage
+            let tradW = withdrawal * traditionalPct;
+            let rothW = withdrawal * rothPct;
+            let nqW = withdrawal * nqPct;
+
+            // Step 2: Enforce RMD floor on Traditional
+            if (totalRMD > tradW) {
+              const rmdForce = totalRMD - tradW;
+              tradW = totalRMD;
+              const nonTrad = rothW + nqW;
+              if (nonTrad > rmdForce) {
+                const ratio = (nonTrad - rmdForce) / nonTrad;
+                rothW *= ratio;
+                nqW *= ratio;
+              } else { rothW = 0; nqW = 0; }
+            }
+
+            // Step 3: Cap each at available account balance, redistribute overflow
+            let ovf = 0;
+            if (tradW > traditionalBalance) { ovf += tradW - traditionalBalance; tradW = traditionalBalance; }
+            if (rothW > rothBalance) { ovf += rothW - rothBalance; rothW = rothBalance; }
+            if (nqW > nqAccountBalance) { ovf += nqW - nqAccountBalance; nqW = nqAccountBalance; }
+            // Redistribute: Traditional → NQ → Roth (least tax-advantaged first)
+            if (ovf > 0) { const add = Math.min(ovf, traditionalBalance - tradW); tradW += add; ovf -= add; }
+            if (ovf > 0) { const add = Math.min(ovf, nqAccountBalance - nqW); nqW += add; ovf -= add; }
+            if (ovf > 0) { const add = Math.min(ovf, rothBalance - rothW); rothW += add; ovf -= add; }
+
+            finalTradWithdrawal = tradW;
+            finalRothWithdrawal = rothW;
+            finalNqWithdrawal = nqW;
+
+            // Step 4: Compute tax on the actual constrained split
+            taxData = calculateAnnualTax({
+              ssIncome,
+              pensionIncome: pensionIncome + (vaIncome || 0),
+              traditionalWithdrawal: tradW,
+              rothWithdrawal: rothW,
+              nqTaxableGain: nqAnnualCapGains,
+              nqQualifiedDividends,
+              nqOrdinaryDividends,
+              otherIncome,
+              employmentIncome
+            }, { filingStatus, stateRate, stateCode: inputs.stateCode || '' }, isSenior);
+
+            const newWithdrawal = adjustedGap + taxData.totalTax;
+            if (Math.abs(newWithdrawal - withdrawal) < 1) break;
+            withdrawal = newWithdrawal;
+          }
+          totalWithdrawal = withdrawal;
+          netSurplus = 0;
+
+          // Compute effective percentages used
+          const totalFinalWithdrawal = finalTradWithdrawal + finalRothWithdrawal + finalNqWithdrawal;
+          const effTradPct = totalFinalWithdrawal > 0 ? Math.round((finalTradWithdrawal / totalFinalWithdrawal) * 100) : 0;
+          const effRothPct = totalFinalWithdrawal > 0 ? Math.round((finalRothWithdrawal / totalFinalWithdrawal) * 100) : 0;
+          const effNqPct = totalFinalWithdrawal > 0 ? 100 - effTradPct - effRothPct : 0;
+
+          nqTaxDetail = {
+            nqWithdrawal: Math.round(finalNqWithdrawal),
+            nqTaxableGain: Math.round(nqAnnualCapGains),
+            nqQualifiedDividends: Math.round(nqQualifiedDividends),
+            nqOrdinaryDividends: Math.round(nqOrdinaryDividends),
+            nqBalanceForTax: Math.round(nqBalanceForTax),
+            traditionalPctUsed: effTradPct,
+            rothPctUsed: effRothPct,
+            nqPctUsed: effNqPct
+          };
+
+          // Update account-type balances based on actual withdrawals
+          traditionalBalance = Math.max(0, traditionalBalance - finalTradWithdrawal);
+          rothBalance = Math.max(0, rothBalance - finalRothWithdrawal);
+          nqAccountBalance = Math.max(0, nqAccountBalance - finalNqWithdrawal);
         }
-        totalWithdrawal = withdrawal;
 
         // Handle RMD excess (when RMD > total spending need, excess reinvested to NQ)
         if (totalRMD > 0) {
@@ -1526,28 +1635,9 @@ export const runSimulation = (basePlan, assumptions, inputs, rebalanceFreq, isMo
             totalWithdrawal = Math.max(totalWithdrawal, totalRMD);
           }
         }
-
-        // Compute effective percentages used
-        const totalFinalWithdrawal = finalTradWithdrawal + finalRothWithdrawal + finalNqWithdrawal;
-        const effTradPct = totalFinalWithdrawal > 0 ? Math.round((finalTradWithdrawal / totalFinalWithdrawal) * 100) : 0;
-        const effRothPct = totalFinalWithdrawal > 0 ? Math.round((finalRothWithdrawal / totalFinalWithdrawal) * 100) : 0;
-        const effNqPct = totalFinalWithdrawal > 0 ? 100 - effTradPct - effRothPct : 0;
-
-        nqTaxDetail = {
-          nqWithdrawal: Math.round(finalNqWithdrawal),
-          nqTaxableGain: Math.round(nqAnnualCapGains),
-          nqQualifiedDividends: Math.round(nqQualifiedDividends),
-          nqOrdinaryDividends: Math.round(nqOrdinaryDividends),
-          nqBalanceForTax: Math.round(nqBalanceForTax),
-          traditionalPctUsed: effTradPct,
-          rothPctUsed: effRothPct,
-          nqPctUsed: effNqPct
-        };
-
-        // Update account-type balances based on actual withdrawals
-        traditionalBalance = Math.max(0, traditionalBalance - finalTradWithdrawal);
-        rothBalance = Math.max(0, rothBalance - finalRothWithdrawal);
-        nqAccountBalance = Math.max(0, nqAccountBalance - finalNqWithdrawal + rmdExcess);
+        if (rmdExcess > 0) {
+          nqAccountBalance += rmdExcess;
+        }
       } else {
         // Tax not enabled — still track balances proportionally
         const tradPct = (inputs.traditionalPercent ?? 60) / 100;
@@ -1559,12 +1649,20 @@ export const runSimulation = (basePlan, assumptions, inputs, rebalanceFreq, isMo
         rmdAmount = 0;
       }
 
+      // Net surplus (after taxes) flows into portfolio as contribution to NQ account
+      // (surplus is after-tax income, so it enters the non-qualified/taxable account)
+      if (netSurplus > 0) {
+        balances.b5 += netSurplus;
+        nqAccountBalance += netSurplus;
+        benchmarkBalance += netSurplus;
+      }
+
       let withdrawalAmount = totalWithdrawal;
 
-      const benchmarkWithdrawal = gap + taxData.totalTax;
-      if (benchmarkBalance >= benchmarkWithdrawal) {
+      const benchmarkWithdrawal = gap + taxData.totalTax - surplus;
+      if (benchmarkWithdrawal > 0 && benchmarkBalance >= benchmarkWithdrawal) {
         benchmarkBalance -= benchmarkWithdrawal;
-      } else {
+      } else if (benchmarkWithdrawal > 0) {
         benchmarkBalance = 0;
       }
 
@@ -1670,6 +1768,8 @@ export const runSimulation = (basePlan, assumptions, inputs, rebalanceFreq, isMo
         growth: Math.round(annualGrowth),
         ssIncome: Math.round(income + vaGuaranteedIncome), // Include VA income in reported income
         contribution: Math.round(oneTimeContributions),
+        surplus: Math.round(netSurplus),
+        livingExpenses: Math.round(expenses),
         expenses: Math.round(expenses + taxData.totalTax),
         distribution: Math.round(totalWithdrawal),
         total: Math.max(0, total),

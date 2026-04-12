@@ -317,6 +317,7 @@ export const ArchitectPage = ({
     const hasEmployment = projectionData.some(r => r.employmentIncomeDetail > 0);
     const hasOther = projectionData.some(r => r.otherIncomeDetail > 0);
     const hasContributions = projectionData.some(r => r.contribution > 0);
+    const hasSurplus = projectionData.some(r => (r.surplus || 0) > 0);
     const hasNqData = inputs.taxEnabled && projectionData.some(r => r.nqWithdrawal > 0);
     const hasRMD = inputs.taxEnabled && projectionData.some(r => r.rmdAmount > 0);
     const hasRMDExcess = hasRMD && projectionData.some(r => r.rmdExcess > 0);
@@ -328,10 +329,8 @@ export const ArchitectPage = ({
     if (clientInfo.isMarried) {
       rows.push({ label: `${clientInfo.partnerName || 'Partner'} Age`, cls: 'text-slate-500 bg-slate-50', getValue: (r) => Math.floor(r.partnerAge) });
     }
+    // --- INCOME ---
     rows.push(
-      { label: '', cls: 'bg-slate-200', getValue: () => '', isSeparator: true },
-      { label: 'Starting Balance', cls: 'text-slate-700', getValue: (r) => fmt(r.startBalance) },
-      { label: 'Growth', cls: '', getValue: (r) => `${r.growth >= 0 ? '+' : ''}${fmt(r.growth)}`, dynamicCls: (r) => r.growth >= 0 ? 'text-mwm-green/80' : 'text-red-600' },
       { label: '', cls: 'bg-slate-200', getValue: () => '', isSeparator: true },
       { label: 'Social Security', cls: 'text-blue-700', getValue: (r) => fmt(r.ssIncomeDetail || 0) },
       { label: 'Pension', cls: 'text-blue-700', getValue: (r) => fmt(r.pensionIncomeDetail || 0) },
@@ -341,40 +340,49 @@ export const ArchitectPage = ({
     if (hasContributions) rows.push({ label: 'One-Time Contributions', cls: 'text-purple-700', getValue: (r) => r.contribution > 0 ? `+${fmt(r.contribution)}` : '-' });
     rows.push(
       { label: 'Total Income', cls: 'font-bold text-blue-800 bg-blue-50', getValue: (r) => fmt(r.ssIncome) },
-      { label: '', cls: 'bg-slate-200', getValue: () => '', isSeparator: true },
-      { label: 'Total Spending', cls: 'font-bold text-slate-800', getValue: (r) => fmt(r.expenses) },
-      { label: 'Portfolio Withdrawal', cls: 'text-orange-700', getValue: (r) => fmt(r.distribution) },
     );
+    // --- EXPENSES ---
+    rows.push(
+      { label: '', cls: 'bg-slate-200', getValue: () => '', isSeparator: true },
+      { label: 'Living Expenses', cls: 'text-slate-700', getValue: (r) => fmt(r.livingExpenses || r.expenses) },
+    );
+    if (inputs.taxEnabled) {
+      rows.push(
+        { label: 'Federal Tax', cls: 'text-red-600', getValue: (r) => fmt(r.federalTax || 0) },
+        { label: 'State Tax', cls: 'text-red-600', getValue: (r) => fmt(r.stateTax || 0) },
+      );
+    }
+    rows.push(
+      { label: 'Total Expenses', cls: 'font-bold text-slate-800 bg-slate-50', getValue: (r) => fmt(r.expenses) },
+    );
+    // --- RMD ---
     if (hasRMD) {
-      rows.push({ label: 'RMD Floor', cls: 'text-orange-600', getValue: (r) => r.rmdAmount > 0 ? fmt(r.rmdAmount) : '-' });
+      rows.push(
+        { label: '', cls: 'bg-slate-200', getValue: () => '', isSeparator: true },
+        { label: 'RMD Floor', cls: 'text-orange-600', getValue: (r) => r.rmdAmount > 0 ? fmt(r.rmdAmount) : '-' },
+      );
       if (hasRMDExcess) {
         rows.push({ label: 'RMD Excess → NQ', cls: 'text-teal-600', getValue: (r) => r.rmdExcess > 0 ? `+${fmt(r.rmdExcess)}` : '-' });
       }
     }
-    if (inputs.taxEnabled) {
-      rows.push(
-        { label: '', cls: 'bg-slate-200', getValue: () => '', isSeparator: true },
-        { label: 'Federal Tax', cls: 'text-red-600', getValue: (r) => fmt(r.federalTax || 0) },
-        { label: 'State Tax', cls: 'text-red-600', getValue: (r) => fmt(r.stateTax || 0) },
-        { label: 'Total Tax', cls: 'font-bold text-red-700 bg-red-50', getValue: (r) => fmt(r.totalTax || 0) },
-        { label: 'Effective Rate', cls: 'text-mwm-gold/80', getValue: (r) => `${r.effectiveRate || '0'}%` },
-      );
-    }
-    if (hasNqData) {
-      rows.push(
-        { label: '', cls: 'bg-slate-200', getValue: () => '', isSeparator: true },
-        { label: 'Traditional Withdrawal', cls: 'text-blue-600', getValue: (r) => fmt(r.distribution * (r.traditionalPctUsed || 0) / 100) },
-        { label: 'Roth Withdrawal', cls: 'text-mwm-green', getValue: (r) => fmt(r.distribution * (r.rothPctUsed || 0) / 100) },
-        { label: 'NQ Withdrawal', cls: 'text-mwm-gold', getValue: (r) => fmt(r.nqWithdrawal || 0) },
-        { label: '  Realized Cap Gains', cls: 'text-red-500 pl-4', getValue: (r) => fmt(r.nqTaxableGain || 0) },
-        { label: 'Qualified Dividends', cls: 'text-purple-600', getValue: (r) => fmt(r.nqQualifiedDividends || 0) },
-        { label: 'Ordinary Dividends', cls: 'text-pink-600', getValue: (r) => fmt(r.nqOrdinaryDividends || 0) },
-      );
+    // --- PORTFOLIO CONTRIBUTION / DISTRIBUTION ---
+    rows.push({ label: '', cls: 'bg-slate-200', getValue: () => '', isSeparator: true });
+    if (hasSurplus) {
+      rows.push({ label: 'Contribution → LT Growth', cls: 'font-bold text-mwm-green', getValue: (r) => (r.surplus || 0) > 0 ? `+${fmt(r.surplus)}` : '-' });
     }
     rows.push(
+      { label: 'Portfolio Distribution', cls: 'text-orange-700', getValue: (r) => r.distribution > 0 ? fmt(r.distribution) : '-' },
+    );
+    // --- ENDING BALANCE ---
+    rows.push(
       { label: '', cls: 'bg-slate-200', getValue: () => '', isSeparator: true },
-      { label: 'Distribution Rate', cls: 'text-red-600', getValue: (r) => `${r.distRate?.toFixed(1) || '0'}%` },
+      { label: 'Starting Balance', cls: 'text-slate-700', getValue: (r) => fmt(r.startBalance) },
+      { label: 'Growth', cls: '', getValue: (r) => `${r.growth >= 0 ? '+' : ''}${fmt(r.growth)}`, dynamicCls: (r) => r.growth >= 0 ? 'text-mwm-green/80' : 'text-red-600' },
       { label: 'Ending Balance', cls: 'font-bold text-slate-900 bg-mwm-green/10 text-base', getValue: (r) => fmt(Math.max(0, r.total)) },
+      { label: 'Distribution Rate', cls: '', getValue: (r) => {
+        if ((r.surplus || 0) > 0 && r.distribution === 0) return 'n/a';
+        return `${r.distRate?.toFixed(1) || '0'}%`;
+      }, dynamicCls: (r) => (r.surplus || 0) > 0 && r.distribution === 0 ? 'text-mwm-green' : 'text-red-600' },
     );
 
     const chunks = [];
