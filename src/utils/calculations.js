@@ -1239,9 +1239,10 @@ export const runSimulation = (basePlan, assumptions, inputs, rebalanceFreq, isMo
   let failureCount = 0;
   const iterations = isMonteCarlo ? 1000 : 1;
   // Benchmark: VBIAX (Vanguard Balanced Index Admiral — 60/40)
-  // Forward-looking estimates with ~18% haircut from 10yr backtested (9.8% / 10.0%)
-  const VBIAX_RETURN = 8.0; // Forward-looking return estimate %
-  const VBIAX_STDDEV = 10.0; // 10yr annualized std dev %
+  // Forward-looking consensus: 5-7% nominal return, 8-11% stddev (midpoints used)
+  // Sources: State Street, BofA, Yahoo Finance market outlook 2026+
+  const VBIAX_RETURN = 6.0; // Forward-looking return estimate % (midpoint of 5-7% consensus)
+  const VBIAX_STDDEV = 10.0; // Forward-looking stddev % (midpoint of 8-11%)
   const benchmarkReturn = VBIAX_RETURN / 100;
   const benchmarkStdDev = VBIAX_STDDEV / 100;
   // Advisory fee applied annually to the managed bucket portfolio (not the passive VBIAX benchmark)
