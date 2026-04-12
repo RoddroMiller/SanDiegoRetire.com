@@ -862,6 +862,18 @@ export default function BucketPortfolioBuilder() {
     });
   };
 
+  const applyConservativeEstimates = () => {
+    // Conservative assumptions for stress-testing: reduced returns across all buckets
+    const CONSERVATIVE_RETURNS = { b1: 3.0, b2: 4.0, b3: 5.0, b4: 6.0, b5: 7.0 };
+    setAssumptions(prev => {
+      const next = { ...prev };
+      Object.keys(CONSERVATIVE_RETURNS).forEach(k => {
+        if (next[k]) next[k].return = CONSERVATIVE_RETURNS[k];
+      });
+      return next;
+    });
+  };
+
   const applyForwardLookingEstimates = () => {
     // Forward-looking estimates justified by capital market assumptions (2026):
     // B1/B2: higher rate environment supports at/above backtested (structural, not cyclical)
@@ -1182,6 +1194,7 @@ export default function BucketPortfolioBuilder() {
         onAssumptionChange={handleAssumptionChange}
         onApplyHistoricalAverages={applyHistoricalAverages}
         onApplyForwardLooking={applyForwardLookingEstimates}
+        onApplyConservative={applyConservativeEstimates}
         onApplyFourPercentRule={applyFourPercentRule}
         showSettings={showSettings}
         onToggleSettings={() => setShowSettings(!showSettings)}

@@ -22,6 +22,7 @@ export const InputsPage = ({
   onAssumptionChange,
   onApplyHistoricalAverages,
   onApplyForwardLooking,
+  onApplyConservative,
   onApplyFourPercentRule,
   // UI State
   showSettings,
@@ -950,18 +951,24 @@ export const InputsPage = ({
         <h3 className="font-semibold text-slate-800 mb-5 flex items-center gap-2 text-lg">
           <TrendingUp className="w-5 h-5" /> Return Assumptions
         </h3>
-        <div className="grid grid-cols-2 gap-2 mb-4">
+        <div className="grid grid-cols-3 gap-2 mb-4">
           <button
             onClick={onApplyHistoricalAverages}
             className="text-xs flex items-center justify-center gap-1 bg-mwm-green/10 text-mwm-green py-2 rounded border border-mwm-green/30 hover:bg-mwm-green/20 transition-colors font-medium"
           >
-            <RefreshCcw className="w-3.5 h-3.5" /> MWM Backtested
+            <RefreshCcw className="w-3.5 h-3.5" /> Backtested
           </button>
           <button
             onClick={onApplyForwardLooking}
             className="text-xs flex items-center justify-center gap-1 bg-mwm-gold/10 text-mwm-gold py-2 rounded border border-mwm-gold/30 hover:bg-mwm-gold/20 transition-colors font-medium"
           >
-            <TrendingUp className="w-3.5 h-3.5" /> Forward-Looking
+            <TrendingUp className="w-3.5 h-3.5" /> Forward
+          </button>
+          <button
+            onClick={onApplyConservative}
+            className="text-xs flex items-center justify-center gap-1 bg-red-50 text-red-600 py-2 rounded border border-red-200 hover:bg-red-100 transition-colors font-medium"
+          >
+            <Shield className="w-3.5 h-3.5" /> Conservative
           </button>
         </div>
         <p className="text-[10px] text-slate-400 mb-3 -mt-2">
