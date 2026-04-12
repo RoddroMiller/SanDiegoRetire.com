@@ -1247,7 +1247,8 @@ export const runSimulation = (basePlan, assumptions, inputs, rebalanceFreq, isMo
   const BENCHMARK_STDDEV = 10.0; // Forward-looking annualized std dev %
   const benchmarkReturn = BENCHMARK_RETURN / 100;
   const benchmarkStdDev = BENCHMARK_STDDEV / 100;
-  // Advisory fee applied annually to the managed bucket portfolio (not the passive 60/40 benchmark)
+  // Advisory fee applied annually to both the managed bucket portfolio and the passive 60/40 benchmark
+  // (client pays the advisor either way — comparison is purely active vs passive strategy)
   const advisoryFeeRate = (inputs.advisoryFee ?? 1.0) / 100;
 
   // Calculate VA allocation if enabled
@@ -1371,6 +1372,12 @@ export const runSimulation = (basePlan, assumptions, inputs, rebalanceFreq, isMo
         ? (benchmarkReturn + benchmarkStdDev * randn_bm())
         : benchmarkReturn;
       benchmarkBalance *= (1 + appliedBench);
+
+      // Apply same advisory fee to benchmark — client pays the advisor either way,
+      // so the comparison is purely active bucket strategy vs passive 60/40 management
+      if (advisoryFeeRate > 0) {
+        benchmarkBalance *= (1 - advisoryFeeRate);
+      }
 
       // Add one-time contributions to benchmark (surplus added after tax netting below)
       if (oneTimeContributions > 0) {
