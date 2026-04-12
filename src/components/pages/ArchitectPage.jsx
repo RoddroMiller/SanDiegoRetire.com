@@ -35,6 +35,7 @@ export const ArchitectPage = ({
   onClientSubmit,
   onGenerateReport,
   isGeneratingReport,
+  printOptions,
   // Client Data
   clientInfo,
   onClientChange,
@@ -100,6 +101,14 @@ export const ArchitectPage = ({
   onAccountSplitChange,
   onWithdrawalOverrideChange
 }) => {
+  // Print data source: use Monte Carlo median when print mode is montecarlo
+  const printData = useMemo(() => {
+    if (printOptions?.mode === 'montecarlo' && monteCarloData?.scenarios?.median) {
+      return monteCarloData.scenarios.median;
+    }
+    return projectionData;
+  }, [printOptions, monteCarloData, projectionData]);
+
   // Compute legacy balance and final projection age
   const lastProjectionEntry = useMemo(() => projectionData[projectionData.length - 1], [projectionData]);
   const finalProjectionAge = lastProjectionEntry?.age || 95;
@@ -311,16 +320,16 @@ export const ArchitectPage = ({
     };
   }, [selectedImprovements, customImprovements, inputs, clientInfo, monteCarloData, projectionData, accumulationData]);
 
-  // --- Cash Flow print page data ---
+  // --- Cash Flow print page data (uses printData which respects print mode) ---
   const cashFlowPrintData = useMemo(() => {
     const fmt = (val) => `$${Math.round(val).toLocaleString()}`;
-    const hasEmployment = projectionData.some(r => r.employmentIncomeDetail > 0);
-    const hasOther = projectionData.some(r => r.otherIncomeDetail > 0);
-    const hasContributions = projectionData.some(r => r.contribution > 0);
-    const hasSurplus = projectionData.some(r => (r.surplus || 0) > 0);
-    const hasNqData = inputs.taxEnabled && projectionData.some(r => r.nqWithdrawal > 0);
-    const hasRMD = inputs.taxEnabled && projectionData.some(r => r.rmdAmount > 0);
-    const hasRMDExcess = hasRMD && projectionData.some(r => r.rmdExcess > 0);
+    const hasEmployment = printData.some(r => r.employmentIncomeDetail > 0);
+    const hasOther = printData.some(r => r.otherIncomeDetail > 0);
+    const hasContributions = printData.some(r => r.contribution > 0);
+    const hasSurplus = printData.some(r => (r.surplus || 0) > 0);
+    const hasNqData = inputs.taxEnabled && printData.some(r => r.nqWithdrawal > 0);
+    const hasRMD = inputs.taxEnabled && printData.some(r => r.rmdAmount > 0);
+    const hasRMDExcess = hasRMD && printData.some(r => r.rmdExcess > 0);
 
     const rows = [
       { label: 'Plan Year', cls: 'font-bold text-slate-800 bg-slate-100', getValue: (r) => r.year },
@@ -395,12 +404,12 @@ export const ArchitectPage = ({
     );
 
     const chunks = [];
-    for (let i = 0; i < projectionData.length; i += 5) {
-      chunks.push(projectionData.slice(i, i + 5));
+    for (let i = 0; i < printData.length; i += 5) {
+      chunks.push(printData.slice(i, i + 5));
     }
 
     return { rows, chunks };
-  }, [projectionData, inputs, clientInfo]);
+  }, [printData, inputs, clientInfo]);
 
   const cashFlowPageCount = cashFlowPrintData.chunks.length;
   const totalPrintPages = 10 + cashFlowPageCount; // 10 base pages + N cash flow pages
@@ -440,6 +449,7 @@ export const ArchitectPage = ({
           <p><strong>Email:</strong> {clientInfo.email || 'Not provided'}</p>
           <p><strong>Phone:</strong> {clientInfo.phone || 'Not provided'}</p>
           <p><strong>Prepared:</strong> {new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' })}</p>
+          <p><strong>Projection:</strong> {printOptions?.mode === 'montecarlo' ? 'Monte Carlo (Median of 1,000 Simulations)' : 'Deterministic (Fixed Return Assumptions)'}</p>
         </div>
         <div className="mt-auto pt-12 text-base text-slate-400">
           <p>Miller Wealth Management</p>
@@ -500,8 +510,8 @@ export const ArchitectPage = ({
         </div>
       </div>
 
-      {/* PRINT PAGE 2: Phase 1 - Accumulation */}
-      <PrintPageWrapper pageNumber={2} totalPages={totalPrintPages} title="Phase 1 - Accumulation" subtitle="Building your retirement portfolio">
+      {/* PRINT PAGE 2: Phase 1 - Accumulation (excluded when client is retired or user opts out) */}
+      {!printOptions?.excludeAccumulation && <PrintPageWrapper pageNumber={2} totalPages={totalPrintPages} title="Phase 1 - Accumulation" subtitle="Building your retirement portfolio">
         <div className="border rounded-lg p-3 mb-4">
           <AreaChart width={670} height={200} data={accumulationData}>
             <CartesianGrid strokeDasharray="3 3" vertical={false} />
@@ -615,7 +625,7 @@ export const ArchitectPage = ({
             <p className="text-2xl font-bold text-mwm-green/80">${inputs.totalPortfolio.toLocaleString()}</p>
           </div>
         </div>
-      </PrintPageWrapper>
+      </PrintPageWrapper>}
 
       {/* MAIN ARCHITECT PAGE */}
       <div className="max-w-7xl mx-auto print:hidden no-print">
@@ -1160,7 +1170,7 @@ export const ArchitectPage = ({
       <PrintPageWrapper pageNumber={5} totalPages={totalPrintPages} title="Portfolio Sustainability" subtitle={inputs.taxEnabled ? 'Projected portfolio balance and cash flow (with estimated taxes)' : 'Projected portfolio balance and annual cash flow detail'}>
         {/* Chart */}
         <div className="border border-slate-200 rounded-lg p-3 mb-4">
-          <ComposedChart width={670} height={180} data={projectionData}>
+          <ComposedChart width={670} height={180} data={printData}>
             <CartesianGrid strokeDasharray="3 3" vertical={false} />
             <XAxis dataKey="year" tick={{ fontSize: 10 }} label={{ value: 'Year', position: 'insideBottom', offset: -2, fontSize: 10 }} />
             <YAxis tickFormatter={(val) => val >= 2000000 ? `$${Math.round(val / 1000000)}M` : `$${Math.round(val / 1000)}k`} tick={{ fontSize: 10 }} />

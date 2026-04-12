@@ -976,13 +976,72 @@ export default function BucketPortfolioBuilder() {
     return () => { if (autoSaveTimerRef.current) clearTimeout(autoSaveTimerRef.current); };
   }, [clientInfo, inputs, assumptions, targetMaxPortfolioAge, rebalanceFreq, vaEnabled, vaInputs, userRole, accumulationData, projectionData, saveProgress]);
 
+  const [showPrintOptions, setShowPrintOptions] = useState(false);
+  const [printOptions, setPrintOptions] = useState({
+    mode: 'deterministic', // 'deterministic' | 'montecarlo'
+    excludeAccumulation: false,
+  });
+
   const generateReport = () => {
+    setShowPrintOptions(true);
+  };
+
+  const executePrint = () => {
+    setShowPrintOptions(false);
     setIsGeneratingReport(true);
     setTimeout(() => {
       window.print();
       setIsGeneratingReport(false);
     }, 500);
   };
+
+  // --- Print Options Modal ---
+  const PrintOptionsModal = () => (
+    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[9999]">
+      <div className="bg-white p-6 rounded-xl shadow-xl max-w-sm mx-4">
+        <h3 className="text-lg font-bold text-slate-800 mb-4">Report Options</h3>
+        <div className="space-y-4">
+          <div>
+            <label className="text-xs font-bold text-slate-500 uppercase mb-2 block">Projection Mode</label>
+            <div className="grid grid-cols-2 gap-2">
+              <button
+                onClick={() => setPrintOptions(p => ({ ...p, mode: 'deterministic' }))}
+                className={`px-3 py-2 text-sm rounded-lg font-medium border transition-all ${printOptions.mode === 'deterministic' ? 'bg-mwm-emerald text-white border-mwm-emerald' : 'bg-white text-slate-600 border-slate-300 hover:border-mwm-green/60'}`}
+              >
+                Deterministic
+              </button>
+              <button
+                onClick={() => setPrintOptions(p => ({ ...p, mode: 'montecarlo' }))}
+                className={`px-3 py-2 text-sm rounded-lg font-medium border transition-all ${printOptions.mode === 'montecarlo' ? 'bg-mwm-emerald text-white border-mwm-emerald' : 'bg-white text-slate-600 border-slate-300 hover:border-mwm-green/60'}`}
+              >
+                Monte Carlo
+              </button>
+            </div>
+            <p className="text-[10px] text-slate-400 mt-1">
+              {printOptions.mode === 'deterministic' ? 'Fixed returns based on assumptions — no randomness.' : 'Median outcome from 1,000 simulated market scenarios.'}
+            </p>
+          </div>
+          <div className="flex items-center justify-between">
+            <label className="text-xs font-bold text-slate-500 uppercase">Exclude Accumulation Page</label>
+            <button
+              onClick={() => setPrintOptions(p => ({ ...p, excludeAccumulation: !p.excludeAccumulation }))}
+              className={`px-3 py-1 text-xs rounded font-medium transition-all ${printOptions.excludeAccumulation ? 'bg-mwm-green text-white' : 'bg-white text-slate-600 border border-slate-300'}`}
+            >
+              {printOptions.excludeAccumulation ? 'Excluded' : 'Included'}
+            </button>
+          </div>
+        </div>
+        <div className="flex gap-2 mt-6">
+          <button onClick={() => setShowPrintOptions(false)} className="flex-1 px-4 py-2 text-sm text-slate-600 font-medium hover:bg-slate-100 rounded-lg transition-colors">
+            Cancel
+          </button>
+          <button onClick={executePrint} className="flex-1 px-4 py-2 text-sm bg-mwm-green text-white font-bold rounded-lg hover:bg-mwm-green/80 transition-colors">
+            Generate Report
+          </button>
+        </div>
+      </div>
+    </div>
+  );
 
   // --- Session Warning Modal ---
   const SessionWarningModal = () => (
@@ -1247,6 +1306,7 @@ export default function BucketPortfolioBuilder() {
   return (
     <>
     {showSessionWarning && <SessionWarningModal />}
+    {showPrintOptions && <PrintOptionsModal />}
     <AdvisorNavBar activeView={activeView} onNavigate={handleNavigation} userRole={userRole} onLogout={onLogout} />
     <ArchitectPage
       userRole={userRole}
@@ -1255,6 +1315,7 @@ export default function BucketPortfolioBuilder() {
       onClientSubmit={handleClientSubmit}
       onGenerateReport={generateReport}
       isGeneratingReport={isGeneratingReport}
+      printOptions={printOptions}
       clientInfo={clientInfo}
       onClientChange={handleClientChange}
       inputs={inputs}
