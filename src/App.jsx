@@ -292,6 +292,9 @@ export default function BucketPortfolioBuilder() {
         pensionSurvivorBenefitPct: s.inputs.pensionSurvivorBenefitPct ?? 0,
         partnerPensionSurvivorBenefitPct: s.inputs.partnerPensionSurvivorBenefitPct ?? 0,
         spendingReductionAtFirstDeath: s.inputs.spendingReductionAtFirstDeath ?? 25,
+        // Migration defaults for advisory fee & benchmark
+        advisoryFee: s.inputs.advisoryFee ?? 1.0,
+        showBenchmark: s.inputs.showBenchmark ?? false,
       });
       setAssumptions(s.assumptions);
       if (s.targetMaxPortfolioAge) setTargetMaxPortfolioAge(s.targetMaxPortfolioAge);
