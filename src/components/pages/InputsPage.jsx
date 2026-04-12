@@ -21,6 +21,7 @@ export const InputsPage = ({
   assumptions,
   onAssumptionChange,
   onApplyHistoricalAverages,
+  onApplyForwardLooking,
   onApplyFourPercentRule,
   // UI State
   showSettings,
@@ -933,16 +934,36 @@ export const InputsPage = ({
         <h3 className="font-semibold text-slate-800 mb-5 flex items-center gap-2 text-lg">
           <TrendingUp className="w-5 h-5" /> Return Assumptions
         </h3>
-        <button
-          onClick={onApplyHistoricalAverages}
-          className="w-full text-sm flex items-center justify-center gap-1 bg-mwm-gold/10 text-mwm-gold py-2 rounded border border-mwm-gold/30 hover:bg-mwm-gold/20 transition-colors mb-4 font-medium"
-        >
-          <RefreshCcw className="w-4 h-4" /> Use Historical Averages
-        </button>
+        <div className="grid grid-cols-2 gap-2 mb-4">
+          <button
+            onClick={onApplyHistoricalAverages}
+            className="text-xs flex items-center justify-center gap-1 bg-mwm-green/10 text-mwm-green py-2 rounded border border-mwm-green/30 hover:bg-mwm-green/20 transition-colors font-medium"
+          >
+            <RefreshCcw className="w-3.5 h-3.5" /> MWM Backtested
+          </button>
+          <button
+            onClick={onApplyForwardLooking}
+            className="text-xs flex items-center justify-center gap-1 bg-mwm-gold/10 text-mwm-gold py-2 rounded border border-mwm-gold/30 hover:bg-mwm-gold/20 transition-colors font-medium"
+          >
+            <TrendingUp className="w-3.5 h-3.5" /> Forward-Looking (-18%)
+          </button>
+        </div>
+        <p className="text-[10px] text-slate-400 mb-3 -mt-2">
+          Backtested uses actual MWM portfolio returns (2016–2026). Forward-looking applies an 18% reduction to returns for normalized market expectations. Standard deviation is unchanged. Manual override available below.
+        </p>
         <div className="space-y-3">
-          {Object.entries(assumptions).map(([key, data]) => (
+          {['b1', 'b2', 'b3', 'b4', 'b5'].map((key) => {
+            const data = assumptions[key];
+            if (!data) return null;
+            return (
             <div key={key} className="p-4 bg-slate-50 rounded-lg">
-              <p className="font-bold text-sm text-slate-700 mb-2">{data.name}</p>
+              <div className="flex items-baseline justify-between mb-2">
+                <p className="font-bold text-sm text-slate-700">{data.name}</p>
+                {data.subtitle && <p className="text-[10px] text-slate-400 font-medium">{data.subtitle}</p>}
+              </div>
+              {data.historical && (
+                <p className="text-[10px] text-mwm-gold/80 mb-2">Backtested avg: {data.historical}% ann. (2016–2026)</p>
+              )}
               <div className="grid grid-cols-2 gap-4">
                 <div>
                   <label className="text-xs text-slate-500">Return %</label>
@@ -954,7 +975,8 @@ export const InputsPage = ({
                 </div>
               </div>
             </div>
-          ))}
+            );
+          })}
         </div>
       </Card>
     </div>

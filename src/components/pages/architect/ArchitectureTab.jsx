@@ -18,7 +18,7 @@ export const ArchitectureTab = ({ inputs, basePlan, assumptions, projectionData 
     'B2 Bridge': row.w2 || 0,
     'B3 Tactical Balanced': row.w3 || 0,
     'B4 Income & Growth': row.w4 || 0,
-    'B5 Long Term Growth': row.w5 || 0,
+    'B5 Permanent Equity': row.w5 || 0,
   }));
 
   return (
@@ -38,7 +38,7 @@ export const ArchitectureTab = ({ inputs, basePlan, assumptions, projectionData 
                     { name: 'Bridge (B2)', value: basePlan.b2Val, color: COLORS.midTerm },
                     { name: 'Tactical Balanced (B3)', value: basePlan.b3Val, color: COLORS.hedged },
                     { name: 'Income & Growth (B4)', value: basePlan.b4Val, color: COLORS.income },
-                    { name: 'Long Term Growth (B5)', value: Math.max(0, basePlan.b5Val), color: COLORS.longTerm },
+                    { name: 'Permanent Equity (B5)', value: Math.max(0, basePlan.b5Val), color: COLORS.longTerm },
                   ]}
                   cx="50%"
                   cy="50%"
@@ -123,7 +123,7 @@ export const ArchitectureTab = ({ inputs, basePlan, assumptions, projectionData 
             <div className="p-3 rounded-lg" style={{ backgroundColor: `${COLORS.longTerm}20`, borderLeft: `4px solid ${COLORS.longTerm}` }}>
               <div className="flex justify-between items-center">
                 <div>
-                  <p className="font-bold text-slate-800">Bucket 5: Long Term Growth</p>
+                  <p className="font-bold text-slate-800">Bucket 5: Permanent Equity</p>
                   <p className="text-xs text-slate-500">Years 15+ • Growth engine</p>
                 </div>
                 <div className="text-right">
@@ -153,7 +153,7 @@ export const ArchitectureTab = ({ inputs, basePlan, assumptions, projectionData 
               <Bar dataKey="B2 Bridge" stackId="1" fill={COLORS.midTerm} />
               <Bar dataKey="B3 Tactical Balanced" stackId="1" fill={COLORS.hedged} />
               <Bar dataKey="B4 Income & Growth" stackId="1" fill={COLORS.income} />
-              <Bar dataKey="B5 Long Term Growth" stackId="1" fill={COLORS.longTerm} />
+              <Bar dataKey="B5 Permanent Equity" stackId="1" fill={COLORS.longTerm} />
             </BarChart>
           </ResponsiveContainer>
         </div>

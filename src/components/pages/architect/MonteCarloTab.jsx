@@ -37,7 +37,7 @@ export const MonteCarloTab = ({ monteCarloData, rebalanceFreq, onSetRebalanceFre
     { key: 'b2', rKey: 'r2', label: 'B2', name: 'Bridge', color: COLORS.midTerm },
     { key: 'b3', rKey: 'r3', label: 'B3', name: 'Tactical Balanced', color: COLORS.hedged },
     { key: 'b4', rKey: 'r4', label: 'B4', name: 'Income & Growth', color: COLORS.income },
-    { key: 'b5', rKey: 'r5', label: 'B5', name: 'Long Term Growth', color: COLORS.longTerm },
+    { key: 'b5', rKey: 'r5', label: 'B5', name: 'Permanent Equity', color: COLORS.longTerm },
   ];
 
   const scenarioKey = scenario === 'optimistic' ? 'optimistic' : scenario === 'conservative' ? 'conservative' : 'median';

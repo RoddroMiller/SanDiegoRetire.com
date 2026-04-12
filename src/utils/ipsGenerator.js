@@ -252,7 +252,7 @@ B1        | Liquidity        | ${allocPcts.b1.padStart(6)}%   | ${formatCurrency
 B2        | Bridge           | ${allocPcts.b2.padStart(6)}%   | ${formatCurrency(allocation.b2Val || 0).padStart(15)} | Years 4-6
 B3        | Tactical Balanced| ${allocPcts.b3.padStart(6)}%   | ${formatCurrency(allocation.b3Val || 0).padStart(15)} | Years 7-15
 B4        | Income & Growth  | ${allocPcts.b4.padStart(6)}%   | ${formatCurrency(allocation.b4Val || 0).padStart(15)} | Years 16-20
-B5        | Long Term Growth | ${allocPcts.b5.padStart(6)}%   | ${formatCurrency(allocation.b5Val || 0).padStart(15)} | Years 21+
+B5        | Permanent Equity | ${allocPcts.b5.padStart(6)}%   | ${formatCurrency(allocation.b5Val || 0).padStart(15)} | Years 21+
 --------------------------------------------------------------------------------
 Total                        | 100.0%   | ${formatCurrency(totalPortfolio).padStart(15)}
 --------------------------------------------------------------------------------
@@ -279,10 +279,10 @@ B4 - Income & Growth (${allocPcts.b4}%):
    Expected Return: ${assumptions.b4.return}% | Volatility: ${assumptions.b4.stdDev}%
    Purpose: Income generation with capital appreciation potential
 
-B5 - Long Term Growth (${allocPcts.b5}%):
+B5 - Permanent Equity (${allocPcts.b5}%):
    Investment Types: Domestic Equity, International Equity, Small Cap
    Expected Return: ${assumptions.b5.return}% | Volatility: ${assumptions.b5.stdDev}%
-   Purpose: Maximum long-term growth for late-stage distributions and legacy
+   Purpose: Permanent equity for late-stage distributions and legacy
 
 ================================================================================
 SECTION 6: DISTRIBUTION STRATEGY

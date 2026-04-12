@@ -368,7 +368,7 @@ export const ArchitectPage = ({
     // --- PORTFOLIO CONTRIBUTION / DISTRIBUTION ---
     rows.push({ label: '', cls: 'bg-slate-200', getValue: () => '', isSeparator: true });
     if (hasSurplus) {
-      rows.push({ label: 'Contribution → LT Growth', cls: 'font-bold text-mwm-green', getValue: (r) => (r.surplus || 0) > 0 ? `+${fmt(r.surplus)}` : '-' });
+      rows.push({ label: 'Contribution → Perm. Equity', cls: 'font-bold text-mwm-green', getValue: (r) => (r.surplus || 0) > 0 ? `+${fmt(r.surplus)}` : '-' });
     }
     rows.push(
       { label: 'Portfolio Distribution', cls: 'text-orange-700', getValue: (r) => r.distribution > 0 ? fmt(r.distribution) : '-' },
@@ -932,7 +932,7 @@ export const ArchitectPage = ({
             <p className="text-xs text-slate-400 mt-1">10% Fixed</p>
           </div>
           <div className="p-4 rounded-lg text-center" style={{ backgroundColor: `${COLORS.longTerm}20`, borderTop: `4px solid ${COLORS.longTerm}` }}>
-            <p className="text-xs font-bold text-slate-600">B5 - Long Term Growth</p>
+            <p className="text-xs font-bold text-slate-600">B5 - Permanent Equity</p>
             <p className="text-xl font-bold text-slate-800">{Math.max(0, basePlan.b5Val) >= 1000000 ? `$${(Math.max(0, basePlan.b5Val) / 1000000).toFixed(2)}M` : `$${(Math.max(0, basePlan.b5Val) / 1000).toFixed(0)}k`}</p>
             <p className="text-xs text-slate-500">{((Math.max(0, basePlan.b5Val) / inputs.totalPortfolio) * 100).toFixed(1)}%</p>
             <p className="text-xs text-slate-400 mt-1">Remainder</p>
@@ -992,7 +992,7 @@ export const ArchitectPage = ({
                 <td className="p-3">Dividend Stocks, REITs, Preferred</td>
               </tr>
               <tr>
-                <td className="p-3 font-medium">B5 - Long Term Growth</td>
+                <td className="p-3 font-medium">B5 - Permanent Equity</td>
                 <td className="p-3 text-center">{assumptions.b5.return}%</td>
                 <td className="p-3 text-center">{assumptions.b5.stdDev}%</td>
                 <td className="p-3">Equity Growth, Small Cap, International</td>
@@ -1050,7 +1050,7 @@ export const ArchitectPage = ({
           { label: 'B2 - Bridge', val: basePlan.b2Val, years: 'Years 4-6', color: COLORS.midTerm, rate: `${fmtMoney(basePlan.b2Val / 3)}/yr`, end: '$0 @ Year 6', income: phase2Income },
           { label: 'B3 - Tactical Balanced', val: basePlan.b3Val, years: 'Years 7-15', color: COLORS.hedged, rate: `${fmtMoney(basePlan.b3Val / 9)}/yr`, end: '$0 @ Year 15', income: phase3Income },
           { label: 'B4 - Income & Growth', val: basePlan.b4Val, years: 'Years 16-20', color: COLORS.income, rate: `${fmtMoney(basePlan.b4Val / 5)}/yr`, end: '$0 @ Year 20', income: phase4Income },
-          { label: 'B5 - Long Term Growth', val: basePlan.b5Val, years: 'Year 21+', color: COLORS.longTerm, rate: '20 Years to grow', end: `${fmtMoney(projectionData[19]?.b5 || basePlan.b5Val * 2)} @ Yr 20`, income: phase5Income, isGrowth: true },
+          { label: 'B5 - Permanent Equity', val: basePlan.b5Val, years: 'Year 21+', color: COLORS.longTerm, rate: '20 Years to grow', end: `${fmtMoney(projectionData[19]?.b5 || basePlan.b5Val * 2)} @ Yr 20`, income: phase5Income, isGrowth: true },
         ];
 
         return (
@@ -1108,7 +1108,7 @@ export const ArchitectPage = ({
                 <span className="flex items-center gap-1"><span className="w-2.5 h-2.5 rounded" style={{ backgroundColor: COLORS.midTerm }}></span> Bridge</span>
                 <span className="flex items-center gap-1"><span className="w-2.5 h-2.5 rounded" style={{ backgroundColor: COLORS.hedged }}></span> Tactical Balanced</span>
                 <span className="flex items-center gap-1"><span className="w-2.5 h-2.5 rounded" style={{ backgroundColor: COLORS.income }}></span> Income & Growth</span>
-                <span className="flex items-center gap-1"><span className="w-2.5 h-2.5 rounded" style={{ backgroundColor: COLORS.longTerm }}></span> Long Term Growth</span>
+                <span className="flex items-center gap-1"><span className="w-2.5 h-2.5 rounded" style={{ backgroundColor: COLORS.longTerm }}></span> Permanent Equity</span>
               </div>
             </div>
 
@@ -1559,7 +1559,7 @@ export const ArchitectPage = ({
                   <li>B2 (Bridge): {assumptions.b2.return}% return, {assumptions.b2.stdDev}% std dev</li>
                   <li>B3 (Tactical Balanced): {assumptions.b3.return}% return, {assumptions.b3.stdDev}% std dev</li>
                   <li>B4 (Income & Growth): {assumptions.b4.return}% return, {assumptions.b4.stdDev}% std dev</li>
-                  <li>B5 (Long Term Growth): {assumptions.b5.return}% return, {assumptions.b5.stdDev}% std dev</li>
+                  <li>B5 (Permanent Equity): {assumptions.b5.return}% return, {assumptions.b5.stdDev}% std dev</li>
                 </ul>
               </div>
               <div>

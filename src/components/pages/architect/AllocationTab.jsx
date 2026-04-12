@@ -251,7 +251,7 @@ export const AllocationTab = ({
               { key: 'b2', label: 'B2 Bridge', color: COLORS.midTerm },
               { key: 'b3', label: 'B3 Tactical Balanced', color: COLORS.hedged },
               { key: 'b4', label: 'B4 Inc & Grth', color: COLORS.income },
-              { key: 'b5', label: 'B5 LT Growth', color: COLORS.longTerm },
+              { key: 'b5', label: 'B5 Perm. Equity', color: COLORS.longTerm },
             ].map(({ key, label, color }) => (
               <div key={key} className="relative">
                 <label className="block text-xs font-medium text-slate-600 mb-1">
@@ -318,7 +318,7 @@ export const AllocationTab = ({
                   { name: 'Bridge', value: basePlan.b2Val, color: COLORS.midTerm },
                   { name: 'Tactical Balanced', value: basePlan.b3Val, color: COLORS.hedged },
                   { name: 'Inc & Grth', value: basePlan.b4Val, color: COLORS.income },
-                  { name: 'Long Term Growth', value: Math.max(0, basePlan.b5Val), color: COLORS.longTerm },
+                  { name: 'Permanent Equity', value: Math.max(0, basePlan.b5Val), color: COLORS.longTerm },
                 ]}
                 cx="50%"
                 cy="50%"
@@ -371,7 +371,7 @@ export const AllocationTab = ({
             description={basePlan.b4Val > 0 ? "Income & dividends/yield allocation." : "No allocation — portfolio prioritized for spending needs."}
           />
           <AllocationRow
-            color={COLORS.longTerm} name="5. Long Term Growth"
+            color={COLORS.longTerm} name="5. Permanent Equity"
             amount={basePlan.b5Val} percent={((basePlan.b5Val / inputs.totalPortfolio) * 100).toFixed(1)}
             returnRate={assumptions.b5.return} stdDev={assumptions.b5.stdDev}
             historicalReturn={assumptions.b5.historical}

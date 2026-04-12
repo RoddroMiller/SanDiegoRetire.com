@@ -226,11 +226,11 @@ export default function BucketPortfolioBuilder() {
 
   // Return Assumptions
   const [assumptions, setAssumptions] = useState({
-    b1: { return: 3.0, stdDev: 1.7, name: "B1 - Liquidity", historical: 3.4 },
-    b2: { return: 4.5, stdDev: 6.0, name: "B2 - Bridge", historical: 5.1 },
-    b3: { return: 8.0, stdDev: 9.5, name: "B3 - Tactical Balanced", historical: 10.1 },
-    b4: { return: 6.5, stdDev: 12.0, name: "B4 - Inc & Growth", historical: 7.8 },
-    b5: { return: 10.0, stdDev: 15.0, name: "B5 - Long Term Growth", historical: 11.9 },
+    b1: { return: 3.0, stdDev: 1.7, name: "B1 - Liquidity", subtitle: "Market-Neutral · Yrs 1–3", historical: 3.4 },
+    b2: { return: 4.5, stdDev: 6.0, name: "B2 - Bridge", subtitle: "Conservative Flexible · Yrs 4–6", historical: 5.1 },
+    b3: { return: 8.0, stdDev: 9.5, name: "B3 - Tactical Balanced", subtitle: "Active Tactical · Yrs 7–14", historical: 10.1 },
+    b4: { return: 6.5, stdDev: 12.0, name: "B4 - Income & Growth", subtitle: "Income-Oriented Equity · Yrs 13+", historical: 7.8 },
+    b5: { return: 10.0, stdDev: 15.0, name: "B5 - Permanent Equity", subtitle: "100% Equity · Growth & Legacy", historical: 11.9 },
   });
 
   // --- Scenario Action Wrappers ---
@@ -840,6 +840,18 @@ export default function BucketPortfolioBuilder() {
     });
   };
 
+  const applyForwardLookingEstimates = () => {
+    // Apply ~18% reduction to backtested returns for forward-looking market expectations
+    // StdDev remains unchanged (risk characteristics are structural, not bull-market inflated)
+    setAssumptions(prev => {
+      const next = { ...prev };
+      Object.keys(next).forEach(k => {
+        next[k].return = Math.round(next[k].historical * 0.82 * 10) / 10; // 18% haircut, round to 1 decimal
+      });
+      return next;
+    });
+  };
+
   const applyFourPercentRule = () => {
     const clientSS = getAdjustedSS(inputs.ssPIA, inputs.ssStartAge) * 12;
     const partnerSS = clientInfo.isMarried ? getAdjustedSS(inputs.partnerSSPIA, inputs.partnerSSStartAge) * 12 : 0;
@@ -1144,6 +1156,7 @@ export default function BucketPortfolioBuilder() {
         assumptions={assumptions}
         onAssumptionChange={handleAssumptionChange}
         onApplyHistoricalAverages={applyHistoricalAverages}
+        onApplyForwardLooking={applyForwardLookingEstimates}
         onApplyFourPercentRule={applyFourPercentRule}
         showSettings={showSettings}
         onToggleSettings={() => setShowSettings(!showSettings)}

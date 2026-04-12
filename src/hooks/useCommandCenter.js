@@ -217,7 +217,7 @@ export const useCommandCenter = ({ currentUser }) => {
         b2: { value: basePlan?.b2Val || 0, percent: b2Pct, name: 'Bridge (4-6 yrs)' },
         b3: { value: basePlan?.b3Val || 0, percent: b3Pct, name: 'Tactical Balanced (7-15 yrs)' },
         b4: { value: basePlan?.b4Val || 0, percent: b4Pct, name: 'Income & Growth' },
-        b5: { value: basePlan?.b5Val || 0, percent: b5Pct, name: 'Long Term Growth' }
+        b5: { value: basePlan?.b5Val || 0, percent: b5Pct, name: 'Permanent Equity' }
       },
 
       // Social Security strategy
