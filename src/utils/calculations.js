@@ -1679,10 +1679,11 @@ export const runSimulation = (basePlan, assumptions, inputs, rebalanceFreq, isMo
 
       let withdrawalAmount = totalWithdrawal;
 
-      const benchmarkWithdrawal = gap + taxData.totalTax - surplus;
-      if (benchmarkWithdrawal > 0 && benchmarkBalance >= benchmarkWithdrawal) {
-        benchmarkBalance -= benchmarkWithdrawal;
-      } else if (benchmarkWithdrawal > 0) {
+      // Benchmark withdraws the same total as the bucket portfolio — same client,
+      // same spending needs, same tax obligations. Only the investment returns differ.
+      if (totalWithdrawal > 0 && benchmarkBalance >= totalWithdrawal) {
+        benchmarkBalance -= totalWithdrawal;
+      } else if (totalWithdrawal > 0) {
         benchmarkBalance = 0;
       }
 
