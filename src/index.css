@@ -88,6 +88,16 @@
     page-break-inside: avoid;
   }
 
+  /* Force all light grey text to black for print readability */
+  [class*="text-slate-3"],
+  [class*="text-slate-4"],
+  [class*="text-slate-5"],
+  [class*="text-gray-3"],
+  [class*="text-gray-4"],
+  [class*="text-gray-5"] {
+    color: #1a1a1a !important;
+  }
+
   /* Force-hide interactive page content during print */
   .no-print {
     display: none !important;
