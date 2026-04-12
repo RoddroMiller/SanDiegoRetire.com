@@ -458,34 +458,38 @@ export const ArchitectPage = ({
       </div>
 
       {/* PRINT PAGE: Table of Contents */}
-      <div className="hidden print:flex flex-col min-h-[10in] break-after-page p-12 bg-white">
-        <h2 className="text-3xl font-bold text-slate-900 mb-2">Table of Contents</h2>
-        <div className="w-20 h-1 bg-mwm-green mb-8"></div>
-        <div className="space-y-0 text-lg">
-          {[
-            !printOptions?.excludeAccumulation && { title: 'Phase 1 — Accumulation', desc: 'Building your retirement portfolio' },
-            { title: 'Bucket Architecture', desc: 'Time-segmented allocation strategy' },
-            { title: 'Phase 2 — Distribution Strategy', desc: 'Bucket-based withdrawal sequence' },
-            { title: 'Portfolio Sustainability', desc: printOptions?.mode === 'montecarlo' ? 'Monte Carlo simulation with probability analysis' : 'Projected portfolio balance and cash flow' },
-            cashFlowPageCount > 0 && { title: 'Detailed Cash Flows', desc: `Year-by-year income, expenses, and portfolio detail (${cashFlowPageCount} ${cashFlowPageCount === 1 ? 'page' : 'pages'})` },
-            { title: 'Social Security Optimization', desc: 'Optimal claiming strategy analysis' },
-            printOptions?.mode !== 'montecarlo' && { title: 'Monte Carlo Simulation', desc: 'Probability analysis based on 1,000 market scenarios' },
-            !printOptions?.excludeStrategyComparison && { title: 'Strategy Comparison', desc: 'Alternative allocation strategies analyzed' },
-            { title: 'Important Disclosures', desc: 'Assumptions, methodology, and limitations' },
-          ].filter(Boolean).map((item, idx) => (
-            <div key={idx} className="flex items-baseline border-b border-slate-100 py-3">
-              <span className="w-8 text-mwm-green font-bold text-base">{idx + 1}.</span>
-              <div>
-                <span className="font-semibold text-slate-800">{item.title}</span>
-                <span className="text-sm text-slate-400 ml-3">{item.desc}</span>
+      {(() => {
+        const tocItems = [
+          !printOptions?.excludeAccumulation && { title: 'Phase 1 — Accumulation', desc: 'Building your retirement portfolio' },
+          { title: 'Bucket Architecture', desc: 'Time-segmented allocation strategy' },
+          { title: 'Phase 2 — Distribution Strategy', desc: 'Bucket-based withdrawal sequence' },
+          { title: 'Portfolio Sustainability', desc: printOptions?.mode === 'montecarlo' ? 'Monte Carlo simulation with probability analysis' : 'Projected portfolio balance and cash flow' },
+          { title: 'Detailed Cash Flows', desc: 'Year-by-year income, expenses, and portfolio detail' },
+          { title: 'Social Security Optimization', desc: 'Optimal claiming strategy analysis' },
+          printOptions?.mode !== 'montecarlo' && { title: 'Monte Carlo Simulation', desc: 'Probability analysis based on 1,000 market scenarios' },
+          !printOptions?.excludeStrategyComparison && { title: 'Strategy Comparison', desc: 'Alternative allocation strategies analyzed' },
+          { title: 'Important Disclosures', desc: 'Assumptions, methodology, and limitations' },
+        ].filter(Boolean);
+        return (
+          <div className="hidden print:block break-after-page p-12 bg-white" style={{ minHeight: '10in' }}>
+            <h2 className="text-3xl font-bold text-slate-900 mb-2">Table of Contents</h2>
+            <div className="w-20 h-1 bg-mwm-green mb-10"></div>
+            {tocItems.map((item, idx) => (
+              <div key={idx} className="flex items-baseline border-b border-slate-100 py-4">
+                <span className="w-10 text-mwm-green font-bold text-lg">{idx + 1}.</span>
+                <div>
+                  <span className="font-semibold text-slate-800 text-lg">{item.title}</span>
+                  <br />
+                  <span className="text-sm text-slate-400">{item.desc}</span>
+                </div>
               </div>
+            ))}
+            <div className="mt-16 text-xs text-slate-400 text-center">
+              <p>This illustration is for informational purposes only and does not constitute investment advice.</p>
             </div>
-          ))}
-        </div>
-        <div className="mt-auto pt-8 text-xs text-slate-400 text-center">
-          <p>This illustration is for informational purposes only and does not constitute investment advice.</p>
-        </div>
-      </div>
+          </div>
+        );
+      })()}
 
       {/* ACTION BAR */}
       <div className="max-w-7xl mx-auto mb-4 sm:mb-6 md:mb-8 print:hidden no-print">
@@ -1207,7 +1211,7 @@ export const ArchitectPage = ({
         <div className="border border-slate-200 rounded-lg p-3 mb-4">
           {printOptions?.mode === 'montecarlo' && monteCarloData?.data ? (
             /* Monte Carlo fan chart: 90th, 50th, 10th percentile bands */
-            <ComposedChart width={670} height={240} data={monteCarloData.data.map((mc, idx) => ({
+            <ComposedChart width={670} height={200} data={monteCarloData.data.map((mc, idx) => ({
               year: idx + 1,
               p90: Math.round(mc.p90),
               median: Math.round(mc.median),
@@ -1225,7 +1229,7 @@ export const ArchitectPage = ({
             </ComposedChart>
           ) : (
             /* Deterministic single-line chart */
-            <ComposedChart width={670} height={240} data={printData}>
+            <ComposedChart width={670} height={200} data={printData}>
               <CartesianGrid strokeDasharray="3 3" vertical={false} />
               <XAxis dataKey="year" tick={{ fontSize: 10 }} label={{ value: 'Year', position: 'insideBottom', offset: -2, fontSize: 10 }} />
               <YAxis tickFormatter={(val) => val >= 2000000 ? `$${Math.round(val / 1000000)}M` : `$${Math.round(val / 1000)}k`} tick={{ fontSize: 10 }} />
@@ -1255,11 +1259,20 @@ export const ArchitectPage = ({
               </tr>
             </thead>
             <tbody>
-              {printData
-                .filter((row, i) => {
-                  const yearNum = i + 1; // 1-indexed year
-                  return yearNum <= 20 || yearNum % 5 === 0;
-                })
+              {(() => {
+                const totalYears = printData.length;
+                const filtered = printData.filter((row, i) => {
+                  const yearNum = i + 1;
+                  if (yearNum <= 15) return true;
+                  if (yearNum % 5 === 0) return true;
+                  return false;
+                });
+                // Add up to 3 final rows if the last year isn't already included
+                const lastFilteredYear = filtered.length > 0 ? filtered[filtered.length - 1]?.year : 0;
+                const remaining = printData.filter(r => r.year > lastFilteredYear);
+                const finalRows = remaining.slice(-Math.min(3, remaining.length));
+                return [...filtered, ...finalRows];
+              })()
                 .map((row, i) => (
                 <tr key={row.year} className={i % 2 === 0 ? 'bg-white' : 'bg-slate-50'}>
                   <td className="p-1 text-left font-bold text-slate-700">{row.age}</td>
@@ -1490,7 +1503,7 @@ export const ArchitectPage = ({
         {/* Simulation Chart */}
         <div className="border border-slate-200 rounded-lg p-4 mb-4">
           <h3 className="font-bold text-base text-slate-800 mb-2">Portfolio Outcome Range (30 Years)</h3>
-          <ComposedChart width={670} height={240} data={monteCarloData.data}>
+          <ComposedChart width={670} height={200} data={monteCarloData.data}>
             <CartesianGrid strokeDasharray="3 3" vertical={false} />
             <XAxis dataKey="year" tick={{ fontSize: 10 }} />
             <YAxis tickFormatter={(val) => val >= 2000000 ? `$${Math.round(val / 1000000)}M` : `$${Math.round(val / 1000)}k`} tick={{ fontSize: 10 }} />
