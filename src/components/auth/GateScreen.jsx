@@ -29,9 +29,9 @@ const SPOUSE_SS_PIA = 1692;
 const SAMPLE_ASSUMPTIONS = {
   b1: { return: 4.0, stdDev: 1.7, name: "B1 - Liquidity", historical: 3.4 },
   b2: { return: 5.5, stdDev: 6.0, name: "B2 - Bridge", historical: 5.1 },
-  b3: { return: 8.0, stdDev: 9.5, name: "B3 - Tactical Balanced", historical: 10.1 },
+  b3: { return: 7.5, stdDev: 9.5, name: "B3 - Tactical Balanced", historical: 10.1 },
   b4: { return: 7.0, stdDev: 12.0, name: "B4 - Income & Growth", historical: 7.8 },
-  b5: { return: 9.0, stdDev: 15.0, name: "B5 - Permanent Equity", historical: 11.9 },
+  b5: { return: 8.5, stdDev: 15.0, name: "B5 - Permanent Equity", historical: 11.9 },
 };
 
 const SAMPLE_INPUTS_BASE = {
