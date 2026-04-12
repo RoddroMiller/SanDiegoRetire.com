@@ -329,6 +329,12 @@ export const ArchitectPage = ({
     if (clientInfo.isMarried) {
       rows.push({ label: `${clientInfo.partnerName || 'Partner'} Age`, cls: 'text-slate-500 bg-slate-50', getValue: (r) => Math.floor(r.partnerAge) });
     }
+    // --- STARTING BALANCE & GROWTH ---
+    rows.push(
+      { label: '', cls: 'bg-slate-200', getValue: () => '', isSeparator: true },
+      { label: 'Starting Balance', cls: 'font-bold text-slate-700', getValue: (r) => fmt(r.startBalance) },
+      { label: 'Portfolio Growth', cls: '', getValue: (r) => `${r.growth >= 0 ? '+' : ''}${fmt(r.growth)}`, dynamicCls: (r) => r.growth >= 0 ? 'text-mwm-green/80' : 'text-red-600' },
+    );
     // --- INCOME ---
     rows.push(
       { label: '', cls: 'bg-slate-200', getValue: () => '', isSeparator: true },
@@ -355,6 +361,11 @@ export const ArchitectPage = ({
     rows.push(
       { label: 'Total Expenses', cls: 'font-bold text-slate-800 bg-slate-50', getValue: (r) => fmt(r.expenses) },
     );
+    if (inputs.taxEnabled) {
+      rows.push(
+        { label: 'Effective Tax Rate', cls: 'text-mwm-gold/80', getValue: (r) => `${r.effectiveRate || '0'}%` },
+      );
+    }
     // --- RMD ---
     if (hasRMD) {
       rows.push(
@@ -376,8 +387,6 @@ export const ArchitectPage = ({
     // --- ENDING BALANCE ---
     rows.push(
       { label: '', cls: 'bg-slate-200', getValue: () => '', isSeparator: true },
-      { label: 'Starting Balance', cls: 'text-slate-700', getValue: (r) => fmt(r.startBalance) },
-      { label: 'Growth', cls: '', getValue: (r) => `${r.growth >= 0 ? '+' : ''}${fmt(r.growth)}`, dynamicCls: (r) => r.growth >= 0 ? 'text-mwm-green/80' : 'text-red-600' },
       { label: 'Ending Balance', cls: 'font-bold text-slate-900 bg-mwm-green/10 text-base', getValue: (r) => fmt(Math.max(0, r.total)) },
       { label: 'Distribution Rate', cls: '', getValue: (r) => {
         if ((r.surplus || 0) > 0 && r.distribution === 0) return 'n/a';
