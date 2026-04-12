@@ -220,8 +220,9 @@ export default function BucketPortfolioBuilder() {
     // SS Breakeven Analysis Settings
     ssBridgeNqPercent: 50, // % of bridge-year withdrawals from NQ (non-qualified) accounts
     ssMarginalTaxRate: 22, // Marginal tax bracket for bridge-year gross-up calculation
-    // Advisory Fee
-    advisoryFee: 1.0 // Annual advisory fee as % of portfolio value
+    // Advisory Fee & Benchmark
+    advisoryFee: 1.0, // Annual advisory fee as % of portfolio value
+    showBenchmark: false // Show passive 60/40 benchmark line on charts (advisor-only)
   });
 
   // Return Assumptions

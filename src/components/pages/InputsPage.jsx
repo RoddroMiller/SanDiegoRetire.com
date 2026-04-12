@@ -140,6 +140,22 @@ export const InputsPage = ({
                 </div>
               </div>
 
+              {/* Benchmark Toggle */}
+              <div className="flex items-center justify-between mt-3">
+                <label className="text-xs font-bold text-slate-500 uppercase">Show Passive 60/40 Benchmark</label>
+                <button
+                  type="button"
+                  onClick={() => onInputChange({ target: { name: 'showBenchmark', type: 'checkbox', checked: !inputs.showBenchmark } })}
+                  className={`px-3 py-1 text-xs rounded font-medium transition-all ${
+                    inputs.showBenchmark
+                      ? 'bg-mwm-gold text-white'
+                      : 'bg-white text-slate-600 border border-slate-300 hover:border-mwm-gold/60'
+                  }`}
+                >
+                  {inputs.showBenchmark ? 'Visible' : 'Hidden'}
+                </button>
+              </div>
+
               {/* Tax Settings Section */}
               <div className="border-t border-slate-200 pt-4 mt-4">
                 <div className="flex items-center justify-between mb-3">

@@ -183,7 +183,6 @@ export const GateScreen = ({ onAdvisorClick, onClientLoginClick, onProspectEntry
                     contentStyle={{ fontSize: 12, borderRadius: 8, border: '1px solid #e2e8f0' }}
                   />
                   <Bar dataKey="total" fill={COLORS.areaFill} opacity={0.7} radius={[2, 2, 0, 0]} />
-                  <Line type="monotone" dataKey="benchmark" stroke={COLORS.benchmark} strokeWidth={2} dot={false} strokeDasharray="5 3" />
                 </ComposedChart>
               </ResponsiveContainer>
             </div>
