@@ -98,6 +98,12 @@
     color: #1a1a1a !important;
   }
 
+  /* Force ALL text on cash flow print tables to black */
+  .print-cf-table td,
+  .print-cf-table th {
+    color: #1a1a1a !important;
+  }
+
   /* Force-hide interactive page content during print */
   .no-print {
     display: none !important;

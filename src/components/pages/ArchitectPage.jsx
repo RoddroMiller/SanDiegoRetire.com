@@ -322,7 +322,11 @@ export const ArchitectPage = ({
 
   // --- Cash Flow print page data (uses printData which respects print mode) ---
   const cashFlowPrintData = useMemo(() => {
-    const fmt = (val) => `$${Math.round(val).toLocaleString()}`;
+    const fmt = (val) => {
+      const rounded = Math.round(val);
+      if (rounded < 0) return `($${Math.abs(rounded).toLocaleString()})`;
+      return `$${rounded.toLocaleString()}`;
+    };
     const hasEmployment = printData.some(r => r.employmentIncomeDetail > 0);
     const hasOther = printData.some(r => r.otherIncomeDetail > 0);
     const hasContributions = printData.some(r => r.contribution > 0);
@@ -342,7 +346,7 @@ export const ArchitectPage = ({
     rows.push(
       { label: '', cls: 'bg-slate-200', getValue: () => '', isSeparator: true },
       { label: 'Starting Balance', cls: 'font-bold text-slate-700', getValue: (r) => fmt(r.startBalance) },
-      { label: 'Portfolio Growth', cls: '', getValue: (r) => `${r.growth >= 0 ? '+' : ''}${fmt(r.growth)}`, dynamicCls: (r) => r.growth >= 0 ? 'text-mwm-green/80' : 'text-red-600' },
+      { label: 'Portfolio Growth', cls: '', getValue: (r) => r.growth >= 0 ? `+${fmt(r.growth)}` : fmt(r.growth), dynamicCls: (r) => r.growth >= 0 ? 'text-mwm-green/80' : 'text-red-600' },
     );
     // --- INCOME ---
     rows.push(
@@ -416,7 +420,7 @@ export const ArchitectPage = ({
 
   const renderCashFlowPrintTable = (cols, allRows) => (
     <div className="overflow-x-auto border border-slate-200 rounded-lg">
-      <table className="w-full text-[11px] border-collapse">
+      <table className="w-full text-[11px] border-collapse print-cf-table">
         <tbody>
           {allRows.map((rowDef, ri) => (
             <tr key={ri} className={rowDef.isSeparator ? 'h-1' : 'border-b border-slate-100'}>
@@ -1244,7 +1248,7 @@ export const ArchitectPage = ({
 
         {/* Cash Flow Table */}
         <div className="border border-slate-200 rounded-lg overflow-hidden">
-          <table className="w-full text-[10px] text-right border-collapse">
+          <table className="w-full text-[10px] text-right border-collapse print-cf-table">
             <thead>
               <tr className="bg-slate-100 text-slate-600 font-bold">
                 <th className="p-1 text-left">Age</th>
@@ -1279,8 +1283,8 @@ export const ArchitectPage = ({
                   <td className="p-1 text-slate-500">${row.startBalance.toLocaleString()}</td>
                   <td className={`p-1 ${row.growth >= 0 ? 'text-mwm-green' : 'text-red-600'}`}>{row.growth >= 0 ? `+$${row.growth.toLocaleString()}` : `($${Math.abs(row.growth).toLocaleString()})`}</td>
                   <td className="p-1 text-blue-600">+${row.ssIncome.toLocaleString()}</td>
-                  <td className="p-1 text-orange-600">-${row.distribution.toLocaleString()}</td>
-                  {inputs.taxEnabled && <td className="p-1 text-red-600">-${(row.totalTax || 0).toLocaleString()}</td>}
+                  <td className="p-1">{row.distribution > 0 ? `($${row.distribution.toLocaleString()})` : '-'}</td>
+                  {inputs.taxEnabled && <td className="p-1">{(row.totalTax || 0) > 0 ? `($${(row.totalTax || 0).toLocaleString()})` : '-'}</td>}
                   <td className="p-1 text-slate-800">${row.expenses.toLocaleString()}</td>
                   {inputs.taxEnabled && <td className="p-1 text-slate-600">${Math.max(0, row.expenses - (row.totalTax || 0)).toLocaleString()}</td>}
                   <td className={`p-1 font-bold ${row.total > 0 ? 'text-slate-900' : 'text-red-500'}`}>${Math.round(row.total).toLocaleString()}</td>
