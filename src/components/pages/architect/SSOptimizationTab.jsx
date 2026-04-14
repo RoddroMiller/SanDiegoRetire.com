@@ -346,10 +346,12 @@ export const SSOptimizationTab = ({ clientInfo, inputs, assumptions, basePlan, r
                   <thead>
                     <tr>
                       <th className="p-1.5 bg-slate-100 border border-slate-200 text-[10px] font-bold text-slate-500 sticky left-0 z-10">
-                        <div className="flex flex-col items-center">
-                          <span>Spouse</span>
-                          <span className="text-slate-400">\</span>
-                          <span>Primary</span>
+                        <div className="flex flex-col items-center gap-0.5">
+                          <span className="text-slate-700">{clientInfo.name || 'Primary'} →</span>
+                          <span className="text-slate-400 text-[8px]">columns</span>
+                          <div className="w-full border-t border-slate-300 my-0.5" />
+                          <span className="text-slate-700">↓ {clientInfo.partnerName || 'Spouse'}</span>
+                          <span className="text-slate-400 text-[8px]">rows</span>
                         </div>
                       </th>
                       {matrixData.ages.map(age => (

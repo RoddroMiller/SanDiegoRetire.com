@@ -254,14 +254,14 @@ export const STATE_TAX_DATA = {
     single: [{ min: 0, max: 10000, rate: 4 }, { min: 10000, max: 40000, rate: 6 }, { min: 40000, max: 60000, rate: 6.5 }, { min: 60000, max: 250000, rate: 8.5 }, { min: 250000, max: 500000, rate: 9.25 }, { min: 500000, max: 1000000, rate: 9.75 }, { min: 1000000, max: Infinity, rate: 10.75 }]
   }},
   'FL': { name: 'Florida', rate: 0, ssTaxable: false },
-  'GA': { name: 'Georgia', rate: 5.49, ssTaxable: false },
+  'GA': { name: 'Georgia', rate: 5.19, ssTaxable: false },
   'HI': { name: 'Hawaii', rate: 11.0, ssTaxable: false, brackets: {
     single:  [{ min: 0, max: 9600, rate: 1.4 }, { min: 9600, max: 14400, rate: 3.2 }, { min: 14400, max: 19200, rate: 5.5 }, { min: 19200, max: 24000, rate: 6.4 }, { min: 24000, max: 36000, rate: 6.8 }, { min: 36000, max: 48000, rate: 7.2 }, { min: 48000, max: 125000, rate: 7.6 }, { min: 125000, max: 175000, rate: 7.9 }, { min: 175000, max: 225000, rate: 8.25 }, { min: 225000, max: 275000, rate: 9 }, { min: 275000, max: 325000, rate: 10 }, { min: 325000, max: Infinity, rate: 11 }],
     married: [{ min: 0, max: 19200, rate: 1.4 }, { min: 19200, max: 28800, rate: 3.2 }, { min: 28800, max: 38400, rate: 5.5 }, { min: 38400, max: 48000, rate: 6.4 }, { min: 48000, max: 72000, rate: 6.8 }, { min: 72000, max: 96000, rate: 7.2 }, { min: 96000, max: 250000, rate: 7.6 }, { min: 250000, max: 350000, rate: 7.9 }, { min: 350000, max: 450000, rate: 8.25 }, { min: 450000, max: 550000, rate: 9 }, { min: 550000, max: 650000, rate: 10 }, { min: 650000, max: Infinity, rate: 11 }]
   }},
   'ID': { name: 'Idaho', rate: 5.695, ssTaxable: false },
   'IL': { name: 'Illinois', rate: 4.95, ssTaxable: false },
-  'IN': { name: 'Indiana', rate: 3.05, ssTaxable: false },
+  'IN': { name: 'Indiana', rate: 3.0, ssTaxable: false },
   'IA': { name: 'Iowa', rate: 3.8, ssTaxable: false },
   'KS': { name: 'Kansas', rate: 5.7, ssTaxable: true, brackets: {
     single:  [{ min: 0, max: 15000, rate: 3.1 }, { min: 15000, max: 30000, rate: 5.25 }, { min: 30000, max: Infinity, rate: 5.7 }],
@@ -283,7 +283,7 @@ export const STATE_TAX_DATA = {
     single:  [{ min: 0, max: 32570, rate: 5.35 }, { min: 32570, max: 106990, rate: 6.8 }, { min: 106990, max: 198630, rate: 7.85 }, { min: 198630, max: Infinity, rate: 9.85 }],
     married: [{ min: 0, max: 47620, rate: 5.35 }, { min: 47620, max: 189180, rate: 6.8 }, { min: 189180, max: 330410, rate: 7.85 }, { min: 330410, max: Infinity, rate: 9.85 }]
   }},
-  'MS': { name: 'Mississippi', rate: 5.0, ssTaxable: false },
+  'MS': { name: 'Mississippi', rate: 4.4, ssTaxable: false },
   'MO': { name: 'Missouri', rate: 4.7, ssTaxable: true, brackets: {
     single: [{ min: 0, max: 1313, rate: 0 }, { min: 1313, max: 2626, rate: 2 }, { min: 2626, max: 3939, rate: 2.5 }, { min: 3939, max: 5252, rate: 3 }, { min: 5252, max: 6565, rate: 3.5 }, { min: 6565, max: 7878, rate: 4 }, { min: 7878, max: 9191, rate: 4.5 }, { min: 9191, max: Infinity, rate: 4.7 }]
   }},
@@ -309,7 +309,7 @@ export const STATE_TAX_DATA = {
     single:  [{ min: 0, max: 8500, rate: 4 }, { min: 8500, max: 11700, rate: 4.5 }, { min: 11700, max: 13900, rate: 5.25 }, { min: 13900, max: 80650, rate: 5.5 }, { min: 80650, max: 215400, rate: 6 }, { min: 215400, max: 1077550, rate: 6.85 }, { min: 1077550, max: 5000000, rate: 9.65 }, { min: 5000000, max: 25000000, rate: 10.3 }, { min: 25000000, max: Infinity, rate: 10.9 }],
     married: [{ min: 0, max: 17150, rate: 4 }, { min: 17150, max: 23600, rate: 4.5 }, { min: 23600, max: 27900, rate: 5.25 }, { min: 27900, max: 161550, rate: 5.5 }, { min: 161550, max: 323200, rate: 6 }, { min: 323200, max: 2155350, rate: 6.85 }, { min: 2155350, max: 5000000, rate: 9.65 }, { min: 5000000, max: 25000000, rate: 10.3 }, { min: 25000000, max: Infinity, rate: 10.9 }]
   }},
-  'NC': { name: 'North Carolina', rate: 4.5, ssTaxable: false },
+  'NC': { name: 'North Carolina', rate: 4.25, ssTaxable: false },
   'ND': { name: 'North Dakota', rate: 1.95, ssTaxable: false, brackets: {
     single:  [{ min: 0, max: 48475, rate: 0 }, { min: 48475, max: 244825, rate: 1.95 }, { min: 244825, max: Infinity, rate: 2.5 }],
     married: [{ min: 0, max: 80975, rate: 0 }, { min: 80975, max: 298075, rate: 1.95 }, { min: 298075, max: Infinity, rate: 2.5 }]
@@ -327,13 +327,13 @@ export const STATE_TAX_DATA = {
   'RI': { name: 'Rhode Island', rate: 5.99, ssTaxable: true, brackets: {
     single: [{ min: 0, max: 79900, rate: 3.75 }, { min: 79900, max: 181650, rate: 4.75 }, { min: 181650, max: Infinity, rate: 5.99 }]
   }},
-  'SC': { name: 'South Carolina', rate: 6.2, ssTaxable: false, brackets: {
-    single: [{ min: 0, max: 3560, rate: 0 }, { min: 3560, max: 17830, rate: 3 }, { min: 17830, max: Infinity, rate: 6.2 }]
+  'SC': { name: 'South Carolina', rate: 6.0, ssTaxable: false, brackets: {
+    single: [{ min: 0, max: 3560, rate: 0 }, { min: 3560, max: 17830, rate: 3 }, { min: 17830, max: Infinity, rate: 6.0 }]
   }},
   'SD': { name: 'South Dakota', rate: 0, ssTaxable: false },
   'TN': { name: 'Tennessee', rate: 0, ssTaxable: false },
   'TX': { name: 'Texas', rate: 0, ssTaxable: false },
-  'UT': { name: 'Utah', rate: 4.65, ssTaxable: true },
+  'UT': { name: 'Utah', rate: 4.5, ssTaxable: true },
   'VT': { name: 'Vermont', rate: 8.75, ssTaxable: true, brackets: {
     single:  [{ min: 0, max: 3825, rate: 0 }, { min: 3825, max: 53225, rate: 3.35 }, { min: 53225, max: 123525, rate: 6.6 }, { min: 123525, max: 253525, rate: 7.6 }, { min: 253525, max: Infinity, rate: 8.75 }],
     married: [{ min: 0, max: 11475, rate: 0 }, { min: 11475, max: 93975, rate: 3.35 }, { min: 93975, max: 210925, rate: 6.6 }, { min: 210925, max: 315475, rate: 7.6 }, { min: 315475, max: Infinity, rate: 8.75 }]

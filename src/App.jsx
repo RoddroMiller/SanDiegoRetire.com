@@ -976,7 +976,7 @@ export default function BucketPortfolioBuilder() {
     saveProgress({ clientInfo, inputs: updatedInputs, assumptions, targetMaxPortfolioAge, rebalanceFreq, vaEnabled, vaInputs, legacyBalance }, userRole);
 
     setInputs(updatedInputs);
-    setStep(2);
+    setAdvisorView('inputs');
     window.scrollTo(0, 0);
   };
 
@@ -1336,6 +1336,9 @@ export default function BucketPortfolioBuilder() {
           setStep(2);
         }}
         projectionData={projectionData}
+        userRole={userRole}
+        saveStatus={saveStatus}
+        onSaveScenario={handleSaveScenario}
       />
       </>
     );

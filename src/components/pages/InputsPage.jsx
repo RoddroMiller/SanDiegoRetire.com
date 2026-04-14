@@ -1,7 +1,8 @@
 import React, { useState } from 'react';
 import {
   Briefcase, DollarSign, Shield, Info, Plus, RefreshCcw,
-  TrendingUp, Settings, Table as TableIcon, Heart, Trash2
+  TrendingUp, Settings, Table as TableIcon, Heart, Trash2,
+  Save, Loader, CheckCircle
 } from 'lucide-react';
 
 import { estimatePIAFromIncome, STATE_TAX_DATA } from '../../utils';
@@ -47,6 +48,10 @@ export const InputsPage = ({
   onSetActiveTab,
   // Projection data (for withdrawal strategy button)
   projectionData,
+  // Save
+  userRole,
+  saveStatus,
+  onSaveScenario,
 }) => {
   // SS Estimator state (local to this page)
   const [showSSEstimator, setShowSSEstimator] = useState(false);
@@ -59,9 +64,21 @@ export const InputsPage = ({
 
   return (
     <div className="max-w-4xl mx-auto px-4 py-8 space-y-6">
-      <div className="mb-2">
-        <h1 className="text-2xl font-bold text-slate-800">Retirement Inputs</h1>
-        <p className="text-sm text-slate-500 mt-1">Configure all planning assumptions and income sources below.</p>
+      <div className="mb-2 flex items-center justify-between">
+        <div>
+          <h1 className="text-2xl font-bold text-slate-800">Retirement Inputs</h1>
+          <p className="text-sm text-slate-500 mt-1">Configure all planning assumptions and income sources below.</p>
+        </div>
+        {userRole !== 'client' && onSaveScenario && (
+          <button
+            onClick={onSaveScenario}
+            disabled={saveStatus === 'saving'}
+            className={`flex items-center gap-2 px-4 py-2 text-white rounded-lg shadow-sm transition-all font-medium text-sm ${saveStatus === 'success' ? 'bg-green-600' : 'bg-mwm-green/80 hover:bg-mwm-emerald'}`}
+          >
+            {saveStatus === 'saving' ? <Loader className="w-4 h-4 animate-spin" /> : saveStatus === 'success' ? <CheckCircle className="w-4 h-4" /> : <Save className="w-4 h-4" />}
+            {saveStatus === 'success' ? 'Saved' : 'Save'}
+          </button>
+        )}
       </div>
 
       {/* Retirement Inputs Card */}
