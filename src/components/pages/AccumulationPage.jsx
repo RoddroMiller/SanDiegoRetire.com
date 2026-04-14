@@ -441,26 +441,27 @@ export const AccumulationPage = ({
               )}
 
               {/* Additional Contributions */}
-              <div>
-                <div className="flex items-center justify-between mb-2">
-                  <label className="block text-xs font-bold text-slate-500 uppercase flex items-center gap-1">
-                    Additional Contributions <Info className="w-3 h-3 text-slate-400" />
-                  </label>
+              <div className="p-4 bg-slate-50 rounded-xl border border-slate-200">
+                <div className="flex items-center justify-between mb-3">
+                  <h4 className="text-sm font-bold text-slate-700 flex items-center gap-2">
+                    <DollarSign className="w-4 h-4 text-mwm-green" />
+                    Employer / Additional Contributions
+                  </h4>
                   <button
                     type="button"
                     onClick={() => {
                       const existing = clientInfo.additionalContributions || [];
                       onClientChange({ target: { name: 'additionalContributions', value: [...existing, { id: Date.now(), label: '', amount: 0, mode: 'dollar' }] } });
                     }}
-                    className="flex items-center gap-1 text-xs text-mwm-green hover:text-mwm-green/80 font-medium"
+                    className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold text-white bg-mwm-green/80 hover:bg-mwm-emerald rounded-lg transition-colors"
                   >
-                    <Plus className="w-3 h-3" /> Add
+                    <Plus className="w-3.5 h-3.5" /> Add Contribution
                   </button>
                 </div>
                 {(clientInfo.additionalContributions || []).length > 0 ? (
                   <div className="space-y-2">
                     {(clientInfo.additionalContributions || []).map((contrib) => (
-                      <div key={contrib.id} className="grid grid-cols-12 gap-2 items-end p-2.5 bg-slate-50 rounded border border-slate-200 text-xs">
+                      <div key={contrib.id} className="grid grid-cols-12 gap-2 items-end p-2.5 bg-white rounded border border-slate-200 text-xs">
                         <div className="col-span-4">
                           <label className="text-[10px] text-slate-500 uppercase">Type</label>
                           <select
@@ -536,7 +537,7 @@ export const AccumulationPage = ({
                     ))}
                   </div>
                 ) : (
-                  <p className="text-xs text-slate-400 italic">No additional contributions (e.g. 401k match, company contribution). Click Add to include.</p>
+                  <p className="text-sm text-slate-500">401k match, company contributions, profit sharing, RSUs, etc. Click <strong>Add Contribution</strong> to include employer or additional contributions in the projection.</p>
                 )}
               </div>
 
