@@ -177,6 +177,7 @@ export default function BucketPortfolioBuilder() {
     annualIncome: 0,
     partnerAnnualIncome: 0,
     expectedReturn: 7.0,
+    additionalContributions: [],
   });
 
   // Architect Inputs
@@ -279,7 +280,7 @@ export default function BucketPortfolioBuilder() {
 
   const handleLoadScenario = (scenario) => {
     loadScenario(scenario, (s) => {
-      setClientInfo({ ...s.clientInfo, partnerAnnualIncome: s.clientInfo.partnerAnnualIncome || 0 });
+      setClientInfo({ ...s.clientInfo, partnerAnnualIncome: s.clientInfo.partnerAnnualIncome || 0, additionalContributions: s.clientInfo.additionalContributions || [] });
       setInputs({
         ...s.inputs,
         cashFlowAdjustments: s.inputs.cashFlowAdjustments || [],

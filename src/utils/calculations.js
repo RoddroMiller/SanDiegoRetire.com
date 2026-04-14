@@ -721,6 +721,14 @@ export const calculateAccumulation = (clientInfo, inflationRate = 0, additionalI
   const growthRate = (expectedReturn || 0) / 100;
   const inflRate = (inflationRate || 0) / 100;
 
+  // Calculate additional contributions (401k match, company contributions, etc.)
+  const additionalContribs = (clientInfo.additionalContributions || []).reduce((sum, c) => {
+    if (c.mode === 'percent' && clientInfo.annualIncome > 0) {
+      return sum + (c.amount / 100) * clientInfo.annualIncome;
+    }
+    return sum + (c.amount || 0);
+  }, 0);
+
   // Staggered retirement: calculate partner's income share for savings reduction
   const annualIncome = clientInfo.annualIncome || 0;
   const partnerAnnualIncome = clientInfo.partnerAnnualIncome || 0;
@@ -765,6 +773,9 @@ export const calculateAccumulation = (clientInfo, inflationRate = 0, additionalI
           currentPartnerAge >= partnerRetirementAge && currentSimAge < retirementAge;
         const partnerIncomeShare = partnerRetired ? partnerAnnualIncome / totalIncome : 0;
 
+        // Distribute additional contributions proportionally across accounts
+        const totalBal = acctBalances.reduce((s, a) => s + a.projected, 0);
+
         acctBalances.forEach(a => {
           let contribution = a.annualContribution || 0;
           // Stop partner account contributions when partner retires
@@ -772,6 +783,11 @@ export const calculateAccumulation = (clientInfo, inflationRate = 0, additionalI
             contribution = 0;
           } else if (partnerRetired && a.owner === 'client') {
             // Client accounts keep full contribution
+          }
+          // Add proportional share of additional contributions
+          if (additionalContribs > 0 && totalBal > 0) {
+            const share = a.projected / totalBal;
+            contribution += additionalContribs * share * (partnerRetired && a.owner === 'partner' ? 0 : 1);
           }
           // Inflation-adjust contributions
           const adjContribution = contribution * Math.pow(1 + inflRate, i);
@@ -803,12 +819,12 @@ export const calculateAccumulation = (clientInfo, inflationRate = 0, additionalI
 
     data.push({ age: currentSimAge, balance: Math.round(balance) });
     if (i < years) {
-      let effectiveSavings = annualSavings;
+      let effectiveSavings = annualSavings + additionalContribs;
 
       // Staggered retirement: reduce savings when partner retires before client
       if (totalIncome > 0 && partnerAnnualIncome > 0 && currentPartnerAge >= partnerRetirementAge && currentSimAge < retirementAge) {
         const partnerIncomeShare = partnerAnnualIncome / totalIncome;
-        effectiveSavings = annualSavings * (1 - partnerIncomeShare);
+        effectiveSavings = (annualSavings + additionalContribs) * (1 - partnerIncomeShare);
       }
 
       const inflationAdjustedSavings = effectiveSavings * Math.pow(1 + inflRate, i);
