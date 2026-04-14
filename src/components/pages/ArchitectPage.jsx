@@ -99,7 +99,13 @@ export const ArchitectPage = ({
   vaOptimizerData,
   // 3-Way Account Split
   onAccountSplitChange,
-  onWithdrawalOverrideChange
+  onWithdrawalOverrideChange,
+  // Tax Strategy Optimization
+  onApplyTaxStrategy,
+  onRothConversionChange,
+  onLiquidationStrategyChange,
+  onCapGainOverrideChange,
+  taxStrategyComparison
 }) => {
   // Print data source: use Monte Carlo median when print mode is montecarlo
   const printData = useMemo(() => {
@@ -416,7 +422,8 @@ export const ArchitectPage = ({
   }, [printData, inputs, clientInfo]);
 
   const cashFlowPageCount = cashFlowPrintData.chunks.length;
-  const totalPrintPages = 10 + cashFlowPageCount; // 10 base pages + N cash flow pages
+  const hasTaxStrategyPage = inputs.taxEnabled && (Object.keys(inputs.rothConversions || {}).length > 0 || inputs.liquidationMode === 'priority');
+  const totalPrintPages = (hasTaxStrategyPage ? 11 : 10) + cashFlowPageCount;
 
   const renderCashFlowPrintTable = (cols, allRows) => (
     <div className="overflow-x-auto border border-slate-200 rounded-lg">
@@ -472,6 +479,7 @@ export const ArchitectPage = ({
           { title: 'Social Security Optimization', desc: 'Optimal claiming strategy analysis' },
           printOptions?.mode !== 'montecarlo' && { title: 'Monte Carlo Simulation', desc: 'Probability analysis based on 1,000 market scenarios' },
           !printOptions?.excludeStrategyComparison && { title: 'Strategy Comparison', desc: 'Alternative allocation strategies analyzed' },
+          hasTaxStrategyPage && { title: 'Tax Strategy Analysis', desc: 'Roth conversion schedule and liquidation strategy' },
           { title: 'Important Disclosures', desc: 'Assumptions, methodology, and limitations' },
         ].filter(Boolean);
         return (
@@ -940,9 +948,17 @@ export const ArchitectPage = ({
           {activeTab === 'taxmap' && (
             <TaxMapTab
               projectionData={projectionData}
+              monteCarloData={monteCarloData}
               inputs={inputs}
               clientInfo={clientInfo}
               basePlan={basePlan}
+              assumptions={assumptions}
+              rebalanceFreq={rebalanceFreq}
+              rebalanceTargets={rebalanceTargets}
+              onApplyTaxStrategy={onApplyTaxStrategy}
+              onRothConversionChange={onRothConversionChange}
+              onLiquidationStrategyChange={onLiquidationStrategyChange}
+              onCapGainOverrideChange={onCapGainOverrideChange}
             />
           )}
 
@@ -1064,36 +1080,21 @@ export const ArchitectPage = ({
         // Helper function for conditional formatting
         const fmtMoney = (val) => val >= 1000000 ? `$${(val / 1000000).toFixed(2)}M` : `$${Math.round(val / 1000)}k`;
 
-        // Get income data for each phase's first year
+        // Get income data for each phase's first year from projection data
         const getPhaseIncome = (yearIndex) => {
           const row = projectionData[yearIndex] || {};
-          const simAge = clientInfo.retirementAge + yearIndex;
-          const partnerSimAge = clientInfo.partnerAge + yearIndex;
-          const inflationFactor = Math.pow(1 + (inputs.inflationRate || 2.5) / 100, yearIndex);
-
-          let ssMonthly = 0;
-          if (simAge >= inputs.ssStartAge) {
-            ssMonthly += Math.round(getAdjustedSS(inputs.ssPIA, inputs.ssStartAge) * inflationFactor);
-          }
-          if (clientInfo.isMarried && partnerSimAge >= inputs.partnerSSStartAge) {
-            ssMonthly += Math.round(getAdjustedSS(inputs.partnerSSPIA, inputs.partnerSSStartAge) * inflationFactor);
-          }
-
-          let pensionMonthly = 0;
-          if (simAge >= inputs.pensionStartAge && inputs.monthlyPension > 0) {
-            pensionMonthly += inputs.pensionCOLA
-              ? Math.round(inputs.monthlyPension * inflationFactor)
-              : inputs.monthlyPension;
-          }
-          if (clientInfo.isMarried && inputs.partnerMonthlyPension > 0 && partnerSimAge >= (inputs.partnerPensionStartAge || 65)) {
-            pensionMonthly += inputs.partnerPensionCOLA
-              ? Math.round(inputs.partnerMonthlyPension * inflationFactor)
-              : inputs.partnerMonthlyPension;
-          }
-
+          const ssMonthly = Math.round((row.ssIncomeDetail || 0) / 12);
+          const pensionMonthly = Math.round((row.pensionIncomeDetail || 0) / 12);
+          const employmentMonthly = Math.round((row.employmentIncomeDetail || 0) / 12);
+          const otherMonthly = Math.round((row.otherIncomeDetail || 0) / 12);
+          const vaMonthly = Math.round((row.vaIncomeDetail || 0) / 12);
           const portfolioMonthly = Math.round((row.distribution || 0) / 12);
-          const total = ssMonthly + pensionMonthly + portfolioMonthly;
-          return { ss: ssMonthly, pension: pensionMonthly, portfolio: portfolioMonthly, total };
+          const grossTotal = ssMonthly + pensionMonthly + employmentMonthly + otherMonthly + vaMonthly + portfolioMonthly;
+          // Exclude Roth conversion tax — it's paid separately from NQ, not from spending income
+          const spendingTax = (row.totalTax || 0) - (row.rothConversionTax || 0);
+          const taxMonthly = Math.round(spendingTax / 12);
+          const netTotal = grossTotal - taxMonthly;
+          return { ss: ssMonthly, pension: pensionMonthly, employment: employmentMonthly, other: otherMonthly, va: vaMonthly, portfolio: portfolioMonthly, gross: grossTotal, tax: taxMonthly, net: netTotal };
         };
 
         const phase1Income = getPhaseIncome(0);
@@ -1101,6 +1102,11 @@ export const ArchitectPage = ({
         const phase3Income = getPhaseIncome(6);
         const phase4Income = getPhaseIncome(15);
         const phase5Income = getPhaseIncome(20);
+
+        const allPhaseIncomes = [phase1Income, phase2Income, phase3Income, phase4Income, phase5Income];
+        const hasEmployment = allPhaseIncomes.some(p => p.employment > 0);
+        const hasOther = allPhaseIncomes.some(p => p.other > 0);
+        const hasVA = allPhaseIncomes.some(p => p.va > 0);
 
         const buckets = [
           { label: 'B1 - Liquidity', val: basePlan.b1Val, years: 'Years 1-3', color: COLORS.shortTerm, rate: `${fmtMoney(basePlan.b1Val / 3)}/yr`, end: '$0 @ Year 3', income: phase1Income },
@@ -1141,10 +1147,15 @@ export const ArchitectPage = ({
                   {/* Income breakdown */}
                   <div className="w-full mt-1 p-1.5 bg-slate-50 rounded border border-slate-200 text-xs">
                     <div className="space-y-0.5">
-                      <div className="flex justify-between"><span>SS:</span><span>${b.income.ss.toLocaleString()}</span></div>
-                      <div className="flex justify-between"><span>Pension:</span><span>${b.income.pension.toLocaleString()}</span></div>
+                      {b.income.ss > 0 && <div className="flex justify-between"><span>SS:</span><span>${b.income.ss.toLocaleString()}</span></div>}
+                      {b.income.pension > 0 && <div className="flex justify-between"><span>Pension:</span><span>${b.income.pension.toLocaleString()}</span></div>}
+                      {hasEmployment && b.income.employment > 0 && <div className="flex justify-between"><span>Employment:</span><span>${b.income.employment.toLocaleString()}</span></div>}
+                      {hasOther && b.income.other > 0 && <div className="flex justify-between"><span>Other:</span><span>${b.income.other.toLocaleString()}</span></div>}
+                      {hasVA && b.income.va > 0 && <div className="flex justify-between"><span>VA:</span><span>${b.income.va.toLocaleString()}</span></div>}
                       <div className="flex justify-between"><span>Portfolio:</span><span>${b.income.portfolio.toLocaleString()}</span></div>
-                      <div className="flex justify-between font-bold border-t border-slate-300 pt-0.5"><span>Total:</span><span>${b.income.total.toLocaleString()}</span></div>
+                      <div className="flex justify-between font-bold border-t border-slate-300 pt-0.5"><span>Gross:</span><span>${b.income.gross.toLocaleString()}</span></div>
+                      <div className="flex justify-between text-red-600"><span>Est. Tax:</span><span>(${b.income.tax.toLocaleString()})</span></div>
+                      <div className="flex justify-between font-bold border-t border-slate-300 pt-0.5"><span>Net:</span><span>${b.income.net.toLocaleString()}</span></div>
                     </div>
                   </div>
                 </div>
@@ -1637,8 +1648,205 @@ export const ArchitectPage = ({
         </div>
       </PrintPageWrapper>}
 
+      {/* PRINT PAGE: Tax Strategy & Roth Conversion Analysis */}
+      {inputs.taxEnabled && (Object.keys(inputs.rothConversions || {}).length > 0 || inputs.liquidationMode === 'priority') && (() => {
+        const hasConversions = Object.keys(inputs.rothConversions || {}).length > 0;
+        const hasPriorityLiq = inputs.liquidationMode === 'priority' && (inputs.liquidationStrategies || []).length > 0;
+        const retAge = basePlan?.simulationStartAge || clientInfo.retirementAge || 65;
+        const printProjection = printOptions?.mode === 'montecarlo' && monteCarloData?.scenarios?.median
+          ? monteCarloData.scenarios.median : projectionData;
+
+        // Build year-by-year data
+        const taxStrategyRows = printProjection.map((row, idx) => {
+          const yearNum = idx + 1;
+          const strategy = hasPriorityLiq
+            ? (inputs.liquidationStrategies || []).find(s => yearNum >= s.startYear && yearNum <= s.endYear)
+            : null;
+          return {
+            age: row.age,
+            yearNum,
+            source: strategy ? strategy.priority[0] : 'proportionate',
+            rothConversion: row.rothConversion || 0,
+            rmd: row.rmdAmount || 0,
+            totalTax: row.totalTax || 0,
+            effectiveRate: row.effectiveRate || '0.0',
+            tradBalance: row.traditionalBalanceDetail || 0,
+            rothBalance: row.rothBalanceDetail || 0,
+            nqBalance: row.nqBalanceDetail || 0,
+            total: row.total || 0
+          };
+        });
+
+        const totalConversions = taxStrategyRows.reduce((s, r) => s + r.rothConversion, 0);
+        const totalTax = taxStrategyRows.reduce((s, r) => s + r.totalTax, 0);
+        const conversionYears = taxStrategyRows.filter(r => r.rothConversion > 0);
+        const sourceLabels = { traditional: 'Trad', roth: 'Roth', nq: 'NQ', proportionate: 'Prop.' };
+        const sourceColors = { traditional: '#f97316', roth: '#10b981', nq: '#a78bfa', proportionate: '#64748b' };
+
+        // Filter rows for print: show every year with a conversion, then every 5th year, plus first and last 3
+        // Limit to 16 rows: prioritize conversion years, first/last, then evenly spaced
+        const filteredRows = (() => {
+          const priority = [];
+          const rest = [];
+          taxStrategyRows.forEach((r, i) => {
+            if (r.rothConversion > 0 || i === 0 || i === taxStrategyRows.length - 1) priority.push(r);
+            else rest.push(r);
+          });
+          const remaining = 16 - priority.length;
+          if (remaining > 0 && rest.length > 0) {
+            const step = Math.max(1, Math.floor(rest.length / remaining));
+            for (let j = 0; j < rest.length && priority.length < 15; j += step) {
+              priority.push(rest[j]);
+            }
+          }
+          return priority.sort((a, b) => a.age - b.age).slice(0, 15);
+        })();
+
+        return (
+          <PrintPageWrapper pageNumber={9 + cashFlowPageCount} totalPages={totalPrintPages} title="Tax Strategy Analysis" subtitle="Roth conversion schedule and liquidation strategy">
+            {/* Strategy Summary */}
+            <div className="grid grid-cols-3 gap-2 mb-3">
+              {hasConversions && (
+                <div className="border border-teal-200 rounded p-2 text-center">
+                  <p className="text-[9px] text-slate-500 uppercase font-semibold">Roth Conversions</p>
+                  <p className="text-sm font-bold text-teal-600">${Math.round(totalConversions).toLocaleString()}</p>
+                  <p className="text-[9px] text-slate-500">{conversionYears.length} yrs — Ages {conversionYears[0]?.age}–{conversionYears[conversionYears.length - 1]?.age}</p>
+                </div>
+              )}
+              {hasPriorityLiq && (
+                <div className="border border-orange-200 rounded p-2 text-center">
+                  <p className="text-[9px] text-slate-500 uppercase font-semibold">Liquidation Strategy</p>
+                  <p className="text-xs font-bold text-orange-600">Priority-Based</p>
+                  <div className="text-[9px] text-slate-500">
+                    {inputs.liquidationStrategies.map((s, i) => (
+                      <p key={i}>Yr {s.startYear}–{s.endYear}: {s.priority.map(a => sourceLabels[a]).join(' → ')}</p>
+                    ))}
+                  </div>
+                </div>
+              )}
+              <div className="border border-slate-200 rounded p-2 text-center">
+                <p className="text-[9px] text-slate-500 uppercase font-semibold">Lifetime Tax Estimate</p>
+                <p className="text-sm font-bold text-red-600">${Math.round(totalTax).toLocaleString()}</p>
+                <p className="text-[9px] text-slate-500">Avg eff. rate: {(taxStrategyRows.reduce((s, r) => s + parseFloat(r.effectiveRate), 0) / taxStrategyRows.length).toFixed(1)}%</p>
+              </div>
+            </div>
+
+            {/* Optimizer Comparison */}
+            {taxStrategyComparison && (
+              <div className="mb-2">
+                <div className="grid grid-cols-2 gap-2 mb-2">
+                  <div className="border border-slate-200 rounded p-2">
+                    <p className="text-[9px] text-slate-500 uppercase font-semibold mb-1">Proportionate Distribution</p>
+                    <div className="space-y-0.5 text-[10px]">
+                      <div className="flex justify-between"><span className="text-slate-600">Lifetime Taxes</span><span className="font-medium text-red-600">${Math.round(taxStrategyComparison.currentLifetimeTax).toLocaleString()}</span></div>
+                      <div className="flex justify-between"><span className="text-slate-600">Heir Tax Burden</span><span className="font-medium text-red-500">${Math.round(taxStrategyComparison.currentTotalBurden - taxStrategyComparison.currentLifetimeTax).toLocaleString()}</span></div>
+                      <div className="flex justify-between border-t border-slate-200 pt-0.5 font-bold"><span>Total Family Tax</span><span className="text-red-700">${Math.round(taxStrategyComparison.currentTotalBurden).toLocaleString()}</span></div>
+                    </div>
+                    <div className="mt-1 pt-1 border-t border-slate-100 text-[9px]">
+                      <div className="flex gap-2">
+                        <span className="text-orange-600">Trad: ${Math.round(taxStrategyComparison.currentLegacyBreakdown.traditional).toLocaleString()}</span>
+                        <span className="text-mwm-green">Roth: ${Math.round(taxStrategyComparison.currentLegacyBreakdown.roth).toLocaleString()}</span>
+                        <span className="text-purple-600">NQ: ${Math.round(taxStrategyComparison.currentLegacyBreakdown.nq).toLocaleString()}</span>
+                      </div>
+                      <p className="font-bold text-blue-700 text-[10px]">After-Tax Legacy: ${Math.round(taxStrategyComparison.currentAfterTaxLegacy).toLocaleString()}</p>
+                    </div>
+                  </div>
+                  <div className="border-2 border-mwm-green/30 rounded p-2 bg-mwm-green/10/20">
+                    <p className="text-[9px] text-mwm-green/80 uppercase font-semibold mb-1">Optimized Strategy</p>
+                    <div className="space-y-0.5 text-[10px]">
+                      <div className="flex justify-between"><span className="text-slate-600">Lifetime Taxes</span><span className="font-medium text-mwm-green">${Math.round(taxStrategyComparison.optimizedLifetimeTax).toLocaleString()}</span></div>
+                      <div className="flex justify-between"><span className="text-slate-600">Heir Tax Burden</span><span className="font-medium text-mwm-green">${Math.round(taxStrategyComparison.optimizedTotalBurden - taxStrategyComparison.optimizedLifetimeTax).toLocaleString()}</span></div>
+                      <div className="flex justify-between border-t border-slate-200 pt-0.5 font-bold"><span>Total Family Tax</span><span className="text-mwm-green/80">${Math.round(taxStrategyComparison.optimizedTotalBurden).toLocaleString()}</span></div>
+                    </div>
+                    <div className="mt-1 pt-1 border-t border-mwm-green/20 text-[9px]">
+                      <div className="flex gap-2">
+                        <span className="text-orange-600">Trad: ${Math.round(taxStrategyComparison.optimizedLegacyBreakdown.traditional).toLocaleString()}</span>
+                        <span className="text-mwm-green">Roth: ${Math.round(taxStrategyComparison.optimizedLegacyBreakdown.roth).toLocaleString()}</span>
+                        <span className="text-purple-600">NQ: ${Math.round(taxStrategyComparison.optimizedLegacyBreakdown.nq).toLocaleString()}</span>
+                      </div>
+                      <p className="font-bold text-blue-700 text-[10px]">After-Tax Legacy: ${Math.round(taxStrategyComparison.optimizedAfterTaxLegacy).toLocaleString()}</p>
+                    </div>
+                  </div>
+                </div>
+                <div className="grid grid-cols-4 gap-1.5">
+                  <div className="bg-slate-50 border border-slate-200 rounded p-1.5 text-center">
+                    <p className="text-[8px] text-slate-500 uppercase font-semibold">Family Tax Savings</p>
+                    <p className="text-xs font-bold text-mwm-green/80">${Math.round(taxStrategyComparison.totalBurdenSavings).toLocaleString()}</p>
+                  </div>
+                  <div className="bg-slate-50 border border-slate-200 rounded p-1.5 text-center">
+                    <p className="text-[8px] text-slate-500 uppercase font-semibold">Legacy Improvement</p>
+                    <p className="text-xs font-bold text-mwm-green/80">+${Math.round(taxStrategyComparison.afterTaxLegacyImprovement).toLocaleString()}</p>
+                  </div>
+                  <div className="bg-slate-50 border border-slate-200 rounded p-1.5 text-center">
+                    <p className="text-[8px] text-slate-500 uppercase font-semibold">Total Conversions</p>
+                    <p className="text-xs font-bold text-teal-600">${Math.round(taxStrategyComparison.totalConversions).toLocaleString()}</p>
+                  </div>
+                  <div className="bg-slate-50 border border-slate-200 rounded p-1.5 text-center">
+                    <p className="text-[8px] text-slate-500 uppercase font-semibold">RMD Reduction</p>
+                    <p className="text-xs font-bold text-blue-600">{taxStrategyComparison.rmdReduction > 0 ? `-$${Math.round(taxStrategyComparison.rmdReduction).toLocaleString()}` : '$0'}</p>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* Year-by-Year Table */}
+            <div className="border border-slate-200 rounded-lg overflow-hidden">
+              <table className="w-full text-[10px] text-right border-collapse print-cf-table">
+                <thead>
+                  <tr className="bg-slate-100 text-slate-600 font-bold">
+                    <th className="p-1 text-left">Age</th>
+                    {hasPriorityLiq && <th className="p-1 text-center">Source</th>}
+                    {hasConversions && <th className="p-1 text-teal-600">Roth Conv.</th>}
+                    <th className="p-1 text-orange-600">RMD</th>
+                    <th className="p-1 text-red-600">Total Tax</th>
+                    <th className="p-1">Eff. Rate</th>
+                    <th className="p-1 text-orange-500">Trad Bal.</th>
+                    <th className="p-1 text-mwm-green">Roth Bal.</th>
+                    <th className="p-1 text-purple-500">NQ Bal.</th>
+                    <th className="p-1 text-slate-900">Total</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {filteredRows.map((row, ri) => (
+                    <tr key={row.age} className={`${ri % 2 === 0 ? 'bg-white' : 'bg-slate-50'} ${row.rothConversion > 0 ? '!bg-teal-50' : ''}`}>
+                      <td className="p-1 text-left font-bold">{row.age}</td>
+                      {hasPriorityLiq && (
+                        <td className="p-1 text-center">
+                          <span className="px-1 py-0.5 rounded text-[9px] font-bold text-white" style={{ backgroundColor: sourceColors[row.source] || '#64748b' }}>
+                            {sourceLabels[row.source] || 'Prop.'}
+                          </span>
+                        </td>
+                      )}
+                      {hasConversions && <td className="p-1 text-teal-600 font-medium">{row.rothConversion > 0 ? `$${Math.round(row.rothConversion).toLocaleString()}` : '-'}</td>}
+                      <td className="p-1 text-orange-600">{row.rmd > 0 ? `$${Math.round(row.rmd).toLocaleString()}` : '-'}</td>
+                      <td className="p-1 text-red-600">${Math.round(row.totalTax).toLocaleString()}</td>
+                      <td className="p-1 text-slate-600">{row.effectiveRate}%</td>
+                      <td className="p-1 text-orange-500">${Math.round(row.tradBalance).toLocaleString()}</td>
+                      <td className="p-1 text-mwm-green">${Math.round(row.rothBalance).toLocaleString()}</td>
+                      <td className="p-1 text-purple-500">${Math.round(row.nqBalance).toLocaleString()}</td>
+                      <td className="p-1 font-bold text-slate-900">${Math.round(row.total).toLocaleString()}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+
+            {/* Explanation */}
+            <div className="mt-3 bg-slate-50 border border-slate-200 rounded-lg p-3 text-[11px] text-slate-600 space-y-1.5">
+              {hasConversions && (
+                <p><strong>Roth Conversions:</strong> Traditional IRA funds are converted to Roth IRA, creating taxable income in the conversion year but providing tax-free growth and withdrawals thereafter. Conversions reduce future Required Minimum Distributions and eliminate heir tax burden on converted amounts.</p>
+              )}
+              {hasPriorityLiq && (
+                <p><strong>Liquidation Strategy:</strong> Withdrawals are taken from accounts in the specified priority order rather than proportionally. This sequence is designed to optimize the tax efficiency of the overall distribution plan.</p>
+              )}
+              <p><strong>Note:</strong> Tax estimates are based on current federal and state tax law projected forward with inflation adjustments. Actual tax liability will depend on future legislation, investment returns, and personal circumstances.</p>
+            </div>
+          </PrintPageWrapper>
+        );
+      })()}
+
       {/* PRINT PAGE: Disclosures */}
-      <PrintPageWrapper pageNumber={9 + cashFlowPageCount} totalPages={totalPrintPages} title="Important Disclosures" subtitle="Assumptions, methodology, and limitations">
+      <PrintPageWrapper pageNumber={(hasTaxStrategyPage ? 10 : 9) + cashFlowPageCount} totalPages={totalPrintPages} title="Important Disclosures" subtitle="Assumptions, methodology, and limitations">
         <div className="space-y-2 text-[12px] text-slate-600">
           {/* Return Assumptions */}
           <div className="border border-slate-200 rounded-lg p-2">

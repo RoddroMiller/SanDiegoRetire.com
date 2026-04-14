@@ -129,6 +129,7 @@ export default function BucketPortfolioBuilder() {
   const [activeTab, setActiveTab] = useState('chart');
   const [rebalanceFreq, setRebalanceFreq] = useState(3);
   const [optimizerRebalanceFreq, setOptimizerRebalanceFreq] = useState(3); // 0 = sequential, 1 = annual, 3 = every 3 years (default matches architect)
+  const [taxStrategyComparison, setTaxStrategyComparison] = useState(null); // Optimizer comparison data for print
   const [isGeneratingReport, setIsGeneratingReport] = useState(false);
   const [showCashFlowTable, setShowCashFlowTable] = useState(false);
 
@@ -216,6 +217,11 @@ export default function BucketPortfolioBuilder() {
     nqQualifiedDividendPercent: 80, // % of NQ dividends that are qualified
     nqCapitalGainRate: 4, // Annual % of NQ balance realized as capital gains (fund distributions, rebalancing)
     withdrawalOverrides: {}, // Per-age overrides: { [age]: { traditionalPercent, rothPercent, nqPercent } }
+    // Integrated Tax Strategy
+    rothConversions: {}, // { [age]: amount } per-year Roth conversion dollars
+    nqCapGainOverrides: [], // [{ startYear, endYear, rate }] per-year-range cap gain rate overrides
+    liquidationMode: 'proportionate', // 'proportionate' | 'priority'
+    liquidationStrategies: [], // [{ id, startYear, endYear, priority: ['nq','traditional','roth'] }]
     accounts: [], // Array of { id, label, owner: 'client'|'partner', type: 'traditional'|'roth'|'nq', subtype: 'ira'|'401k'|'brokerage', balance }
     // SS Breakeven Analysis Settings
     ssBridgeNqPercent: 50, // % of bridge-year withdrawals from NQ (non-qualified) accounts
@@ -284,6 +290,10 @@ export default function BucketPortfolioBuilder() {
         nqQualifiedDividendPercent: s.inputs.nqQualifiedDividendPercent ?? 80,
         nqCapitalGainRate: s.inputs.nqCapitalGainRate > 10 ? 4 : (s.inputs.nqCapitalGainRate ?? 4),
         withdrawalOverrides: s.inputs.withdrawalOverrides || {},
+        rothConversions: s.inputs.rothConversions || {},
+        nqCapGainOverrides: s.inputs.nqCapGainOverrides || [],
+        liquidationMode: s.inputs.liquidationMode || 'proportionate',
+        liquidationStrategies: s.inputs.liquidationStrategies || [],
         accounts: (s.inputs.accounts || []).map(a => ({ ...a, annualContribution: a.annualContribution || 0 })),
         stateCode: s.inputs.stateCode || '',
         // Migration defaults for life expectancy & survivor benefits
@@ -785,6 +795,45 @@ export default function BucketPortfolioBuilder() {
       }
       return { ...prev, withdrawalOverrides: overrides };
     });
+  };
+
+  // Tax Strategy Handlers
+  const handleApplyTaxStrategy = (strategy, comparison) => {
+    setInputs(prev => ({
+      ...prev,
+      rothConversions: strategy.rothConversions || {},
+      nqCapGainOverrides: strategy.nqCapGainOverrides || [],
+      liquidationMode: strategy.liquidationMode || 'proportionate',
+      liquidationStrategies: strategy.liquidationStrategies || []
+    }));
+    if (comparison) setTaxStrategyComparison(comparison);
+  };
+
+  const handleRothConversionChange = (age, amount) => {
+    setInputs(prev => {
+      if (age === '__reset_all__') {
+        return { ...prev, rothConversions: {} };
+      }
+      const conversions = { ...prev.rothConversions };
+      if (amount === null || amount === 0) {
+        delete conversions[age];
+      } else {
+        conversions[age] = amount;
+      }
+      return { ...prev, rothConversions: conversions };
+    });
+  };
+
+  const handleLiquidationStrategyChange = (mode, strategies) => {
+    setInputs(prev => ({
+      ...prev,
+      liquidationMode: mode,
+      liquidationStrategies: strategies || []
+    }));
+  };
+
+  const handleCapGainOverrideChange = (overrides) => {
+    setInputs(prev => ({ ...prev, nqCapGainOverrides: overrides || [] }));
   };
 
   // Additional Income Stream Handlers
@@ -1387,6 +1436,12 @@ export default function BucketPortfolioBuilder() {
       // 3-Way Account Split
       onAccountSplitChange={handleAccountSplitChange}
       onWithdrawalOverrideChange={handleWithdrawalOverrideChange}
+      // Tax Strategy Optimization
+      onApplyTaxStrategy={handleApplyTaxStrategy}
+      taxStrategyComparison={taxStrategyComparison}
+      onRothConversionChange={handleRothConversionChange}
+      onLiquidationStrategyChange={handleLiquidationStrategyChange}
+      onCapGainOverrideChange={handleCapGainOverrideChange}
     />
     </>
   );

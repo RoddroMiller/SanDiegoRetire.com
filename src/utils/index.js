@@ -18,6 +18,7 @@ export {
   calculateRMD,
   STATE_TAX_DATA,
   optimizeLiquidationStrategy,
+  optimizeRetirementTaxStrategy,
   applyDeemedFiling,
   getImpliedPIA
 } from './calculations';
