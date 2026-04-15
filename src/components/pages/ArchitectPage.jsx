@@ -132,6 +132,7 @@ export const ArchitectPage = ({
   // Portfolio Sustainability chart mode (shared between Allocation tab and SS Optimizer)
   const [showMonteCarlo, setShowMonteCarlo] = useState(false);
 
+
   // SS Optimizer outcomes from actual simulation (deterministic) — used by both tab and print
   const ssOutcomesForDisplay = useMemo(() => {
     if (!ssSimResults || ssSimResults.length === 0) return ssAnalysis.outcomes;
