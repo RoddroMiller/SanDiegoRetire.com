@@ -172,48 +172,110 @@ export const estimatePIAFromIncome = (annualIncome) => {
 // Tax bracket base year — all brackets are 2026 values
 const TAX_BRACKET_BASE_YEAR = 2026;
 
-// 2026 Federal Tax Brackets (IRS Rev. Proc. 2025-XX, inflation-adjusted)
+// 2026 Federal Tax Brackets (IRS Rev. Proc. 2025-32, TCJA made permanent by OBBBA July 2025)
 const FEDERAL_BRACKETS = {
   single: [
-    { min: 0, max: 11925, rate: 0.10 },
-    { min: 11925, max: 48475, rate: 0.12 },
-    { min: 48475, max: 103350, rate: 0.22 },
-    { min: 103350, max: 197300, rate: 0.24 },
-    { min: 197300, max: 250525, rate: 0.32 },
-    { min: 250525, max: 626350, rate: 0.35 },
-    { min: 626350, max: Infinity, rate: 0.37 }
+    { min: 0, max: 12400, rate: 0.10 },
+    { min: 12400, max: 50400, rate: 0.12 },
+    { min: 50400, max: 105700, rate: 0.22 },
+    { min: 105700, max: 201775, rate: 0.24 },
+    { min: 201775, max: 256225, rate: 0.32 },
+    { min: 256225, max: 640600, rate: 0.35 },
+    { min: 640600, max: Infinity, rate: 0.37 }
   ],
   married: [
-    { min: 0, max: 23850, rate: 0.10 },
-    { min: 23850, max: 96950, rate: 0.12 },
-    { min: 96950, max: 206700, rate: 0.22 },
-    { min: 206700, max: 394600, rate: 0.24 },
-    { min: 394600, max: 501050, rate: 0.32 },
-    { min: 501050, max: 752800, rate: 0.35 },
-    { min: 752800, max: Infinity, rate: 0.37 }
+    { min: 0, max: 24800, rate: 0.10 },
+    { min: 24800, max: 100800, rate: 0.12 },
+    { min: 100800, max: 211400, rate: 0.22 },
+    { min: 211400, max: 403550, rate: 0.24 },
+    { min: 403550, max: 512450, rate: 0.32 },
+    { min: 512450, max: 768700, rate: 0.35 },
+    { min: 768700, max: Infinity, rate: 0.37 }
   ]
 };
 
-// 2026 Qualified Dividend / LTCG Brackets
+// 2026 Qualified Dividend / LTCG Brackets (IRS Rev. Proc. 2025-32)
 const QDIV_BRACKETS = {
   single: [
-    { min: 0, max: 48350, rate: 0 },
-    { min: 48350, max: 533400, rate: 0.15 },
-    { min: 533400, max: Infinity, rate: 0.20 }
+    { min: 0, max: 49450, rate: 0 },
+    { min: 49450, max: 545500, rate: 0.15 },
+    { min: 545500, max: Infinity, rate: 0.20 }
   ],
   married: [
-    { min: 0, max: 96700, rate: 0 },
-    { min: 96700, max: 600050, rate: 0.15 },
-    { min: 600050, max: Infinity, rate: 0.20 }
+    { min: 0, max: 98900, rate: 0 },
+    { min: 98900, max: 613700, rate: 0.15 },
+    { min: 613700, max: Infinity, rate: 0.20 }
   ]
 };
 
-// Standard deduction (2026)
+// Standard deduction (2026, IRS Rev. Proc. 2025-32)
 const STANDARD_DEDUCTION = {
-  single: 15000,
-  married: 30000,
+  single: 16100,
+  married: 32200,
   // Additional deduction for 65+
-  seniorBonus: { single: 2000, married: 1600 }
+  seniorBonus: { single: 2050, married: 1650 }
+};
+
+// ============================================
+// IRMAA (Income-Related Monthly Adjustment Amount) — Medicare Part B & Part D
+// ============================================
+// 2026 IRMAA brackets based on MAGI from 2 years prior (2024 for 2026)
+// Source: CMS 2026 Medicare Parts A & B Premiums
+const IRMAA_BASE_YEAR = 2026;
+const IRMAA_BASE_PART_B = 202.90; // monthly base premium
+
+// MAGI thresholds and monthly surcharges (Part B premium includes base)
+const IRMAA_BRACKETS = {
+  single: [
+    { magiMax: 109000, partBMonthly: 202.90, partDSurchargeMonthly: 0 },
+    { magiMax: 137000, partBMonthly: 284.10, partDSurchargeMonthly: 14.50 },
+    { magiMax: 171000, partBMonthly: 405.80, partDSurchargeMonthly: 37.50 },
+    { magiMax: 205000, partBMonthly: 527.50, partDSurchargeMonthly: 60.40 },
+    { magiMax: 500000, partBMonthly: 649.20, partDSurchargeMonthly: 83.30 },
+    { magiMax: Infinity, partBMonthly: 689.90, partDSurchargeMonthly: 91.00 }
+  ],
+  married: [
+    { magiMax: 218000, partBMonthly: 202.90, partDSurchargeMonthly: 0 },
+    { magiMax: 274000, partBMonthly: 284.10, partDSurchargeMonthly: 14.50 },
+    { magiMax: 342000, partBMonthly: 405.80, partDSurchargeMonthly: 37.50 },
+    { magiMax: 410000, partBMonthly: 527.50, partDSurchargeMonthly: 60.40 },
+    { magiMax: 750000, partBMonthly: 649.20, partDSurchargeMonthly: 83.30 },
+    { magiMax: Infinity, partBMonthly: 689.90, partDSurchargeMonthly: 91.00 }
+  ]
+};
+
+/**
+ * Calculate IRMAA surcharge for a given year
+ * @param {number} magi - Modified Adjusted Gross Income (from 2 years prior)
+ * @param {string} filingStatus - 'single' or 'married'
+ * @param {number} yearsFromBase - Years from IRMAA_BASE_YEAR for inflation adjustment
+ * @param {number} inflationRate - Annual inflation rate as percentage
+ * @param {number} numPeople - Number of Medicare enrollees (1 or 2 for married couples)
+ * @returns {{ partBSurcharge: number, partDSurcharge: number, totalAnnualCost: number, bracket: number }}
+ */
+export const calculateIRMAA = (magi, filingStatus, yearsFromBase, inflationRate, numPeople = 1) => {
+  const brackets = IRMAA_BRACKETS[filingStatus] || IRMAA_BRACKETS.married;
+  const factor = yearsFromBase > 0 ? Math.pow(1 + inflationRate / 100, yearsFromBase) : 1;
+
+  // Find applicable bracket based on inflation-adjusted MAGI thresholds
+  let bracket = 0;
+  for (let i = 0; i < brackets.length; i++) {
+    const adjustedMax = brackets[i].magiMax === Infinity ? Infinity : Math.round(brackets[i].magiMax * factor);
+    if (magi <= adjustedMax) {
+      bracket = i;
+      break;
+    }
+    bracket = i;
+  }
+
+  const b = brackets[bracket];
+  // Surcharge = total premium minus base premium, per person, annualized
+  const partBSurchargeMonthly = Math.max(0, b.partBMonthly - IRMAA_BASE_PART_B);
+  const partBSurcharge = partBSurchargeMonthly * 12 * numPeople;
+  const partDSurcharge = b.partDSurchargeMonthly * 12 * numPeople;
+  const totalAnnualCost = partBSurcharge + partDSurcharge;
+
+  return { partBSurcharge, partDSurcharge, totalAnnualCost, bracket };
 };
 
 // ============================================
@@ -394,6 +456,17 @@ const calculateStateTax = (taxableIncome, stateCode, filingStatus) => {
  */
 export const getInflationAdjustedBrackets = (filingStatus, yearsFromBase, inflationRate) => {
   const brackets = FEDERAL_BRACKETS[filingStatus] || FEDERAL_BRACKETS.married;
+  if (yearsFromBase <= 0) return brackets;
+  const factor = Math.pow(1 + inflationRate / 100, yearsFromBase);
+  return brackets.map(b => ({
+    ...b,
+    min: b.min === 0 ? 0 : Math.round(b.min * factor),
+    max: b.max === Infinity ? Infinity : Math.round(b.max * factor)
+  }));
+};
+
+export const getInflationAdjustedQDivBrackets = (filingStatus, yearsFromBase, inflationRate) => {
+  const brackets = QDIV_BRACKETS[filingStatus] || QDIV_BRACKETS.married;
   if (yearsFromBase <= 0) return brackets;
   const factor = Math.pow(1 + inflationRate / 100, yearsFromBase);
   return brackets.map(b => ({
@@ -1331,6 +1404,8 @@ export const runSimulation = (basePlan, assumptions, inputs, rebalanceFreq, isMo
     let rothBalance = inputs.totalPortfolio * initRothPct;
     let nqAccountBalance = inputs.totalPortfolio * initNqPct;
 
+    let nqUnrealizedGains = 0; // Tracks deferred capital gains that roll forward
+
     let benchmarkBalance = inputs.totalPortfolio;
     let history = [];
     let failed = false;
@@ -1530,6 +1605,13 @@ export const runSimulation = (basePlan, assumptions, inputs, rebalanceFreq, isMo
       let netSurplus = surplus; // Track surplus after tax netting
       let rothConversionAmount = 0;
       let rothConversionTax = 0;
+      let currentMAGI = 0;
+      let irmaaCost = 0;
+      let irmaaBracket = 0;
+      let nqAnnualCapGains = 0;
+      let nqStrategicRealization = 0;
+      let nqOrdinaryDividends = 0;
+      let nqQualifiedDividends = 0;
 
       if (inputs.taxEnabled) {
         // Resolve per-age override or use defaults
@@ -1538,21 +1620,36 @@ export const runSimulation = (basePlan, assumptions, inputs, rebalanceFreq, isMo
         const rothPct = (override?.rothPercent ?? inputs.rothPercent ?? 25) / 100;
         const nqPct = (override?.nqPercent ?? inputs.nqPercent ?? 15) / 100;
 
-        // NQ assumptions
-        const nqDividendYield = (inputs.nqDividendYield ?? 2.0) / 100;
-        const nqQualifiedDividendPct = (inputs.nqQualifiedDividendPercent ?? 80) / 100;
-        // Annual realized capital gain rate as % of NQ balance (fund distributions, rebalancing, etc.)
-        // Per-year-range override takes precedence over global rate
+        // NQ tax computation — per-bucket when taxProfiles are available, global fallback otherwise
         const capGainOverride = (inputs.nqCapGainOverrides || []).find(r => i >= r.startYear && i <= r.endYear);
+        const baseCapGainRate = ((inputs.nqCapitalGainRate) ?? 4) / 100;
         const nqAnnualCapGainRate = ((capGainOverride?.rate ?? inputs.nqCapitalGainRate) ?? 4) / 100;
-
-        // Use tracked NQ balance for dividend and cap gain calculations
         const nqBalanceForTax = nqAccountBalance;
-        const nqTotalDividends = nqBalanceForTax * nqDividendYield;
-        const nqQualifiedDividends = nqTotalDividends * nqQualifiedDividendPct;
-        const nqOrdinaryDividends = nqTotalDividends - nqQualifiedDividends;
-        // Annual realized capital gains from NQ balance (independent of withdrawals)
-        const nqAnnualCapGains = nqBalanceForTax * nqAnnualCapGainRate;
+
+        // Per-bucket tax profiles: compute NQ tax items from each bucket's NQ share
+        const hasBucketTaxProfiles = assumptions.b1?.taxProfile && assumptions.b2?.taxProfile;
+
+        if (hasBucketTaxProfiles) {
+          // Each bucket's NQ portion generates tax items based on its taxProfile
+          const nqFraction = nqPct; // NQ share of the portfolio
+          const bucketKeys = ['b1', 'b2', 'b3', 'b4', 'b5'];
+          const bucketTotal = bucketKeys.reduce((s, k) => s + balances[k], 0);
+
+          for (const bk of bucketKeys) {
+            const tp = assumptions[bk]?.taxProfile;
+            if (!tp || bucketTotal <= 0) continue;
+            const bucketNqBalance = balances[bk] * nqFraction;
+            nqOrdinaryDividends += bucketNqBalance * ((tp.ordinaryIncomeRate || 0) / 100);
+            nqQualifiedDividends += bucketNqBalance * ((tp.qualDivRate || 0) / 100);
+          }
+        } else {
+          // Global fallback: use flat dividend yield
+          const nqDividendYield = (inputs.nqDividendYield ?? 2.0) / 100;
+          const nqQualifiedDividendPct = (inputs.nqQualifiedDividendPercent ?? 80) / 100;
+          const nqTotalDividends = nqBalanceForTax * nqDividendYield;
+          nqQualifiedDividends = nqTotalDividends * nqQualifiedDividendPct;
+          nqOrdinaryDividends = nqTotalDividends - nqQualifiedDividends;
+        }
 
         const isSenior = simAge >= 65;
         // Switch to single filing after first spouse dies
@@ -1561,6 +1658,64 @@ export const runSimulation = (basePlan, assumptions, inputs, rebalanceFreq, isMo
         const bothAliveForTax = clientAliveForTax && partnerAliveForTax;
         const filingStatus = (inputs.filingStatus === 'married' && !bothAliveForTax) ? 'single' : (inputs.filingStatus || 'married');
         const stateRate = inputs.stateRate || 0;
+
+        // Unrealized gains rollforward: when cap gain override sets rate to 0,
+        // gains still accrue but are deferred (unrealized). They accumulate and
+        // can be strategically realized in years with 0% LTCG bracket room.
+
+        // Compute potential and realized cap gains (per-bucket or global)
+        let potentialCapGains = 0;
+
+        if (hasBucketTaxProfiles) {
+          const bucketKeys = ['b1', 'b2', 'b3', 'b4', 'b5'];
+          const bucketTotal = bucketKeys.reduce((s, k) => s + balances[k], 0);
+          for (const bk of bucketKeys) {
+            const tp = assumptions[bk]?.taxProfile;
+            if (!tp || bucketTotal <= 0) continue;
+            const bucketNqBalance = balances[bk] * nqPct;
+            potentialCapGains += bucketNqBalance * ((tp.realizedCapGainRate || 0) / 100);
+          }
+        } else {
+          potentialCapGains = nqBalanceForTax * baseCapGainRate;
+        }
+
+        if (capGainOverride && capGainOverride.rate === 0) {
+          // Defer: gains accrue as unrealized
+          nqUnrealizedGains += potentialCapGains;
+          nqAnnualCapGains = 0;
+        } else if (capGainOverride) {
+          // Explicit override rate (non-zero)
+          nqAnnualCapGains = nqBalanceForTax * (capGainOverride.rate / 100);
+        } else {
+          // Use per-bucket computed cap gains as the realized amount
+          nqAnnualCapGains = potentialCapGains;
+
+          // Strategic realization: if there are accumulated unrealized gains,
+          // check if we can realize them at the 0% LTCG rate.
+          // The 0% LTCG bracket applies when taxable ordinary income is below the threshold.
+          if (nqUnrealizedGains > 0) {
+            // Estimate ordinary income to determine 0% LTCG room
+            const estTradWithdrawal = adjustedGap > 0 ? adjustedGap * ((inputs.traditionalPercent ?? 60) / 100) : 0;
+            const estOrdinaryIncome = (ssIncome * 0.85) + pensionIncome + (vaIncome || 0) + estTradWithdrawal +
+              nqOrdinaryDividends + otherIncome + (employmentIncome || 0) +
+              (inputs.rothConversions?.[simAge] || 0);
+            const yearsFromTaxBase = Math.max(0, simAge - (clientInfo?.currentAge || 65));
+            const inflPct = inputs.inflationRate ?? 2.5;
+            const qdivBrackets = getInflationAdjustedQDivBrackets(filingStatus, yearsFromTaxBase, inflPct);
+            const deduction = getInflationAdjustedDeduction(filingStatus, yearsFromTaxBase, inflPct, isSenior);
+            const taxableOrdinary = Math.max(0, estOrdinaryIncome - deduction);
+
+            // 0% LTCG bracket room = threshold - taxable ordinary income - already realized gains - qualified divs
+            const zeroPctThreshold = qdivBrackets[0]?.max || 98900;
+            const availableRoom = Math.max(0, zeroPctThreshold - taxableOrdinary - nqAnnualCapGains - nqQualifiedDividends);
+
+            if (availableRoom > 0) {
+              nqStrategicRealization = Math.min(nqUnrealizedGains, availableRoom);
+              nqUnrealizedGains -= nqStrategicRealization;
+              nqAnnualCapGains += nqStrategicRealization;
+            }
+          }
+        }
 
         // When there's an income surplus, first compute tax on income alone (no withdrawal).
         // Surplus pays taxes before any portfolio withdrawal is needed.
@@ -1736,6 +1891,32 @@ export const runSimulation = (basePlan, assumptions, inputs, rebalanceFreq, isMo
                 taxRemaining -= deduct;
               }
             }
+          }
+        }
+        // --- IRMAA calculation (Medicare surcharge based on MAGI from 2 years prior) ---
+        // Compute current year's MAGI for IRMAA lookback
+        // MAGI = all gross income (SS + pension + traditional + NQ gains/divs + other + Roth conversions)
+        currentMAGI = ssIncome + pensionIncome + (vaIncome || 0) +
+          (nqTaxDetail.nqWithdrawal || 0) + nqAnnualCapGains + nqQualifiedDividends + nqOrdinaryDividends +
+          otherIncome + (employmentIncome || 0) + rothConversionAmount +
+          (totalWithdrawal * ((nqTaxDetail.traditionalPctUsed || 0) / 100));
+
+        if (inputs.irmaaEnabled && simAge >= 65) {
+          // Use MAGI from 2 years prior (lookback rule)
+          const lookbackIdx = history.length - 2;
+          const lookbackMAGI = lookbackIdx >= 0 ? (history[lookbackIdx].magi || 0) : currentMAGI;
+
+          const yearsFromIrmaaBase = Math.max(0, simAge - (clientInfo?.currentAge || 65));
+          const inflPct = inputs.inflationRate ?? 2.5;
+          const numMedicareEnrollees = (bothAliveForTax && simAge >= 65 && currentPartnerAge >= 65) ? 2 : 1;
+          const irmaaResult = calculateIRMAA(lookbackMAGI, filingStatus, yearsFromIrmaaBase, inflPct, numMedicareEnrollees);
+          irmaaCost = irmaaResult.totalAnnualCost;
+          irmaaBracket = irmaaResult.bracket;
+
+          // IRMAA is an additional cost that increases total withdrawal needed
+          if (irmaaCost > 0) {
+            totalWithdrawal += irmaaCost;
+            taxData.irmaaCost = irmaaCost;
           }
         }
       } else {
@@ -1914,6 +2095,13 @@ export const runSimulation = (basePlan, assumptions, inputs, rebalanceFreq, isMo
         taxableSS: Math.round(taxData.taxableSS || 0),
         rothConversion: Math.round(rothConversionAmount),
         rothConversionTax: Math.round(rothConversionTax),
+        // Unrealized capital gains tracking
+        nqUnrealizedGains: Math.round(nqUnrealizedGains),
+        nqStrategicRealization: Math.round(nqStrategicRealization || 0),
+        // IRMAA tracking
+        magi: Math.round(currentMAGI || 0),
+        irmaaCost: Math.round(irmaaCost || 0),
+        irmaaBracket: irmaaBracket || 0,
         // Per-bucket return rates (as decimals, e.g. 0.05 = 5%)
         r1: rates.b1,
         r2: rates.b2,
@@ -2191,7 +2379,9 @@ export const optimizeLiquidationStrategy = (basePlan, assumptions, inputs, clien
     rmd: row.rmdAmount || 0,
     tradBalance: row.traditionalBalanceDetail || 0,
     rothBalance: row.rothBalanceDetail || 0,
-    nqBalance: row.nqBalanceDetail || 0
+    nqBalance: row.nqBalanceDetail || 0,
+    nqUnrealizedGains: row.nqUnrealizedGains || 0,
+    nqStrategicRealization: row.nqStrategicRealization || 0
   }));
 
   return {
@@ -2478,7 +2668,11 @@ export const optimizeRetirementTaxStrategy = (basePlan, assumptions, inputs, cli
       nqBalance: row.nqBalanceDetail || 0,
       totalTax: row.totalTax || 0,
       effectiveRate: row.effectiveRate || '0.0',
-      distribution: row.distribution || 0
+      distribution: row.distribution || 0,
+      nqUnrealizedGains: row.nqUnrealizedGains || 0,
+      nqStrategicRealization: row.nqStrategicRealization || 0,
+      irmaaCost: row.irmaaCost || 0,
+      magi: row.magi || 0
     };
   });
 

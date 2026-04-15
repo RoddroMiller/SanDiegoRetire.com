@@ -17,7 +17,7 @@ import { Card, StatBox, AllocationRow, FormattedNumberInput, Disclaimer } from '
 import {
   AllocationTab, WithdrawalOverrideModal, MonteCarloTab, SSOptimizationTab,
   ImproveOutcomeTab, ArchitectureTab, OptimizerTab, TaxMapTab,
-  LiquidationTab, CashFlowsTab, PrintPageWrapper
+  LiquidationTab, CashFlowsTab, ExecutiveSummaryTab, RebalancingTab, PrintPageWrapper
 } from './architect';
 
 const SCHEDULING_URL = 'https://oncehub.com/RoddMiller-30';
@@ -829,6 +829,20 @@ export const ArchitectPage = ({
               >
                 <TableIcon className="w-3 h-3 sm:w-4 sm:h-4" /> Cash Flows
               </button>
+              <button
+                onClick={() => onSetActiveTab('executive')}
+                className={`${activeTab === 'executive' ? 'border-mwm-green text-mwm-green/80' : 'border-transparent text-slate-500 hover:text-slate-700 hover:border-slate-300'} whitespace-nowrap py-3 sm:py-4 px-1 border-b-2 font-medium text-xs sm:text-sm flex items-center gap-1 sm:gap-2`}
+              >
+                <FileText className="w-3 h-3 sm:w-4 sm:h-4" /> Summary
+              </button>
+              {/* Rebalancing tab hidden — engine needs refinement
+              <button
+                onClick={() => onSetActiveTab('rebalancing')}
+                className={`${activeTab === 'rebalancing' ? 'border-mwm-green text-mwm-green/80' : 'border-transparent text-slate-500 hover:text-slate-700 hover:border-slate-300'} whitespace-nowrap py-3 sm:py-4 px-1 border-b-2 font-medium text-xs sm:text-sm flex items-center gap-1 sm:gap-2`}
+              >
+                <RefreshCw className="w-3 h-3 sm:w-4 sm:h-4" /> Rebalancing
+              </button>
+              */}
             </nav>
           </div>
 
@@ -959,6 +973,7 @@ export const ArchitectPage = ({
               onRothConversionChange={onRothConversionChange}
               onLiquidationStrategyChange={onLiquidationStrategyChange}
               onCapGainOverrideChange={onCapGainOverrideChange}
+              onInputChange={onInputChange}
             />
           )}
 
@@ -968,6 +983,27 @@ export const ArchitectPage = ({
               monteCarloData={monteCarloData}
               inputs={inputs}
               clientInfo={clientInfo}
+            />
+          )}
+
+          {activeTab === 'rebalancing' && (
+            <RebalancingTab
+              inputs={inputs}
+              basePlan={basePlan}
+              assumptions={assumptions}
+              projectionData={projectionData}
+            />
+          )}
+
+          {activeTab === 'executive' && (
+            <ExecutiveSummaryTab
+              inputs={inputs}
+              basePlan={basePlan}
+              projectionData={projectionData}
+              assumptions={assumptions}
+              clientInfo={clientInfo}
+              ssAnalysis={ssAnalysis}
+              ssPartnerAnalysis={ssPartnerAnalysis}
             />
           )}
         </div>

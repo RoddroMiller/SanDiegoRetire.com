@@ -1027,6 +1027,38 @@ export const InputsPage = ({
                   <input type="number" value={data.stdDev} onChange={(e) => onAssumptionChange(key, 'stdDev', e.target.value)} className="w-full px-3 py-2 text-sm border rounded-md" />
                 </div>
               </div>
+              {/* Tax Profile by Bucket — how this bucket's NQ portion generates taxable income */}
+              {data.taxProfile && (
+                <div className="mt-3 pt-3 border-t border-slate-200">
+                  <p className="text-[10px] text-slate-400 uppercase font-semibold mb-2">Tax Characteristics (% of NQ balance)</p>
+                  <div className="grid grid-cols-4 gap-2">
+                    <div>
+                      <label className="text-[10px] text-slate-400">Ordinary Inc.</label>
+                      <input type="number" step="0.5" value={data.taxProfile.ordinaryIncomeRate ?? 0}
+                        onChange={(e) => onAssumptionChange(key, 'taxProfile.ordinaryIncomeRate', e.target.value)}
+                        className="w-full px-2 py-1.5 text-xs border rounded-md" />
+                    </div>
+                    <div>
+                      <label className="text-[10px] text-slate-400">Qual. Divs</label>
+                      <input type="number" step="0.5" value={data.taxProfile.qualDivRate ?? 0}
+                        onChange={(e) => onAssumptionChange(key, 'taxProfile.qualDivRate', e.target.value)}
+                        className="w-full px-2 py-1.5 text-xs border rounded-md" />
+                    </div>
+                    <div>
+                      <label className="text-[10px] text-slate-400">Growth</label>
+                      <input type="number" step="0.5" value={data.taxProfile.growthRate ?? 0}
+                        onChange={(e) => onAssumptionChange(key, 'taxProfile.growthRate', e.target.value)}
+                        className="w-full px-2 py-1.5 text-xs border rounded-md" />
+                    </div>
+                    <div>
+                      <label className="text-[10px] text-slate-400">Real. CG</label>
+                      <input type="number" step="0.5" value={data.taxProfile.realizedCapGainRate ?? 0}
+                        onChange={(e) => onAssumptionChange(key, 'taxProfile.realizedCapGainRate', e.target.value)}
+                        className="w-full px-2 py-1.5 text-xs border rounded-md" />
+                    </div>
+                  </div>
+                </div>
+              )}
             </div>
             );
           })}

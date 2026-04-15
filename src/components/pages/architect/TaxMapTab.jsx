@@ -53,7 +53,8 @@ const CapGainRangeAdder = ({ totalYears, defaultRate, onAdd }) => {
 export const TaxMapTab = ({
   projectionData, monteCarloData, inputs, clientInfo, basePlan,
   assumptions, rebalanceFreq, rebalanceTargets,
-  onApplyTaxStrategy, onRothConversionChange, onLiquidationStrategyChange, onCapGainOverrideChange
+  onApplyTaxStrategy, onRothConversionChange, onLiquidationStrategyChange, onCapGainOverrideChange,
+  onInputChange
 }) => {
   const fmt = (val) => `$${Math.round(val).toLocaleString()}`;
 
@@ -119,7 +120,9 @@ export const TaxMapTab = ({
         effectiveRate: row.effectiveRate || '0.0',
         tradBalance: row.traditionalBalanceDetail || 0,
         rothBalance: row.rothBalanceDetail || 0,
-        nqBalance: row.nqBalanceDetail || 0
+        nqBalance: row.nqBalanceDetail || 0,
+        nqUnrealizedGains: row.nqUnrealizedGains || 0,
+        nqStrategicRealization: row.nqStrategicRealization || 0
       };
     });
   }, [projectionData, inputs, clientInfo, basePlan]);
@@ -427,6 +430,8 @@ export const TaxMapTab = ({
                         <th className="p-2 text-right">Trad Bal</th>
                         <th className="p-2 text-right">Roth Bal</th>
                         <th className="p-2 text-right">NQ Bal</th>
+                        <th className="p-2 text-right">Unreal. CG</th>
+                        <th className="p-2 text-right">CG Harvest</th>
                       </tr>
                     </thead>
                     <tbody>
@@ -448,6 +453,8 @@ export const TaxMapTab = ({
                           <td className="p-2 text-right text-orange-500">{fmt(row.tradBalance)}</td>
                           <td className="p-2 text-right text-mwm-green">{fmt(row.rothBalance)}</td>
                           <td className="p-2 text-right text-purple-500">{fmt(row.nqBalance)}</td>
+                          <td className="p-2 text-right text-amber-600">{row.nqUnrealizedGains > 0 ? fmt(row.nqUnrealizedGains) : '-'}</td>
+                          <td className={`p-2 text-right ${row.nqStrategicRealization > 0 ? 'text-emerald-600 font-semibold' : 'text-slate-400'}`}>{row.nqStrategicRealization > 0 ? fmt(row.nqStrategicRealization) : '-'}</td>
                         </tr>
                       ))}
                     </tbody>
@@ -658,6 +665,43 @@ export const TaxMapTab = ({
             <CapGainRangeAdder totalYears={projectionData.length} defaultRate={inputs.nqCapitalGainRate ?? 4} onAdd={(range) => {
               onCapGainOverrideChange([...(inputs.nqCapGainOverrides || []), range]);
             }} />
+          </div>
+        )}
+      </Card>
+
+      {/* IRMAA Medicare Surcharge Overlay */}
+      <Card>
+        <div className="flex items-center justify-between">
+          <h3 className="font-semibold text-slate-800 text-base flex items-center gap-2">
+            <DollarSign className="w-4 h-4" /> Medicare IRMAA Surcharges
+          </h3>
+          <label className="flex items-center gap-2 cursor-pointer">
+            <span className="text-xs text-slate-500">{inputs.irmaaEnabled ? 'Enabled' : 'Disabled'}</span>
+            <input type="checkbox" checked={inputs.irmaaEnabled || false}
+              onChange={(e) => onInputChange({ target: { name: 'irmaaEnabled', value: e.target.checked, type: 'checkbox' } })}
+              className="rounded border-slate-300 text-mwm-green focus:ring-mwm-green" />
+          </label>
+        </div>
+        <p className="text-xs text-slate-500 mt-1">
+          Income-Related Monthly Adjustment Amount — additional Medicare Part B & Part D premiums based on MAGI from 2 years prior.
+          Roth conversions can push MAGI into higher IRMAA brackets.
+        </p>
+        {inputs.irmaaEnabled && projectionData.some(r => r.irmaaCost > 0) && (
+          <div className="mt-3">
+            <div className="grid grid-cols-3 gap-3 text-center">
+              <div className="bg-red-50 rounded-lg p-2">
+                <p className="text-[10px] text-slate-500 uppercase font-semibold">Lifetime IRMAA</p>
+                <p className="text-base font-bold text-red-600">${projectionData.reduce((s, r) => s + (r.irmaaCost || 0), 0).toLocaleString()}</p>
+              </div>
+              <div className="bg-amber-50 rounded-lg p-2">
+                <p className="text-[10px] text-slate-500 uppercase font-semibold">Peak Annual</p>
+                <p className="text-base font-bold text-amber-600">${Math.max(...projectionData.map(r => r.irmaaCost || 0)).toLocaleString()}</p>
+              </div>
+              <div className="bg-slate-50 rounded-lg p-2">
+                <p className="text-[10px] text-slate-500 uppercase font-semibold">Years with IRMAA</p>
+                <p className="text-base font-bold text-slate-700">{projectionData.filter(r => r.irmaaCost > 0).length}</p>
+              </div>
+            </div>
           </div>
         )}
       </Card>

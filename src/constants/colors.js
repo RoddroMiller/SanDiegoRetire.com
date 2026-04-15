@@ -3,7 +3,7 @@
 export const COLORS = {
   shortTerm: '#9FA3A6', // Shield Silver
   midTerm: '#009639',   // Action Green
-  hedged: '#1A3628',    // Emerald (Structural)
+  hedged: '#2D6A4F',    // Forest Green (Structural)
   income: '#C5A059',    // Legacy Gold
   longTerm: '#1A1A1A',  // Vault Black
 

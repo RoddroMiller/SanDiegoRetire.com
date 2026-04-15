@@ -221,6 +221,7 @@ export default function BucketPortfolioBuilder() {
     // Integrated Tax Strategy
     rothConversions: {}, // { [age]: amount } per-year Roth conversion dollars
     nqCapGainOverrides: [], // [{ startYear, endYear, rate }] per-year-range cap gain rate overrides
+    irmaaEnabled: false, // Track Medicare IRMAA surcharges
     liquidationMode: 'proportionate', // 'proportionate' | 'priority'
     liquidationStrategies: [], // [{ id, startYear, endYear, priority: ['nq','traditional','roth'] }]
     accounts: [], // Array of { id, label, owner: 'client'|'partner', type: 'traditional'|'roth'|'nq', subtype: 'ira'|'401k'|'brokerage', balance }
@@ -234,11 +235,16 @@ export default function BucketPortfolioBuilder() {
 
   // Return Assumptions
   const [assumptions, setAssumptions] = useState({
-    b1: { return: 4.0, stdDev: 1.7, name: "B1 - Liquidity", subtitle: "Market-Neutral · Yrs 1–3", historical: 3.4 },
-    b2: { return: 5.5, stdDev: 6.0, name: "B2 - Bridge", subtitle: "Conservative Flexible · Yrs 4–6", historical: 5.1 },
-    b3: { return: 7.5, stdDev: 9.5, name: "B3 - Tactical Balanced", subtitle: "Active Tactical · Yrs 7–14", historical: 10.1 },
-    b4: { return: 7.0, stdDev: 12.0, name: "B4 - Income & Growth", subtitle: "Income-Oriented Equity · Yrs 13+", historical: 7.8 },
-    b5: { return: 8.5, stdDev: 15.0, name: "B5 - Permanent Equity", subtitle: "100% Equity · Growth & Legacy", historical: 11.9 },
+    b1: { return: 4.0, stdDev: 1.7, name: "B1 - Liquidity", subtitle: "Market-Neutral · Yrs 1–3", historical: 3.4,
+      taxProfile: { ordinaryIncomeRate: 4.0, qualDivRate: 0, growthRate: 0, realizedCapGainRate: 0 } },
+    b2: { return: 5.5, stdDev: 6.0, name: "B2 - Bridge", subtitle: "Conservative Flexible · Yrs 4–6", historical: 5.1,
+      taxProfile: { ordinaryIncomeRate: 4.0, qualDivRate: 1.0, growthRate: 0.5, realizedCapGainRate: 0 } },
+    b3: { return: 7.5, stdDev: 9.5, name: "B3 - Tactical Balanced", subtitle: "Active Tactical · Yrs 7–14", historical: 10.1,
+      taxProfile: { ordinaryIncomeRate: 2.0, qualDivRate: 1.0, growthRate: 4.5, realizedCapGainRate: 2.0 } },
+    b4: { return: 7.0, stdDev: 12.0, name: "B4 - Income & Growth", subtitle: "Income-Oriented Equity · Yrs 13+", historical: 7.8,
+      taxProfile: { ordinaryIncomeRate: 0, qualDivRate: 5.0, growthRate: 2.0, realizedCapGainRate: 0 } },
+    b5: { return: 8.5, stdDev: 15.0, name: "B5 - Permanent Equity", subtitle: "100% Equity · Growth & Legacy", historical: 11.9,
+      taxProfile: { ordinaryIncomeRate: 0, qualDivRate: 1.5, growthRate: 7.0, realizedCapGainRate: 4.0 } },
   });
 
   // --- Scenario Action Wrappers ---
@@ -901,7 +907,19 @@ export default function BucketPortfolioBuilder() {
   };
 
   const handleAssumptionChange = (key, field, value) => {
-    setAssumptions(prev => ({ ...prev, [key]: { ...prev[key], [field]: parseFloat(value) || 0 } }));
+    // Support nested taxProfile updates: field = 'taxProfile.ordinaryIncomeRate'
+    if (field.startsWith('taxProfile.')) {
+      const subField = field.split('.')[1];
+      setAssumptions(prev => ({
+        ...prev,
+        [key]: {
+          ...prev[key],
+          taxProfile: { ...(prev[key].taxProfile || {}), [subField]: parseFloat(value) || 0 }
+        }
+      }));
+    } else {
+      setAssumptions(prev => ({ ...prev, [key]: { ...prev[key], [field]: parseFloat(value) || 0 } }));
+    }
   };
 
   const applyHistoricalAverages = () => {

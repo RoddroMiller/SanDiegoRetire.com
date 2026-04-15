@@ -7,4 +7,6 @@ export { OptimizerTab } from './OptimizerTab';
 export { TaxMapTab } from './TaxMapTab';
 export { LiquidationTab } from './LiquidationTab';
 export { CashFlowsTab } from './CashFlowsTab';
+export { ExecutiveSummaryTab } from './ExecutiveSummaryTab';
+export { RebalancingTab } from './RebalancingTab';
 export { PrintPageWrapper, PrintFooter } from './PrintPageWrapper';
