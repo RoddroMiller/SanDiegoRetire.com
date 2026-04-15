@@ -1416,7 +1416,20 @@ export const runSimulation = (basePlan, assumptions, inputs, rebalanceFreq, isMo
 
       if (inputs.liquidationMode === 'priority') {
         const strategy = (inputs.liquidationStrategies || []).find(s => yearNum >= s.startYear && yearNum <= s.endYear);
-        if (strategy && strategy.priority) {
+        if (strategy && strategy.split) {
+          // Percentage-based split: e.g. { traditional: 50, nq: 50, roth: 0 }
+          const sp = strategy.split;
+          const totalPct = (sp.traditional || 0) + (sp.roth || 0) + (sp.nq || 0);
+          if (totalPct > 0) {
+            tradW = withdrawal * ((sp.traditional || 0) / totalPct);
+            rothW = withdrawal * ((sp.roth || 0) / totalPct);
+            nqW = withdrawal * ((sp.nq || 0) / totalPct);
+          } else {
+            tradW = withdrawal * traditionalPct;
+            rothW = withdrawal * rothPct;
+            nqW = withdrawal * nqPct;
+          }
+        } else if (strategy && strategy.priority) {
           tradW = 0; rothW = 0; nqW = 0;
           let remaining = withdrawal;
           const balMap = { traditional: tradBal, roth: rothBal, nq: nqBal };
@@ -1621,6 +1634,7 @@ export const runSimulation = (basePlan, assumptions, inputs, rebalanceFreq, isMo
         const nqPct = (override?.nqPercent ?? inputs.nqPercent ?? 15) / 100;
 
         // NQ tax computation — per-bucket when taxProfiles are available, global fallback otherwise
+        // Only generate NQ dividends/cap gains when there is actual NQ balance remaining
         const capGainOverride = (inputs.nqCapGainOverrides || []).find(r => i >= r.startYear && i <= r.endYear);
         const baseCapGainRate = ((inputs.nqCapitalGainRate) ?? 4) / 100;
         const nqAnnualCapGainRate = ((capGainOverride?.rate ?? inputs.nqCapitalGainRate) ?? 4) / 100;
@@ -1629,26 +1643,30 @@ export const runSimulation = (basePlan, assumptions, inputs, rebalanceFreq, isMo
         // Per-bucket tax profiles: compute NQ tax items from each bucket's NQ share
         const hasBucketTaxProfiles = assumptions.b1?.taxProfile && assumptions.b2?.taxProfile;
 
-        if (hasBucketTaxProfiles) {
-          // Each bucket's NQ portion generates tax items based on its taxProfile
-          const nqFraction = nqPct; // NQ share of the portfolio
-          const bucketKeys = ['b1', 'b2', 'b3', 'b4', 'b5'];
-          const bucketTotal = bucketKeys.reduce((s, k) => s + balances[k], 0);
+        if (nqBalanceForTax > 0) {
+          if (hasBucketTaxProfiles) {
+            // Each bucket's NQ portion generates tax items based on its taxProfile
+            // Scale by actual NQ balance vs theoretical to handle partial depletion
+            const bucketKeys = ['b1', 'b2', 'b3', 'b4', 'b5'];
+            const bucketTotal = bucketKeys.reduce((s, k) => s + balances[k], 0);
+            const theoreticalNq = bucketTotal * nqPct;
+            const nqScale = theoreticalNq > 0 ? Math.min(1, nqBalanceForTax / theoreticalNq) : 0;
 
-          for (const bk of bucketKeys) {
-            const tp = assumptions[bk]?.taxProfile;
-            if (!tp || bucketTotal <= 0) continue;
-            const bucketNqBalance = balances[bk] * nqFraction;
-            nqOrdinaryDividends += bucketNqBalance * ((tp.ordinaryIncomeRate || 0) / 100);
-            nqQualifiedDividends += bucketNqBalance * ((tp.qualDivRate || 0) / 100);
+            for (const bk of bucketKeys) {
+              const tp = assumptions[bk]?.taxProfile;
+              if (!tp || bucketTotal <= 0) continue;
+              const bucketNqBalance = balances[bk] * nqPct * nqScale;
+              nqOrdinaryDividends += bucketNqBalance * ((tp.ordinaryIncomeRate || 0) / 100);
+              nqQualifiedDividends += bucketNqBalance * ((tp.qualDivRate || 0) / 100);
+            }
+          } else {
+            // Global fallback: use flat dividend yield
+            const nqDividendYield = (inputs.nqDividendYield ?? 2.0) / 100;
+            const nqQualifiedDividendPct = (inputs.nqQualifiedDividendPercent ?? 80) / 100;
+            const nqTotalDividends = nqBalanceForTax * nqDividendYield;
+            nqQualifiedDividends = nqTotalDividends * nqQualifiedDividendPct;
+            nqOrdinaryDividends = nqTotalDividends - nqQualifiedDividends;
           }
-        } else {
-          // Global fallback: use flat dividend yield
-          const nqDividendYield = (inputs.nqDividendYield ?? 2.0) / 100;
-          const nqQualifiedDividendPct = (inputs.nqQualifiedDividendPercent ?? 80) / 100;
-          const nqTotalDividends = nqBalanceForTax * nqDividendYield;
-          nqQualifiedDividends = nqTotalDividends * nqQualifiedDividendPct;
-          nqOrdinaryDividends = nqTotalDividends - nqQualifiedDividends;
         }
 
         const isSenior = simAge >= 65;
@@ -1666,17 +1684,21 @@ export const runSimulation = (basePlan, assumptions, inputs, rebalanceFreq, isMo
         // Compute potential and realized cap gains (per-bucket or global)
         let potentialCapGains = 0;
 
-        if (hasBucketTaxProfiles) {
-          const bucketKeys = ['b1', 'b2', 'b3', 'b4', 'b5'];
-          const bucketTotal = bucketKeys.reduce((s, k) => s + balances[k], 0);
-          for (const bk of bucketKeys) {
-            const tp = assumptions[bk]?.taxProfile;
-            if (!tp || bucketTotal <= 0) continue;
-            const bucketNqBalance = balances[bk] * nqPct;
-            potentialCapGains += bucketNqBalance * ((tp.realizedCapGainRate || 0) / 100);
+        if (nqBalanceForTax > 0) {
+          if (hasBucketTaxProfiles) {
+            const bucketKeys = ['b1', 'b2', 'b3', 'b4', 'b5'];
+            const bucketTotal = bucketKeys.reduce((s, k) => s + balances[k], 0);
+            const theoreticalNq = bucketTotal * nqPct;
+            const nqScale = theoreticalNq > 0 ? Math.min(1, nqBalanceForTax / theoreticalNq) : 0;
+            for (const bk of bucketKeys) {
+              const tp = assumptions[bk]?.taxProfile;
+              if (!tp || bucketTotal <= 0) continue;
+              const bucketNqBalance = balances[bk] * nqPct * nqScale;
+              potentialCapGains += bucketNqBalance * ((tp.realizedCapGainRate || 0) / 100);
+            }
+          } else {
+            potentialCapGains = nqBalanceForTax * baseCapGainRate;
           }
-        } else {
-          potentialCapGains = nqBalanceForTax * baseCapGainRate;
         }
 
         if (capGainOverride && capGainOverride.rate === 0) {
@@ -1913,10 +1935,19 @@ export const runSimulation = (basePlan, assumptions, inputs, rebalanceFreq, isMo
           irmaaCost = irmaaResult.totalAnnualCost;
           irmaaBracket = irmaaResult.bracket;
 
-          // IRMAA is an additional cost that increases total withdrawal needed
+          // IRMAA is an additional expense — deduct from portfolio (NQ first, then buckets)
           if (irmaaCost > 0) {
             totalWithdrawal += irmaaCost;
             taxData.irmaaCost = irmaaCost;
+            // Deduct IRMAA cost from NQ account and bucket balances
+            nqAccountBalance = Math.max(0, nqAccountBalance - irmaaCost);
+            let irmaaRemaining = irmaaCost;
+            for (const bk of ['b1', 'b2', 'b3', 'b4', 'b5']) {
+              if (irmaaRemaining <= 0) break;
+              const deduct = Math.min(irmaaRemaining, balances[bk]);
+              balances[bk] -= deduct;
+              irmaaRemaining -= deduct;
+            }
           }
         }
       } else {
@@ -2438,9 +2469,10 @@ export const optimizeRetirementTaxStrategy = (basePlan, assumptions, inputs, cli
   const heirStateRate = stateData ? stateData.rate / 100 : (inputs.stateRate || 0) / 100;
   const heirTotalRate = heirFederalRate + heirStateRate;
 
-  // Score a strategy by running the full simulation
-  const scoreStrategy = (testInputs) => {
-    const projection = runSimulation(basePlan, assumptions, testInputs, rebalanceFreq, false, null, rebalanceTargets);
+  // Score and rank strategies using deterministic simulation
+  // IRMAA is included in scoring — it reduces portfolio balances, affecting after-tax legacy
+  const useMC = !!monteCarloData;
+  const extractMetrics = (projection) => {
     const last = projection.length > 0 ? projection[projection.length - 1] : {};
     const grossLegacy = last.total || 0;
     const tradLegacy = last.traditionalBalanceDetail || 0;
@@ -2450,36 +2482,29 @@ export const optimizeRetirementTaxStrategy = (basePlan, assumptions, inputs, cli
     const afterTaxLegacy = grossLegacy - heirTax;
     const lifetimeTax = projection.reduce((s, r) => s + (r.totalTax || 0), 0);
     const lifetimeRMD = projection.reduce((s, r) => s + (r.rmdAmount || 0), 0);
+    const lifetimeIrmaa = projection.reduce((s, r) => s + (r.irmaaCost || 0), 0);
     const depleted = projection.some(r => r.total <= 0);
-    return { projection, grossLegacy, afterTaxLegacy, lifetimeTax, lifetimeRMD, depleted, tradLegacy, rothLegacy, nqLegacy, heirTax };
+    return { projection, grossLegacy, afterTaxLegacy, lifetimeTax, lifetimeRMD, lifetimeIrmaa, depleted, tradLegacy, rothLegacy, nqLegacy, heirTax };
+  };
+  // Deterministic scorer for ranking and baseline
+  const scoreStrategy = (testInputs) => {
+    const projection = runSimulation(basePlan, assumptions, testInputs, rebalanceFreq, false, null, rebalanceTargets);
+    return extractMetrics(projection);
+  };
+  // MC scorer for display scenarios (run after winner is chosen)
+  const scoreMC = (testInputs) => {
+    const result = runSimulation(basePlan, assumptions, testInputs, rebalanceFreq, true, null, rebalanceTargets);
+    return result?.scenarios || null;
   };
 
-  // --- Step 1: Score baseline using Monte Carlo median (matches what user sees) ---
-  let baseline;
-  if (monteCarloData?.scenarios?.median) {
-    // Use the MC median projection for the current strategy baseline
-    const mcMedian = monteCarloData.scenarios.median;
-    const last = mcMedian.length > 0 ? mcMedian[mcMedian.length - 1] : {};
-    const grossLegacy = last.total || 0;
-    const tradLegacy = last.traditionalBalanceDetail || 0;
-    const rothLegacy = last.rothBalanceDetail || 0;
-    const nqLegacy = last.nqBalanceDetail || 0;
-    const heirTax = tradLegacy * heirTotalRate;
-    const afterTaxLegacy = grossLegacy - heirTax;
-    const lifetimeTax = mcMedian.reduce((s, r) => s + (r.totalTax || 0), 0);
-    const lifetimeRMD = mcMedian.reduce((s, r) => s + (r.rmdAmount || 0), 0);
-    const depleted = mcMedian.some(r => r.total <= 0);
-    baseline = { projection: mcMedian, grossLegacy, afterTaxLegacy, lifetimeTax, lifetimeRMD, depleted, tradLegacy, rothLegacy, nqLegacy, heirTax };
-  } else {
-    baseline = scoreStrategy(inputs);
-  }
+  // --- Step 1: Score baseline using deterministic simulation ---
+  const baseline = scoreStrategy(inputs);
 
   // --- Step 2: Compute bracket headroom for Roth conversion scheduling ---
-  // Use deterministic projection for headroom calculation (consistent income/bracket data)
-  const baseProjection = scoreStrategy(inputs).projection;
+  const baseProjection = baseline.projection;
 
-  const generateConversionSchedule = (targetBracketIdx, projData, liquidInputs) => {
-    // targetBracketIdx: 1=12%, 2=22%, 3=24%
+  const generateConversionSchedule = (targetBracketIdx, projData, fillFraction = 1.0) => {
+    // targetBracketIdx: 1=12%, 2=22%, 3=24%; fillFraction: 0-1 to scale headroom usage
     const conversions = {};
     let runningTradBalance = inputs.totalPortfolio * ((inputs.traditionalPercent ?? 60) / 100);
 
@@ -2520,7 +2545,7 @@ export const optimizeRetirementTaxStrategy = (basePlan, assumptions, inputs, cli
       }
       runningTradBalance = Math.max(0, runningTradBalance);
 
-      const conversionAmount = Math.min(headroom, runningTradBalance);
+      const conversionAmount = Math.min(headroom * fillFraction, runningTradBalance);
       if (conversionAmount > 1000) { // Minimum threshold to bother
         conversions[age] = Math.round(conversionAmount);
       }
@@ -2528,199 +2553,173 @@ export const optimizeRetirementTaxStrategy = (basePlan, assumptions, inputs, cli
     return conversions;
   };
 
-  // --- Step 3: Define candidate strategies ---
-  const preRMDYears = Math.max(0, rmdStartAge - retAge);
-  const totalYears = baseProjection.length;
-  const nqBalance = inputs.totalPortfolio * ((inputs.nqPercent ?? 15) / 100);
-  const annualSpend = (inputs.monthlySpending || 5000) * 12;
-  const nqDrainYears = annualSpend > 0 ? Math.min(Math.ceil(nqBalance / annualSpend), totalYears) : totalYears;
-
-  const liquidationCandidates = [
-    { label: 'Proportionate (Current)', mode: 'proportionate', strategies: [] },
-    { label: 'NQ First → Trad → Roth', mode: 'priority', strategies: [
-      { id: 1, startYear: 1, endYear: totalYears, priority: ['nq', 'traditional', 'roth'] }
-    ]},
-    { label: 'NQ First Pre-RMD, Then Proportionate', mode: 'priority', strategies: [
-      { id: 1, startYear: 1, endYear: preRMDYears, priority: ['nq', 'traditional', 'roth'] }
-    ]},
-    { label: 'Trad First → NQ → Roth', mode: 'priority', strategies: [
-      { id: 1, startYear: 1, endYear: totalYears, priority: ['traditional', 'nq', 'roth'] }
-    ]},
-    { label: 'Roth Preserve (NQ/Trad First)', mode: 'priority', strategies: [
-      { id: 1, startYear: 1, endYear: nqDrainYears, priority: ['nq', 'traditional', 'roth'] },
-      { id: 2, startYear: nqDrainYears + 1, endYear: totalYears, priority: ['traditional', 'nq', 'roth'] }
-    ]},
+  // --- Step 3: Define Roth conversion candidates ---
+  // Uses the user's manually-set liquidation strategy; optimizer only solves for conversions
+  const conversionCandidates = [
+    { label: 'No Conversions', idx: null, fillFraction: 0 },
+    { label: 'Fill to 12%', idx: 1, fillFraction: 1.0 },
+    { label: 'Fill to 22%', idx: 2, fillFraction: 1.0 },
+    { label: 'Fill to 24%', idx: 3, fillFraction: 1.0 },
+    { label: 'Partial 24% (50%)', idx: 3, fillFraction: 0.5 },
   ];
 
-  const targetBrackets = [
-    { label: '12%', idx: 1 },
-    { label: '22%', idx: 2 },
-    { label: '24%', idx: 3 },
-  ];
-
-  // --- Step 4: Test combinations ---
+  // --- Step 4: Test conversion candidates (preserving user's liquidation & cap gain settings) ---
   const results = [];
+  const baseInputs = { ...inputs, rothConversions: {} };
 
-  for (const liq of liquidationCandidates) {
-    // Test without conversions
-    const noConvInputs = {
-      ...inputs,
-      rothConversions: {},
-      liquidationMode: liq.mode,
-      liquidationStrategies: liq.strategies,
-      nqCapGainOverrides: []
-    };
-    const noConvResult = scoreStrategy(noConvInputs);
+  // Include user's current strategy as a candidate so it can't lose
+  const hasCurrentConversions = Object.keys(inputs.rothConversions || {}).length > 0;
+  if (hasCurrentConversions) {
+    const currentResult = scoreStrategy(inputs);
     results.push({
-      liquidation: liq,
       targetBracket: null,
-      conversions: {},
-      capGainOverrides: [],
-      ...noConvResult,
-      label: `${liq.label} — No Conversions`
+      conversions: inputs.rothConversions,
+      ...currentResult,
+      label: 'Current Strategy'
     });
-
-    // Test with Roth conversions at each target bracket
-    for (const tb of targetBrackets) {
-      const convSchedule = generateConversionSchedule(tb.idx, noConvResult.projection, noConvInputs);
-      if (Object.keys(convSchedule).length === 0) continue;
-
-      const convInputs = {
-        ...noConvInputs,
-        rothConversions: convSchedule
-      };
-      const convResult = scoreStrategy(convInputs);
-
-      // Test with and without 0% CG (managed in practice during conversion years)
-      const cgOverrides = [{ startYear: 1, endYear: totalYears, rate: 0 }];
-
-      results.push({
-        liquidation: liq,
-        targetBracket: tb,
-        conversions: convSchedule,
-        capGainOverrides: [],
-        ...convResult,
-        label: `${liq.label} — Roth to ${tb.label}`
-      });
-
-      const cgInputs = { ...convInputs, nqCapGainOverrides: cgOverrides };
-      const cgResult = scoreStrategy(cgInputs);
-      results.push({
-        liquidation: liq,
-        targetBracket: tb,
-        conversions: convSchedule,
-        capGainOverrides: cgOverrides,
-        ...cgResult,
-        label: `${liq.label} — Roth to ${tb.label} + Min CG`
-      });
-    }
   }
 
-  // --- Step 5: Find best strategy (deterministic screening), then re-score with Monte Carlo ---
+  // Score the no-conversion baseline (deterministic)
+  const noConvResult = scoreStrategy(baseInputs);
+
+  for (const candidate of conversionCandidates) {
+    let conversions = {};
+    if (candidate.idx !== null) {
+      conversions = generateConversionSchedule(candidate.idx, noConvResult.projection, candidate.fillFraction);
+      if (Object.keys(conversions).length === 0) continue;
+    }
+
+    const testInputs = { ...baseInputs, rothConversions: conversions };
+    const result = scoreStrategy(testInputs);
+
+    results.push({
+      targetBracket: candidate.idx !== null ? { label: candidate.label, idx: candidate.idx } : null,
+      conversions,
+      ...result,
+      label: candidate.label
+    });
+  }
+
+  // --- Step 5: Find best strategy (all scored deterministically) ---
   const validResults = results.filter(r => !r.depleted);
   validResults.sort((a, b) => b.afterTaxLegacy - a.afterTaxLegacy);
   let best = validResults[0] || results[0];
 
-  // Re-score the winner with Monte Carlo for accurate final numbers
-  if (monteCarloData) {
-    const bestInputs = {
-      ...inputs,
-      rothConversions: best.conversions || {},
-      liquidationMode: best.liquidation.mode,
-      liquidationStrategies: best.liquidation.strategies,
-      nqCapGainOverrides: best.capGainOverrides || []
-    };
-    const mcResult = runSimulation(basePlan, assumptions, bestInputs, rebalanceFreq, true, null, rebalanceTargets);
-    if (mcResult?.scenarios?.median) {
-      const mcMedian = mcResult.scenarios.median;
-      const last = mcMedian.length > 0 ? mcMedian[mcMedian.length - 1] : {};
-      const grossLegacy = last.total || 0;
-      const tradLegacy = last.traditionalBalanceDetail || 0;
-      const rothLegacy = last.rothBalanceDetail || 0;
-      const nqLegacy = last.nqBalanceDetail || 0;
-      const heirTax = tradLegacy * heirTotalRate;
-      best = {
-        ...best,
-        projection: mcMedian,
-        grossLegacy,
-        afterTaxLegacy: grossLegacy - heirTax,
-        lifetimeTax: mcMedian.reduce((s, r) => s + (r.totalTax || 0), 0),
-        lifetimeRMD: mcMedian.reduce((s, r) => s + (r.rmdAmount || 0), 0),
-        depleted: mcMedian.some(r => r.total <= 0),
-        tradLegacy, rothLegacy, nqLegacy, heirTax
-      };
-    }
-  }
-
   // --- Step 6: Build output ---
-  const yearDetails = best.projection.map((row, idx) => {
-    const yearNum = idx + 1;
-    const strategy = (best.liquidation.strategies || []).find(s => yearNum >= s.startYear && yearNum <= s.endYear);
-    const liquidationSource = strategy ? strategy.priority[0] : 'proportionate';
+  // Helper to build comparison + yearDetails from a projection pair (baseline vs best)
+  const buildComparisonFromProjection = (baselineProj, bestProj) => {
+    const bm = extractMetrics(baselineProj);
+    const om = extractMetrics(bestProj);
+    const totalConversions = Object.values(best.conversions).reduce((s, v) => s + v, 0);
+    const totalConversionTax = bestProj
+      .filter(r => r.rothConversion > 0)
+      .reduce((s, r) => s + (r.totalTax || 0), 0) -
+      baselineProj
+      .filter((_, idx) => bestProj[idx]?.rothConversion > 0)
+      .reduce((s, r) => s + (r.totalTax || 0), 0);
+
     return {
-      age: row.age,
-      yearNum,
-      liquidationSource,
-      rothConversion: row.rothConversion || 0,
-      rmd: row.rmdAmount || 0,
-      tradBalance: row.traditionalBalanceDetail || 0,
-      rothBalance: row.rothBalanceDetail || 0,
-      nqBalance: row.nqBalanceDetail || 0,
-      totalTax: row.totalTax || 0,
-      effectiveRate: row.effectiveRate || '0.0',
-      distribution: row.distribution || 0,
-      nqUnrealizedGains: row.nqUnrealizedGains || 0,
-      nqStrategicRealization: row.nqStrategicRealization || 0,
-      irmaaCost: row.irmaaCost || 0,
-      magi: row.magi || 0
-    };
-  });
-
-  const totalConversions = Object.values(best.conversions).reduce((s, v) => s + v, 0);
-  const totalConversionTax = best.projection
-    .filter(r => r.rothConversion > 0)
-    .reduce((s, r) => s + (r.totalTax || 0), 0) -
-    baseline.projection
-    .filter((_, idx) => best.projection[idx]?.rothConversion > 0)
-    .reduce((s, r) => s + (r.totalTax || 0), 0);
-
-  return {
-    recommended: {
-      liquidationMode: best.liquidation.mode,
-      liquidationStrategies: best.liquidation.strategies,
-      rothConversions: best.conversions,
-      nqCapGainOverrides: best.capGainOverrides || [],
-      targetBracket: best.targetBracket?.label || null,
-      label: best.label
-    },
-    comparison: {
-      currentAfterTaxLegacy: Math.round(baseline.afterTaxLegacy),
-      optimizedAfterTaxLegacy: Math.round(best.afterTaxLegacy),
-      afterTaxLegacyImprovement: Math.round(best.afterTaxLegacy - baseline.afterTaxLegacy),
-      currentLifetimeTax: Math.round(baseline.lifetimeTax),
-      optimizedLifetimeTax: Math.round(best.lifetimeTax),
-      totalTaxSavings: Math.round(baseline.lifetimeTax - best.lifetimeTax),
-      currentTotalBurden: Math.round(baseline.lifetimeTax + baseline.heirTax),
-      optimizedTotalBurden: Math.round(best.lifetimeTax + best.heirTax),
-      totalBurdenSavings: Math.round((baseline.lifetimeTax + baseline.heirTax) - (best.lifetimeTax + best.heirTax)),
-      currentRMDTotal: Math.round(baseline.lifetimeRMD),
-      optimizedRMDTotal: Math.round(best.lifetimeRMD),
-      rmdReduction: Math.round(baseline.lifetimeRMD - best.lifetimeRMD),
+      currentAfterTaxLegacy: Math.round(bm.afterTaxLegacy),
+      optimizedAfterTaxLegacy: Math.round(om.afterTaxLegacy),
+      afterTaxLegacyImprovement: Math.round(om.afterTaxLegacy - bm.afterTaxLegacy),
+      currentLifetimeTax: Math.round(bm.lifetimeTax),
+      optimizedLifetimeTax: Math.round(om.lifetimeTax),
+      totalTaxSavings: Math.round(bm.lifetimeTax - om.lifetimeTax),
+      currentLifetimeIrmaa: Math.round(bm.lifetimeIrmaa || 0),
+      optimizedLifetimeIrmaa: Math.round(om.lifetimeIrmaa || 0),
+      irmaaSavings: Math.round((bm.lifetimeIrmaa || 0) - (om.lifetimeIrmaa || 0)),
+      currentTotalBurden: Math.round(bm.lifetimeTax + bm.heirTax + (bm.lifetimeIrmaa || 0)),
+      optimizedTotalBurden: Math.round(om.lifetimeTax + om.heirTax + (om.lifetimeIrmaa || 0)),
+      totalBurdenSavings: Math.round((bm.lifetimeTax + bm.heirTax + (bm.lifetimeIrmaa || 0)) - (om.lifetimeTax + om.heirTax + (om.lifetimeIrmaa || 0))),
+      currentRMDTotal: Math.round(bm.lifetimeRMD),
+      optimizedRMDTotal: Math.round(om.lifetimeRMD),
+      rmdReduction: Math.round(bm.lifetimeRMD - om.lifetimeRMD),
       totalConversions: Math.round(totalConversions),
       totalConversionTax: Math.round(totalConversionTax),
       heirTaxRate: Math.round(heirTotalRate * 100),
-      currentLegacyBreakdown: { traditional: Math.round(baseline.tradLegacy), roth: Math.round(baseline.rothLegacy), nq: Math.round(baseline.nqLegacy) },
-      optimizedLegacyBreakdown: { traditional: Math.round(best.tradLegacy), roth: Math.round(best.rothLegacy), nq: Math.round(best.nqLegacy) }
-    },
-    yearDetails,
-    alternativeStrategies: validResults.slice(0, 8).map(r => ({
+      currentLegacyBreakdown: { traditional: Math.round(bm.tradLegacy), roth: Math.round(bm.rothLegacy), nq: Math.round(bm.nqLegacy) },
+      optimizedLegacyBreakdown: { traditional: Math.round(om.tradLegacy), roth: Math.round(om.rothLegacy), nq: Math.round(om.nqLegacy) }
+    };
+  };
+
+  const buildYearDetails = (proj) => proj.map((row, idx) => ({
+    age: row.age,
+    yearNum: idx + 1,
+    rothConversion: row.rothConversion || 0,
+    rmd: row.rmdAmount || 0,
+    tradBalance: row.traditionalBalanceDetail || 0,
+    rothBalance: row.rothBalanceDetail || 0,
+    nqBalance: row.nqBalanceDetail || 0,
+    totalTax: row.totalTax || 0,
+    effectiveRate: row.effectiveRate || '0.0',
+    distribution: row.distribution || 0,
+    nqUnrealizedGains: row.nqUnrealizedGains || 0,
+    nqStrategicRealization: row.nqStrategicRealization || 0,
+    irmaaCost: row.irmaaCost || 0,
+    magi: row.magi || 0
+  }));
+
+  // Default comparison and yearDetails are deterministic (the scoring basis)
+  const comparison = buildComparisonFromProjection(baseline.projection, best.projection);
+  const yearDetails = buildYearDetails(best.projection);
+  const alternativeStrategies = validResults.slice(0, 8).map(r => {
+    const m = extractMetrics(r.projection);
+    return {
       label: r.label,
-      afterTaxLegacy: Math.round(r.afterTaxLegacy),
-      lifetimeTax: Math.round(r.lifetimeTax),
-      grossLegacy: Math.round(r.grossLegacy),
-      conversions: r.conversions,
-      liquidation: r.liquidation,
-      capGainOverrides: r.capGainOverrides
-    }))
+      afterTaxLegacy: Math.round(m.afterTaxLegacy),
+      lifetimeTax: Math.round(m.lifetimeTax),
+      lifetimeIrmaa: Math.round(m.lifetimeIrmaa || 0),
+      grossLegacy: Math.round(m.grossLegacy),
+      conversions: r.conversions
+    };
+  });
+
+  // Build MC scenario views for display toggle (run MC once per strategy)
+  let scenarioResults = null;
+  if (useMC) {
+    const bestMC = scoreMC({ ...inputs, rothConversions: best.conversions });
+    const baselineMC = scoreMC(inputs);
+    // Run MC for each alternative once, cache results
+    const altMCCache = validResults.slice(0, 8).map(r => ({
+      ...r,
+      mcScenarios: scoreMC({ ...inputs, rothConversions: r.conversions })
+    }));
+    if (bestMC && baselineMC) {
+      scenarioResults = {};
+      for (const key of ['optimistic', 'median', 'conservative']) {
+        if (bestMC[key] && baselineMC[key]) {
+          scenarioResults[key] = {
+            comparison: buildComparisonFromProjection(baselineMC[key], bestMC[key]),
+            yearDetails: buildYearDetails(bestMC[key]),
+            alternativeStrategies: altMCCache.map(r => {
+              const proj = r.mcScenarios?.[key] || r.projection;
+              const m = extractMetrics(proj);
+              return {
+                label: r.label,
+                afterTaxLegacy: Math.round(m.afterTaxLegacy),
+                lifetimeTax: Math.round(m.lifetimeTax),
+                lifetimeIrmaa: Math.round(m.lifetimeIrmaa || 0),
+                grossLegacy: Math.round(m.grossLegacy),
+                conversions: r.conversions
+              };
+            })
+          };
+        }
+      }
+    }
+  }
+
+  return {
+    recommended: {
+      rothConversions: best.conversions,
+      nqCapGainOverrides: [],
+      targetBracket: best.targetBracket?.label || null,
+      label: best.label
+    },
+    comparison,
+    yearDetails,
+    alternativeStrategies,
+    // MC scenario-specific results for UI toggle
+    scenarios: Object.keys(scenarioResults).length > 0 ? scenarioResults : null
   };
 };

@@ -1,7 +1,8 @@
 import React, { useMemo, useState, useCallback } from 'react';
-import { FileText, Layers, DollarSign, TrendingUp, Shield } from 'lucide-react';
+import { FileText, Layers, DollarSign, TrendingUp, Shield, ArrowRight } from 'lucide-react';
 import { COLORS } from '../../../constants/colors';
 import { Card } from '../../ui';
+import { runSimulation } from '../../../utils';
 
 const BUCKET_NAMES = ['B1 - Liquidity', 'B2 - Bridge', 'B3 - Tactical', 'B4 - Income', 'B5 - Equity'];
 const BUCKET_SHORT = ['B1', 'B2', 'B3', 'B4', 'B5'];
@@ -90,8 +91,21 @@ const optimizeAllocation = (bucketTargets, accountBalances, liquidationStrategie
 
 export const ExecutiveSummaryTab = ({
   inputs, basePlan, projectionData, assumptions, clientInfo,
-  ssAnalysis, ssPartnerAnalysis
+  ssAnalysis, ssPartnerAnalysis, rebalanceFreq, rebalanceTargets, monteCarloData
 }) => {
+  // SS comparison: user picks their "original plan" claiming age
+  const [ssOriginalAge, setSSOriginalAge] = useState(62);
+  const [ssPartnerOriginalAge, setSSPartnerOriginalAge] = useState(62);
+  const [mcMode, setMcMode] = useState('deterministic');
+
+  // Active projection data — deterministic or MC scenario
+  const activeProjection = useMemo(() => {
+    if (mcMode !== 'deterministic' && monteCarloData?.scenarios?.[mcMode]) {
+      return monteCarloData.scenarios[mcMode];
+    }
+    return projectionData;
+  }, [mcMode, monteCarloData, projectionData]);
+
   // Use manual overrides stored in state: matrix[acctType][bucketKey] = dollar amount
   const [manualOverrides, setManualOverrides] = useState(null);
 
@@ -179,17 +193,94 @@ export const ExecutiveSummaryTab = ({
     return { ages, total, targetBracket, conversions };
   }, [inputs.rothConversions, inputs.liquidationMode]);
 
-  // Value added summary
-  const valueAdded = useMemo(() => {
-    if (!projectionData || projectionData.length === 0) return null;
-    const lastRow = projectionData[projectionData.length - 1];
-    const lifetimeTax = projectionData.reduce((s, r) => s + (r.totalTax || 0), 0);
-    const totalConversions = projectionData.reduce((s, r) => s + (r.rothConversion || 0), 0);
+  // SS comparison: portfolio outcome at original vs selected claiming ages
+  const ssComparison = useMemo(() => {
+    if (!ssAnalysis?.outcomes) return null;
+    const selectedAge = inputs.ssStartAge || 67;
+    const originalOutcome = ssAnalysis.outcomes.find(o => o.age === ssOriginalAge);
+    const selectedOutcome = ssAnalysis.outcomes.find(o => o.age === selectedAge);
+    if (!originalOutcome || !selectedOutcome) return null;
+
+    let partnerResult = null;
+    if (clientInfo?.isMarried && ssPartnerAnalysis?.outcomes) {
+      const pSelectedAge = inputs.partnerSSStartAge || 67;
+      const pOriginal = ssPartnerAnalysis.outcomes.find(o => o.age === ssPartnerOriginalAge);
+      const pSelected = ssPartnerAnalysis.outcomes.find(o => o.age === pSelectedAge);
+      if (pOriginal && pSelected) {
+        partnerResult = {
+          originalAge: ssPartnerOriginalAge,
+          selectedAge: pSelectedAge,
+          originalBalance: pOriginal.balance,
+          selectedBalance: pSelected.balance,
+          improvement: pSelected.balance - pOriginal.balance
+        };
+      }
+    }
+
     return {
-      finalLegacy: lastRow.total || 0, lifetimeTax, totalConversions,
-      hasOptimization: inputs.liquidationMode === 'priority' || totalConversions > 0
+      originalAge: ssOriginalAge,
+      selectedAge,
+      originalBalance: originalOutcome.balance,
+      selectedBalance: selectedOutcome.balance,
+      improvement: selectedOutcome.balance - originalOutcome.balance,
+      partner: partnerResult
     };
-  }, [projectionData, inputs.liquidationMode]);
+  }, [ssAnalysis, ssPartnerAnalysis, ssOriginalAge, ssPartnerOriginalAge, inputs.ssStartAge, inputs.partnerSSStartAge, clientInfo?.isMarried]);
+
+  // Baseline strategy comparison: proportionate distribution, no tax optimization
+  const strategyComparison = useMemo(() => {
+    if (!activeProjection || activeProjection.length === 0 || !basePlan || !inputs.taxEnabled) return null;
+
+    // Current plan metrics (from active projection — deterministic or MC scenario)
+    const lastRow = activeProjection[activeProjection.length - 1];
+    const currentLegacy = lastRow.total || 0;
+    const currentTradLegacy = lastRow.traditionalBalanceDetail || 0;
+    const currentLifetimeTax = activeProjection.reduce((s, r) => s + (r.totalTax || 0), 0);
+    const currentLifetimeIrmaa = activeProjection.reduce((s, r) => s + (r.irmaaCost || 0), 0);
+    const heirFederalRate = 0.24;
+    const heirStateRate = (inputs.stateRate || 0) / 100;
+    const currentHeirTax = currentTradLegacy * (heirFederalRate + heirStateRate);
+    const currentAfterTax = currentLegacy - currentHeirTax;
+    const currentTotalBurden = currentLifetimeTax + currentHeirTax + currentLifetimeIrmaa;
+
+    // Baseline: proportionate distribution, no conversions, no cap gain overrides
+    // Use MC when a MC mode is selected, deterministic otherwise
+    const useMC = mcMode !== 'deterministic';
+    const baselineInputs = {
+      ...inputs,
+      rothConversions: {},
+      nqCapGainOverrides: [],
+      liquidationMode: 'proportionate',
+      liquidationStrategies: []
+    };
+    const baselineResult = runSimulation(basePlan, assumptions, baselineInputs, rebalanceFreq || 0, useMC, null, rebalanceTargets);
+    let baselineProjection;
+    if (useMC && baselineResult?.scenarios?.[mcMode]) {
+      baselineProjection = baselineResult.scenarios[mcMode];
+    } else if (Array.isArray(baselineResult)) {
+      baselineProjection = baselineResult;
+    } else {
+      return null;
+    }
+    if (!baselineProjection || baselineProjection.length === 0) return null;
+
+    const baselineLast = baselineProjection[baselineProjection.length - 1];
+    const baselineLegacy = baselineLast.total || 0;
+    const baselineTradLegacy = baselineLast.traditionalBalanceDetail || 0;
+    const baselineLifetimeTax = baselineProjection.reduce((s, r) => s + (r.totalTax || 0), 0);
+    const baselineLifetimeIrmaa = baselineProjection.reduce((s, r) => s + (r.irmaaCost || 0), 0);
+    const baselineHeirTax = baselineTradLegacy * (heirFederalRate + heirStateRate);
+    const baselineAfterTax = baselineLegacy - baselineHeirTax;
+    const baselineTotalBurden = baselineLifetimeTax + baselineHeirTax + baselineLifetimeIrmaa;
+
+    return {
+      baseline: { legacy: baselineLegacy, afterTaxLegacy: baselineAfterTax, lifetimeTax: baselineLifetimeTax, heirTax: baselineHeirTax, totalBurden: baselineTotalBurden, irmaa: baselineLifetimeIrmaa },
+      current: { legacy: currentLegacy, afterTaxLegacy: currentAfterTax, lifetimeTax: currentLifetimeTax, heirTax: currentHeirTax, totalBurden: currentTotalBurden, irmaa: currentLifetimeIrmaa },
+      legacyImprovement: currentAfterTax - baselineAfterTax,
+      burdenSavings: baselineTotalBurden - currentTotalBurden,
+      taxSavings: baselineLifetimeTax - currentLifetimeTax
+    };
+  }, [activeProjection, basePlan, assumptions, inputs, rebalanceFreq, rebalanceTargets, mcMode]);
 
   return (
     <div className="space-y-4">
@@ -203,29 +294,80 @@ export const ExecutiveSummaryTab = ({
         </p>
       </Card>
 
-      {/* Strategy Summary */}
-      {valueAdded && (
+      {/* Strategy Summary — Baseline vs Prepared Plan */}
+      {strategyComparison && (
         <Card>
-          <h3 className="font-semibold text-slate-800 text-base mb-3 flex items-center gap-2">
-            <TrendingUp className="w-4 h-4" /> Strategy Summary
-          </h3>
+          <div className="flex items-center justify-between mb-3">
+            <h3 className="font-semibold text-slate-800 text-base flex items-center gap-2">
+              <TrendingUp className="w-4 h-4" /> Strategy Value Added
+            </h3>
+            {monteCarloData?.scenarios && (
+              <div className="flex items-center gap-1 bg-slate-100 p-1 rounded-lg">
+                <button onClick={() => setMcMode('deterministic')}
+                  className={`px-2.5 py-1 text-[11px] font-bold rounded transition-all ${mcMode === 'deterministic' ? 'bg-white shadow text-slate-800' : 'text-slate-500 hover:text-slate-700'}`}
+                >Deterministic</button>
+                <button onClick={() => setMcMode('optimistic')}
+                  className={`px-2.5 py-1 text-[11px] font-bold rounded transition-all ${mcMode === 'optimistic' ? 'bg-mwm-green text-white shadow' : 'text-slate-500 hover:text-slate-700'}`}
+                >Optimistic</button>
+                <button onClick={() => setMcMode('median')}
+                  className={`px-2.5 py-1 text-[11px] font-bold rounded transition-all ${mcMode === 'median' ? 'bg-blue-500 text-white shadow' : 'text-slate-500 hover:text-slate-700'}`}
+                >Median</button>
+                <button onClick={() => setMcMode('conservative')}
+                  className={`px-2.5 py-1 text-[11px] font-bold rounded transition-all ${mcMode === 'conservative' ? 'bg-red-500 text-white shadow' : 'text-slate-500 hover:text-slate-700'}`}
+                >Conservative</button>
+              </div>
+            )}
+          </div>
           <p className="text-xs text-slate-500 mb-3">
-            {valueAdded.hasOptimization
-              ? 'Active tax optimization with priority liquidation and/or Roth conversions'
-              : 'Run the Tax Optimizer to see value-added analysis vs baseline'}
+            Baseline (proportionate distribution, no tax optimization) vs. your prepared plan{mcMode !== 'deterministic' ? ` — ${mcMode === 'optimistic' ? '90th' : mcMode === 'median' ? '50th' : '10th'} percentile` : ''}
           </p>
-          <div className="grid grid-cols-3 gap-4 text-center">
-            <div className="bg-emerald-50 rounded-lg p-3 border border-emerald-100">
-              <p className="text-[10px] text-slate-500 uppercase font-semibold">Projected Legacy</p>
-              <p className="text-xl font-bold text-emerald-600">{fmt(valueAdded.finalLegacy)}</p>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+            {/* Baseline */}
+            <div className="border border-slate-200 rounded-lg p-4 bg-slate-50/50">
+              <p className="text-[10px] text-slate-400 uppercase font-semibold mb-2">Baseline — No Optimization</p>
+              <div className="space-y-1.5 text-sm">
+                <div className="flex justify-between"><span className="text-slate-500">After-Tax Legacy</span><span className="font-semibold text-slate-600">{fmt(strategyComparison.baseline.afterTaxLegacy)}</span></div>
+                <div className="flex justify-between"><span className="text-slate-500">Lifetime Taxes</span><span className="font-semibold text-red-500">{fmt(strategyComparison.baseline.lifetimeTax)}</span></div>
+                <div className="flex justify-between"><span className="text-slate-500">Heir Tax Burden</span><span className="font-semibold text-red-400">{fmt(strategyComparison.baseline.heirTax)}</span></div>
+                {strategyComparison.baseline.irmaa > 0 && (
+                  <div className="flex justify-between"><span className="text-slate-500">Lifetime IRMAA</span><span className="font-semibold text-amber-500">{fmt(strategyComparison.baseline.irmaa)}</span></div>
+                )}
+                <div className="flex justify-between border-t border-slate-200 pt-1.5 font-bold"><span className="text-slate-700">Total Family Burden</span><span className="text-red-600">{fmt(strategyComparison.baseline.totalBurden)}</span></div>
+              </div>
             </div>
-            <div className="bg-red-50 rounded-lg p-3 border border-red-100">
-              <p className="text-[10px] text-slate-500 uppercase font-semibold">Lifetime Taxes</p>
-              <p className="text-xl font-bold text-red-600">{fmt(valueAdded.lifetimeTax)}</p>
+            {/* Prepared Plan */}
+            <div className="border border-mwm-green/30 rounded-lg p-4 bg-mwm-green/5">
+              <p className="text-[10px] text-mwm-green/80 uppercase font-semibold mb-2">Prepared Plan</p>
+              <div className="space-y-1.5 text-sm">
+                <div className="flex justify-between"><span className="text-slate-500">After-Tax Legacy</span><span className="font-semibold text-mwm-green">{fmt(strategyComparison.current.afterTaxLegacy)}</span></div>
+                <div className="flex justify-between"><span className="text-slate-500">Lifetime Taxes</span><span className="font-semibold text-mwm-green">{fmt(strategyComparison.current.lifetimeTax)}</span></div>
+                <div className="flex justify-between"><span className="text-slate-500">Heir Tax Burden</span><span className="font-semibold text-mwm-green">{fmt(strategyComparison.current.heirTax)}</span></div>
+                {strategyComparison.current.irmaa > 0 && (
+                  <div className="flex justify-between"><span className="text-slate-500">Lifetime IRMAA</span><span className="font-semibold text-amber-500">{fmt(strategyComparison.current.irmaa)}</span></div>
+                )}
+                <div className="flex justify-between border-t border-slate-200 pt-1.5 font-bold"><span className="text-slate-700">Total Family Burden</span><span className="text-mwm-green">{fmt(strategyComparison.current.totalBurden)}</span></div>
+              </div>
             </div>
-            <div className="bg-teal-50 rounded-lg p-3 border border-teal-100">
-              <p className="text-[10px] text-slate-500 uppercase font-semibold">Total Roth Conversions</p>
-              <p className="text-xl font-bold text-teal-600">{fmt(valueAdded.totalConversions)}</p>
+          </div>
+          {/* Value Added Cards */}
+          <div className="grid grid-cols-3 gap-3 text-center">
+            <div className={`rounded-lg p-3 border ${strategyComparison.legacyImprovement > 0 ? 'bg-emerald-50 border-emerald-200' : 'bg-slate-50 border-slate-200'}`}>
+              <p className="text-[10px] text-slate-500 uppercase font-semibold">Legacy Improvement</p>
+              <p className={`text-xl font-bold ${strategyComparison.legacyImprovement > 0 ? 'text-emerald-600' : 'text-slate-500'}`}>
+                {strategyComparison.legacyImprovement > 0 ? '+' : ''}{fmt(strategyComparison.legacyImprovement)}
+              </p>
+            </div>
+            <div className={`rounded-lg p-3 border ${strategyComparison.burdenSavings > 0 ? 'bg-emerald-50 border-emerald-200' : 'bg-slate-50 border-slate-200'}`}>
+              <p className="text-[10px] text-slate-500 uppercase font-semibold">Burden Savings</p>
+              <p className={`text-xl font-bold ${strategyComparison.burdenSavings > 0 ? 'text-emerald-600' : 'text-slate-500'}`}>
+                {fmt(strategyComparison.burdenSavings)}
+              </p>
+            </div>
+            <div className={`rounded-lg p-3 border ${strategyComparison.taxSavings > 0 ? 'bg-emerald-50 border-emerald-200' : 'bg-slate-50 border-slate-200'}`}>
+              <p className="text-[10px] text-slate-500 uppercase font-semibold">Tax Savings</p>
+              <p className={`text-xl font-bold ${strategyComparison.taxSavings > 0 ? 'text-emerald-600' : 'text-slate-500'}`}>
+                {fmt(strategyComparison.taxSavings)}
+              </p>
             </div>
           </div>
         </Card>
@@ -330,27 +472,109 @@ export const ExecutiveSummaryTab = ({
 
       </Card>
 
-      {/* SS Claiming Strategy */}
+      {/* SS Claiming Strategy — with Original Plan Comparison */}
       <Card>
         <h3 className="font-semibold text-slate-800 text-base mb-3 flex items-center gap-2">
           <Shield className="w-4 h-4" /> Social Security Claiming Strategy
         </h3>
-        <div className="grid grid-cols-2 gap-4">
+        <div className="grid grid-cols-2 gap-4 mb-4">
           <div className="bg-slate-50 rounded-lg p-3">
-            <p className="text-[10px] text-slate-500 uppercase font-semibold">Client</p>
-            <p className="text-lg font-bold text-slate-700">Age {ssSummary.clientAge}</p>
+            <p className="text-[10px] text-slate-500 uppercase font-semibold">{clientInfo?.name || 'Client'} — Selected Plan</p>
+            <p className="text-lg font-bold text-mwm-green">Age {ssSummary.clientAge}</p>
             <p className="text-sm text-slate-500">PIA: {fmt(ssSummary.clientPIA)}/mo</p>
             <p className="text-sm font-semibold text-mwm-green">{fmt(ssSummary.clientAnnual)}/yr at claiming</p>
           </div>
           {clientInfo?.isMarried && ssSummary.partnerPIA > 0 && (
             <div className="bg-slate-50 rounded-lg p-3">
-              <p className="text-[10px] text-slate-500 uppercase font-semibold">Partner</p>
-              <p className="text-lg font-bold text-slate-700">Age {ssSummary.partnerAge}</p>
+              <p className="text-[10px] text-slate-500 uppercase font-semibold">{clientInfo?.partnerName || 'Partner'} — Selected Plan</p>
+              <p className="text-lg font-bold text-mwm-green">Age {ssSummary.partnerAge}</p>
               <p className="text-sm text-slate-500">PIA: {fmt(ssSummary.partnerPIA)}/mo</p>
               <p className="text-sm font-semibold text-mwm-green">{fmt(ssSummary.partnerAnnual)}/yr at claiming</p>
             </div>
           )}
         </div>
+
+        {/* SS Value Comparison */}
+        {ssAnalysis?.outcomes && (
+          <div className="border-t border-slate-200 pt-4">
+            <p className="text-xs text-slate-500 mb-3">
+              Compare portfolio outcome at plan horizon: original claiming plan vs. selected strategy
+            </p>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-3">
+              {/* Client SS Comparison */}
+              <div className="border border-slate-200 rounded-lg p-3">
+                <div className="flex items-center justify-between mb-2">
+                  <p className="text-[10px] text-slate-400 uppercase font-semibold">{clientInfo?.name || 'Client'} — Original Plan</p>
+                  <select
+                    value={ssOriginalAge}
+                    onChange={(e) => setSSOriginalAge(parseInt(e.target.value))}
+                    className="text-xs border border-slate-200 rounded px-2 py-1"
+                  >
+                    {[62, 63, 64, 65, 66, 67, 68, 69, 70].map(age => (
+                      <option key={age} value={age}>Age {age}</option>
+                    ))}
+                  </select>
+                </div>
+                {ssComparison && (
+                  <div className="flex items-center gap-3">
+                    <div className="text-center flex-1">
+                      <p className="text-[10px] text-slate-400 uppercase">Age {ssComparison.originalAge}</p>
+                      <p className="text-sm font-bold text-slate-600">{fmtShort(ssComparison.originalBalance)}</p>
+                    </div>
+                    <ArrowRight className="w-4 h-4 text-slate-300" />
+                    <div className="text-center flex-1">
+                      <p className="text-[10px] text-mwm-green/80 uppercase">Age {ssComparison.selectedAge}</p>
+                      <p className="text-sm font-bold text-mwm-green">{fmtShort(ssComparison.selectedBalance)}</p>
+                    </div>
+                    <div className={`text-center flex-1 rounded-lg p-1.5 ${ssComparison.improvement > 0 ? 'bg-emerald-50' : ssComparison.improvement < 0 ? 'bg-red-50' : 'bg-slate-50'}`}>
+                      <p className="text-[10px] text-slate-400 uppercase">Value Add</p>
+                      <p className={`text-sm font-bold ${ssComparison.improvement > 0 ? 'text-emerald-600' : ssComparison.improvement < 0 ? 'text-red-600' : 'text-slate-500'}`}>
+                        {ssComparison.improvement > 0 ? '+' : ''}{fmtShort(ssComparison.improvement)}
+                      </p>
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              {/* Partner SS Comparison */}
+              {clientInfo?.isMarried && ssPartnerAnalysis?.outcomes && (
+                <div className="border border-slate-200 rounded-lg p-3">
+                  <div className="flex items-center justify-between mb-2">
+                    <p className="text-[10px] text-slate-400 uppercase font-semibold">{clientInfo?.partnerName || 'Partner'} — Original Plan</p>
+                    <select
+                      value={ssPartnerOriginalAge}
+                      onChange={(e) => setSSPartnerOriginalAge(parseInt(e.target.value))}
+                      className="text-xs border border-slate-200 rounded px-2 py-1"
+                    >
+                      {[62, 63, 64, 65, 66, 67, 68, 69, 70].map(age => (
+                        <option key={age} value={age}>Age {age}</option>
+                      ))}
+                    </select>
+                  </div>
+                  {ssComparison?.partner && (
+                    <div className="flex items-center gap-3">
+                      <div className="text-center flex-1">
+                        <p className="text-[10px] text-slate-400 uppercase">Age {ssComparison.partner.originalAge}</p>
+                        <p className="text-sm font-bold text-slate-600">{fmtShort(ssComparison.partner.originalBalance)}</p>
+                      </div>
+                      <ArrowRight className="w-4 h-4 text-slate-300" />
+                      <div className="text-center flex-1">
+                        <p className="text-[10px] text-mwm-green/80 uppercase">Age {ssComparison.partner.selectedAge}</p>
+                        <p className="text-sm font-bold text-mwm-green">{fmtShort(ssComparison.partner.selectedBalance)}</p>
+                      </div>
+                      <div className={`text-center flex-1 rounded-lg p-1.5 ${ssComparison.partner.improvement > 0 ? 'bg-emerald-50' : ssComparison.partner.improvement < 0 ? 'bg-red-50' : 'bg-slate-50'}`}>
+                        <p className="text-[10px] text-slate-400 uppercase">Value Add</p>
+                        <p className={`text-sm font-bold ${ssComparison.partner.improvement > 0 ? 'text-emerald-600' : ssComparison.partner.improvement < 0 ? 'text-red-600' : 'text-slate-500'}`}>
+                          {ssComparison.partner.improvement > 0 ? '+' : ''}{fmtShort(ssComparison.partner.improvement)}
+                        </p>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+          </div>
+        )}
       </Card>
 
       {/* Roth Conversion Protocol */}

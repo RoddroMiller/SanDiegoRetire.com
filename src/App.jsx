@@ -221,7 +221,7 @@ export default function BucketPortfolioBuilder() {
     // Integrated Tax Strategy
     rothConversions: {}, // { [age]: amount } per-year Roth conversion dollars
     nqCapGainOverrides: [], // [{ startYear, endYear, rate }] per-year-range cap gain rate overrides
-    irmaaEnabled: false, // Track Medicare IRMAA surcharges
+    irmaaEnabled: true, // Track Medicare IRMAA surcharges
     liquidationMode: 'proportionate', // 'proportionate' | 'priority'
     liquidationStrategies: [], // [{ id, startYear, endYear, priority: ['nq','traditional','roth'] }]
     accounts: [], // Array of { id, label, owner: 'client'|'partner', type: 'traditional'|'roth'|'nq', subtype: 'ira'|'401k'|'brokerage', balance }
@@ -299,6 +299,7 @@ export default function BucketPortfolioBuilder() {
         withdrawalOverrides: s.inputs.withdrawalOverrides || {},
         rothConversions: s.inputs.rothConversions || {},
         nqCapGainOverrides: s.inputs.nqCapGainOverrides || [],
+        irmaaEnabled: s.inputs.irmaaEnabled ?? true,
         liquidationMode: s.inputs.liquidationMode || 'proportionate',
         liquidationStrategies: s.inputs.liquidationStrategies || [],
         accounts: (s.inputs.accounts || []).map(a => ({ ...a, annualContribution: a.annualContribution || 0 })),
@@ -811,13 +812,19 @@ export default function BucketPortfolioBuilder() {
 
   // Tax Strategy Handlers
   const handleApplyTaxStrategy = (strategy, comparison) => {
-    setInputs(prev => ({
-      ...prev,
-      rothConversions: strategy.rothConversions || {},
-      nqCapGainOverrides: strategy.nqCapGainOverrides || [],
-      liquidationMode: strategy.liquidationMode || 'proportionate',
-      liquidationStrategies: strategy.liquidationStrategies || []
-    }));
+    setInputs(prev => {
+      const updates = {
+        ...prev,
+        rothConversions: strategy.rothConversions || {},
+        nqCapGainOverrides: strategy.nqCapGainOverrides || [],
+      };
+      // Only override liquidation if explicitly provided (e.g. "Clear All" button)
+      if ('liquidationMode' in strategy) {
+        updates.liquidationMode = strategy.liquidationMode;
+        updates.liquidationStrategies = strategy.liquidationStrategies || [];
+      }
+      return updates;
+    });
     if (comparison) setTaxStrategyComparison(comparison);
   };
 

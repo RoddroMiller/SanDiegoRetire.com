@@ -25,6 +25,8 @@ const CashFlowsTab = ({ projectionData, monteCarloData, inputs, clientInfo }) =>
   const hasContributions = activeData.some(r => r.contribution > 0);
   const hasSurplus = activeData.some(r => (r.surplus || 0) > 0);
   const hasDistributions = activeData.some(r => r.distribution > 0);
+  const hasIRMAA = inputs.irmaaEnabled && activeData.some(r => r.irmaaCost > 0);
+  const hasRothConversions = inputs.taxEnabled && activeData.some(r => r.rothConversion > 0);
   const hasRMD = inputs.taxEnabled && activeData.some(r => r.rmdAmount > 0);
   const hasRMDExcess = hasRMD && activeData.some(r => r.rmdExcess > 0);
 
@@ -68,6 +70,11 @@ const CashFlowsTab = ({ projectionData, monteCarloData, inputs, clientInfo }) =>
         { label: 'Federal Tax', cls: 'text-red-600', getValue: (r) => fmt(r.federalTax || 0) },
         { label: 'State Tax', cls: 'text-red-600', getValue: (r) => fmt(r.stateTax || 0) },
       );
+      if (hasIRMAA) {
+        rows.push(
+          { label: 'IRMAA Surcharge', cls: 'text-red-500', getValue: (r) => (r.irmaaCost || 0) > 0 ? fmt(r.irmaaCost) : '-' },
+        );
+      }
     }
     rows.push(
       { label: 'Total Expenses', cls: 'font-bold text-slate-800 bg-slate-50', getValue: (r) => fmt(r.expenses) },
@@ -151,6 +158,13 @@ const CashFlowsTab = ({ projectionData, monteCarloData, inputs, clientInfo }) =>
       rows.push(
         { label: '', cls: 'bg-slate-200', getValue: () => '', isSeparator: true },
         { label: 'Traditional Balance', cls: 'text-blue-600', getValue: (r) => fmt(r.traditionalBalanceDetail || 0) },
+      );
+      if (hasRothConversions) {
+        rows.push(
+          { label: 'Roth Conversion', cls: 'text-teal-600', getValue: (r) => (r.rothConversion || 0) > 0 ? fmt(r.rothConversion) : '-' },
+        );
+      }
+      rows.push(
         { label: 'Roth Balance', cls: 'text-mwm-green', getValue: (r) => fmt(r.rothBalanceDetail || 0) },
         { label: 'NQ Balance', cls: 'text-mwm-gold', getValue: (r) => fmt(r.nqBalanceDetail || 0) },
       );

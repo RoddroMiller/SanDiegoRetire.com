@@ -1001,10 +1001,13 @@ export const ArchitectPage = ({
               inputs={inputs}
               basePlan={basePlan}
               projectionData={projectionData}
+              monteCarloData={monteCarloData}
               assumptions={assumptions}
               clientInfo={clientInfo}
               ssAnalysis={ssAnalysis}
               ssPartnerAnalysis={ssPartnerAnalysis}
+              rebalanceFreq={rebalanceFreq}
+              rebalanceTargets={rebalanceTargets}
             />
           )}
         </div>
