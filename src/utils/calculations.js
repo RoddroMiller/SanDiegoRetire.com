@@ -2083,8 +2083,8 @@ export const runSimulation = (basePlan, assumptions, inputs, rebalanceFreq, isMo
         contribution: Math.round(oneTimeContributions),
         surplus: Math.round(netSurplus),
         livingExpenses: Math.round(expenses),
-        expenses: Math.round(expenses + taxData.totalTax),
-        distribution: Math.round(totalWithdrawal),
+        expenses: Math.round(expenses + taxData.totalTax + irmaaCost),
+        distribution: Math.round(totalWithdrawal + rothConversionTax),
         total: Math.max(0, total),
         benchmark: Math.max(0, benchmarkBalance),
         distRate,
@@ -2453,7 +2453,7 @@ export const optimizeLiquidationStrategy = (basePlan, assumptions, inputs, clien
  * Integrated Tax Strategy Optimizer
  * Jointly optimizes liquidation order, Roth conversions, and capital gains to maximize after-tax legacy.
  */
-export const optimizeRetirementTaxStrategy = (basePlan, assumptions, inputs, clientInfo, rebalanceFreq = 0, rebalanceTargets = null, monteCarloData = null) => {
+export const optimizeRetirementTaxStrategy = (basePlan, assumptions, inputs, clientInfo, rebalanceFreq = 0, rebalanceTargets = null, monteCarloData = null, targetOptimizeAge = null) => {
   if (!inputs.taxEnabled) return null;
 
   const currentYear = new Date().getFullYear();
@@ -2473,17 +2473,22 @@ export const optimizeRetirementTaxStrategy = (basePlan, assumptions, inputs, cli
   // IRMAA is included in scoring — it reduces portfolio balances, affecting after-tax legacy
   const useMC = !!monteCarloData;
   const extractMetrics = (projection) => {
-    const last = projection.length > 0 ? projection[projection.length - 1] : {};
+    const last = targetOptimizeAge
+      ? (projection.find(r => r.age >= targetOptimizeAge) || projection[projection.length - 1])
+      : (projection.length > 0 ? projection[projection.length - 1] : {});
     const grossLegacy = last.total || 0;
     const tradLegacy = last.traditionalBalanceDetail || 0;
     const rothLegacy = last.rothBalanceDetail || 0;
     const nqLegacy = last.nqBalanceDetail || 0;
     const heirTax = tradLegacy * heirTotalRate;
     const afterTaxLegacy = grossLegacy - heirTax;
-    const lifetimeTax = projection.reduce((s, r) => s + (r.totalTax || 0), 0);
-    const lifetimeRMD = projection.reduce((s, r) => s + (r.rmdAmount || 0), 0);
-    const lifetimeIrmaa = projection.reduce((s, r) => s + (r.irmaaCost || 0), 0);
-    const depleted = projection.some(r => r.total <= 0);
+    const scopedProjection = targetOptimizeAge
+      ? projection.filter(r => r.age <= targetOptimizeAge)
+      : projection;
+    const lifetimeTax = scopedProjection.reduce((s, r) => s + (r.totalTax || 0), 0);
+    const lifetimeRMD = scopedProjection.reduce((s, r) => s + (r.rmdAmount || 0), 0);
+    const lifetimeIrmaa = scopedProjection.reduce((s, r) => s + (r.irmaaCost || 0), 0);
+    const depleted = scopedProjection.some(r => r.total <= 0);
     return { projection, grossLegacy, afterTaxLegacy, lifetimeTax, lifetimeRMD, lifetimeIrmaa, depleted, tradLegacy, rothLegacy, nqLegacy, heirTax };
   };
   // Deterministic scorer for ranking and baseline

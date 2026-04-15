@@ -341,6 +341,9 @@ export const ArchitectPage = ({
     const hasNqData = inputs.taxEnabled && printData.some(r => r.nqWithdrawal > 0);
     const hasRMD = inputs.taxEnabled && printData.some(r => r.rmdAmount > 0);
     const hasRMDExcess = hasRMD && printData.some(r => r.rmdExcess > 0);
+    const hasIRMAA = inputs.irmaaEnabled && printData.some(r => r.irmaaCost > 0);
+    const hasRothConversions = inputs.taxEnabled && printData.some(r => r.rothConversion > 0);
+    const hasAccountBalances = inputs.taxEnabled && printData.some(r => r.traditionalBalanceDetail > 0);
 
     const rows = [
       { label: 'Plan Year', cls: 'font-bold text-slate-800 bg-slate-100', getValue: (r) => r.year },
@@ -378,6 +381,11 @@ export const ArchitectPage = ({
         { label: 'State Tax', cls: 'text-red-600', getValue: (r) => fmt(r.stateTax || 0) },
       );
     }
+    if (hasIRMAA) {
+      rows.push(
+        { label: 'IRMAA Surcharge', cls: 'text-red-500', getValue: (r) => (r.irmaaCost || 0) > 0 ? fmt(r.irmaaCost) : '-' },
+      );
+    }
     rows.push(
       { label: 'Total Expenses', cls: 'font-bold text-slate-800 bg-slate-50', getValue: (r) => fmt(r.expenses) },
     );
@@ -413,6 +421,22 @@ export const ArchitectPage = ({
         return `${r.distRate?.toFixed(1) || '0'}%`;
       }, dynamicCls: (r) => (r.surplus || 0) > 0 && r.distribution === 0 ? 'text-mwm-green' : 'text-red-600' },
     );
+    // --- ACCOUNT TYPE BALANCES ---
+    if (hasAccountBalances) {
+      rows.push(
+        { label: '', cls: 'bg-slate-200', getValue: () => '', isSeparator: true },
+        { label: 'Traditional Balance', cls: 'text-blue-600', getValue: (r) => fmt(r.traditionalBalanceDetail || 0) },
+      );
+      if (hasRothConversions) {
+        rows.push(
+          { label: 'Roth Conversion', cls: 'text-teal-600', getValue: (r) => (r.rothConversion || 0) > 0 ? fmt(r.rothConversion) : '-' },
+        );
+      }
+      rows.push(
+        { label: 'Roth Balance', cls: 'text-mwm-green', getValue: (r) => fmt(r.rothBalanceDetail || 0) },
+        { label: 'NQ Balance', cls: 'text-mwm-gold', getValue: (r) => fmt(r.nqBalanceDetail || 0) },
+      );
+    }
 
     const chunks = [];
     for (let i = 0; i < printData.length; i += 5) {
@@ -424,7 +448,145 @@ export const ArchitectPage = ({
 
   const cashFlowPageCount = cashFlowPrintData.chunks.length;
   const hasTaxStrategyPage = inputs.taxEnabled && (Object.keys(inputs.rothConversions || {}).length > 0 || inputs.liquidationMode === 'priority');
-  const totalPrintPages = (hasTaxStrategyPage ? 11 : 10) + cashFlowPageCount;
+  const hasExecSummaryPage = inputs.taxEnabled;
+  const totalPrintPages = (hasTaxStrategyPage ? 11 : 10) + cashFlowPageCount + (hasExecSummaryPage ? 1 : 0);
+
+  // --- Executive Summary print data ---
+  const execSummaryPrint = useMemo(() => {
+    if (!inputs.taxEnabled || !printData || printData.length === 0) return null;
+    const fmtP = (val) => val === 0 ? '-' : `$${Math.round(val).toLocaleString()}`;
+    const fmtShortP = (val) => {
+      if (val === 0) return '-';
+      if (val >= 1000000) return `$${(val / 1000000).toFixed(2)}M`;
+      if (val >= 1000) return `$${(val / 1000).toFixed(0)}k`;
+      return `$${Math.round(val).toLocaleString()}`;
+    };
+
+    // Strategy comparison: baseline (proportionate, no optimization) vs current plan
+    const lastRow = printData[printData.length - 1];
+    const currentLegacy = lastRow.total || 0;
+    const currentTradLegacy = lastRow.traditionalBalanceDetail || 0;
+    const currentLifetimeTax = printData.reduce((s, r) => s + (r.totalTax || 0), 0);
+    const currentLifetimeIrmaa = printData.reduce((s, r) => s + (r.irmaaCost || 0), 0);
+    const heirFederalRate = 0.24;
+    const heirStateRate = (inputs.stateRate || 0) / 100;
+    const currentHeirTax = currentTradLegacy * (heirFederalRate + heirStateRate);
+    const currentAfterTax = currentLegacy - currentHeirTax;
+    const currentTotalBurden = currentLifetimeTax + currentHeirTax + currentLifetimeIrmaa;
+
+    // Baseline simulation
+    let baseline = null;
+    if (basePlan && assumptions) {
+      const baselineInputs = { ...inputs, rothConversions: {}, nqCapGainOverrides: [], liquidationMode: 'proportionate', liquidationStrategies: [] };
+      const useMC = printOptions?.mode === 'montecarlo';
+      const baseResult = runSimulation(basePlan, assumptions, baselineInputs, rebalanceFreq || 0, useMC, null, rebalanceTargets);
+      let baseProj = Array.isArray(baseResult) ? baseResult : null;
+      if (useMC && baseResult?.scenarios?.median) baseProj = baseResult.scenarios.median;
+      if (baseProj && baseProj.length > 0) {
+        const baseLast = baseProj[baseProj.length - 1];
+        const baseTradLegacy = baseLast.traditionalBalanceDetail || 0;
+        const baseLifetimeTax = baseProj.reduce((s, r) => s + (r.totalTax || 0), 0);
+        const baseLifetimeIrmaa = baseProj.reduce((s, r) => s + (r.irmaaCost || 0), 0);
+        const baseHeirTax = baseTradLegacy * (heirFederalRate + heirStateRate);
+        baseline = {
+          legacy: baseLast.total || 0,
+          afterTaxLegacy: (baseLast.total || 0) - baseHeirTax,
+          lifetimeTax: baseLifetimeTax,
+          heirTax: baseHeirTax,
+          totalBurden: baseLifetimeTax + baseHeirTax + baseLifetimeIrmaa,
+          irmaa: baseLifetimeIrmaa
+        };
+      }
+    }
+
+    // Bucket allocation matrix
+    const total = inputs.totalPortfolio || 0;
+    const accountBalances = {
+      traditional: total * ((inputs.traditionalPercent ?? 60) / 100),
+      roth: total * ((inputs.rothPercent ?? 25) / 100),
+      nq: total * ((inputs.nqPercent ?? 15) / 100),
+    };
+    const bucketTargets = {
+      b1: basePlan?.b1Val || 0, b2: basePlan?.b2Val || 0, b3: basePlan?.b3Val || 0,
+      b4: basePlan?.b4Val || 0, b5: basePlan?.b5Val || 0,
+    };
+    // Inline optimizeAllocation
+    const ACCT_TYPES = ['traditional', 'roth', 'nq'];
+    const BK_KEYS = ['b1', 'b2', 'b3', 'b4', 'b5'];
+    const matrix = {};
+    for (const acct of ACCT_TYPES) { matrix[acct] = {}; for (const bk of BK_KEYS) matrix[acct][bk] = 0; }
+    const bucketRem = { ...bucketTargets };
+    const acctRem = { ...accountBalances };
+    let fillOrder;
+    const liqStrats = inputs.liquidationStrategies;
+    if (liqStrats && liqStrats.length > 0) {
+      const earlyStrategy = liqStrats.reduce((a, b) => a.startYear < b.startYear ? a : b);
+      const priority = earlyStrategy.priority || ['nq', 'traditional', 'roth'];
+      fillOrder = [
+        { acct: priority[0], buckets: ['b1', 'b2', 'b3', 'b4', 'b5'] },
+        { acct: priority[1], buckets: ['b3', 'b2', 'b4', 'b1', 'b5'] },
+        { acct: priority[2], buckets: ['b5', 'b4', 'b3', 'b2', 'b1'] },
+      ];
+    } else {
+      fillOrder = [
+        { acct: 'nq', buckets: ['b1', 'b2', 'b3', 'b4', 'b5'] },
+        { acct: 'traditional', buckets: ['b3', 'b4', 'b2', 'b5', 'b1'] },
+        { acct: 'roth', buckets: ['b5', 'b4', 'b3', 'b2', 'b1'] },
+      ];
+    }
+    for (const { acct, buckets } of fillOrder) {
+      if ((acctRem[acct] || 0) <= 0) continue;
+      for (const bk of buckets) {
+        if (acctRem[acct] <= 0 || bucketRem[bk] <= 0) continue;
+        const fill = Math.min(acctRem[acct], bucketRem[bk]);
+        matrix[acct][bk] = fill;
+        acctRem[acct] -= fill;
+        bucketRem[bk] -= fill;
+      }
+    }
+
+    // SS summary
+    const fraAge = 67;
+    const adjustFactor = (claimAge) => {
+      if (claimAge < fraAge) return 1 - (fraAge - claimAge) * (6.67 / 100);
+      if (claimAge > fraAge) return 1 + (claimAge - fraAge) * 8 / 100;
+      return 1;
+    };
+    const ssSummary = {
+      clientAge: inputs.ssStartAge || 67,
+      partnerAge: inputs.partnerSSStartAge || 67,
+      clientAnnual: (inputs.ssPIA || 0) * 12 * adjustFactor(inputs.ssStartAge || 67),
+      partnerAnnual: (inputs.partnerSSPIA || 0) * 12 * adjustFactor(inputs.partnerSSStartAge || 67),
+    };
+
+    // Roth conversion protocol
+    const conversions = inputs.rothConversions || {};
+    const rothAges = Object.keys(conversions).map(Number).sort((a, b) => a - b);
+    const rothTotal = Object.values(conversions).reduce((s, v) => s + v, 0);
+
+    // Liquidation strategy description
+    const liqDesc = (inputs.liquidationStrategies || []).map(s => {
+      if (s.split) return `Yr ${s.startYear}–${s.endYear}: Split ${s.split.traditional || 0}% Trad / ${s.split.roth || 0}% Roth / ${s.split.nq || 0}% NQ`;
+      return `Yr ${s.startYear}–${s.endYear}: ${(s.priority || []).map(a => a === 'traditional' ? 'Trad' : a === 'roth' ? 'Roth' : 'NQ').join(' → ')}`;
+    });
+
+    // Legacy breakdown (current plan)
+    const currentRothLegacy = lastRow.rothBalanceDetail || 0;
+    const currentNqLegacy = lastRow.nqBalanceDetail || 0;
+
+    return {
+      fmt: fmtP, fmtShort: fmtShortP,
+      current: {
+        legacy: currentLegacy, afterTaxLegacy: currentAfterTax, lifetimeTax: currentLifetimeTax,
+        heirTax: currentHeirTax, totalBurden: currentTotalBurden, irmaa: currentLifetimeIrmaa,
+        tradLegacy: currentTradLegacy, rothLegacy: currentRothLegacy, nqLegacy: currentNqLegacy,
+      },
+      baseline,
+      matrix, accountBalances, bucketTargets,
+      ssSummary, rothAges, rothTotal, conversions, liqDesc,
+      heirFederalRate, heirStateRate,
+    };
+  }, [printData, inputs, basePlan, assumptions, rebalanceFreq, rebalanceTargets, printOptions]);
 
   const renderCashFlowPrintTable = (cols, allRows) => (
     <div className="overflow-x-auto border border-slate-200 rounded-lg">
@@ -481,6 +643,7 @@ export const ArchitectPage = ({
           printOptions?.mode !== 'montecarlo' && { title: 'Monte Carlo Simulation', desc: 'Probability analysis based on 1,000 market scenarios' },
           !printOptions?.excludeStrategyComparison && { title: 'Strategy Comparison', desc: 'Alternative allocation strategies analyzed' },
           hasTaxStrategyPage && { title: 'Tax Strategy Analysis', desc: 'Roth conversion schedule and liquidation strategy' },
+          hasExecSummaryPage && { title: 'Executive Summary', desc: 'Plan overview, SS optimization value, and net legacy comparison' },
           { title: 'Important Disclosures', desc: 'Assumptions, methodology, and limitations' },
         ].filter(Boolean);
         return (
@@ -1271,7 +1434,7 @@ export const ArchitectPage = ({
               p90: Math.round(mc.p90),
               median: Math.round(mc.median),
               p10: Math.round(mc.p10),
-              total: Math.round(mc.median),
+              deterministic: Math.round(projectionData[idx]?.total ?? mc.median),
             }))}>
               <CartesianGrid strokeDasharray="3 3" vertical={false} />
               <XAxis dataKey="year" tick={{ fontSize: 10 }} label={{ value: 'Year', position: 'insideBottom', offset: -2, fontSize: 10 }} />
@@ -1280,7 +1443,7 @@ export const ArchitectPage = ({
               <Area type="monotone" dataKey="p90" name="90th Percentile" fill="#d1fae5" stroke="#10b981" fillOpacity={0.4} />
               <Area type="monotone" dataKey="median" name="50th Percentile (Median)" fill="#bfdbfe" stroke="#3b82f6" fillOpacity={0.5} />
               <Area type="monotone" dataKey="p10" name="10th Percentile" fill="#fee2e2" stroke="#ef4444" fillOpacity={0.4} />
-              <Line type="monotone" dataKey="total" name="Deterministic" stroke={COLORS.areaFill} strokeWidth={2} dot={false} strokeDasharray="5 5" />
+              <Line type="monotone" dataKey="deterministic" name="Deterministic" stroke={COLORS.areaFill} strokeWidth={2} dot={false} strokeDasharray="5 5" />
             </ComposedChart>
           ) : (
             /* Deterministic single-line chart */
@@ -1702,10 +1865,13 @@ export const ArchitectPage = ({
           const strategy = hasPriorityLiq
             ? (inputs.liquidationStrategies || []).find(s => yearNum >= s.startYear && yearNum <= s.endYear)
             : null;
+          const isSplit = strategy && !!strategy.split;
           return {
             age: row.age,
             yearNum,
-            source: strategy ? strategy.priority[0] : 'proportionate',
+            source: isSplit ? 'split' : (strategy ? strategy.priority[0] : 'proportionate'),
+            splitDetail: isSplit ? strategy.split : null,
+            priorityDetail: !isSplit && strategy ? strategy.priority : null,
             rothConversion: row.rothConversion || 0,
             rmd: row.rmdAmount || 0,
             totalTax: row.totalTax || 0,
@@ -1720,8 +1886,8 @@ export const ArchitectPage = ({
         const totalConversions = taxStrategyRows.reduce((s, r) => s + r.rothConversion, 0);
         const totalTax = taxStrategyRows.reduce((s, r) => s + r.totalTax, 0);
         const conversionYears = taxStrategyRows.filter(r => r.rothConversion > 0);
-        const sourceLabels = { traditional: 'Trad', roth: 'Roth', nq: 'NQ', proportionate: 'Prop.' };
-        const sourceColors = { traditional: '#f97316', roth: '#10b981', nq: '#a78bfa', proportionate: '#64748b' };
+        const sourceLabels = { traditional: 'Trad', roth: 'Roth', nq: 'NQ', proportionate: 'Prop.', split: 'Split' };
+        const sourceColors = { traditional: '#f97316', roth: '#10b981', nq: '#a78bfa', proportionate: '#64748b', split: '#3b82f6' };
 
         // Filter rows for print: show every year with a conversion, then every 5th year, plus first and last 3
         // Limit to 16 rows: prioritize conversion years, first/last, then evenly spaced
@@ -1756,10 +1922,13 @@ export const ArchitectPage = ({
               {hasPriorityLiq && (
                 <div className="border border-orange-200 rounded p-2 text-center">
                   <p className="text-[9px] text-slate-500 uppercase font-semibold">Liquidation Strategy</p>
-                  <p className="text-xs font-bold text-orange-600">Priority-Based</p>
+                  <p className="text-xs font-bold text-orange-600">Custom Withdrawal Order</p>
                   <div className="text-[9px] text-slate-500">
                     {inputs.liquidationStrategies.map((s, i) => (
-                      <p key={i}>Yr {s.startYear}–{s.endYear}: {s.priority.map(a => sourceLabels[a]).join(' → ')}</p>
+                      <p key={i}>Yr {s.startYear}–{s.endYear}: {s.split
+                        ? `Split ${s.split.traditional || 0}% Trad / ${s.split.roth || 0}% Roth / ${s.split.nq || 0}% NQ`
+                        : (s.priority || []).map(a => sourceLabels[a]).join(' → ')
+                      }</p>
                     ))}
                   </div>
                 </div>
@@ -1853,7 +2022,9 @@ export const ArchitectPage = ({
                       {hasPriorityLiq && (
                         <td className="p-1 text-center">
                           <span className="px-1 py-0.5 rounded text-[9px] font-bold text-white" style={{ backgroundColor: sourceColors[row.source] || '#64748b' }}>
-                            {sourceLabels[row.source] || 'Prop.'}
+                            {row.source === 'split' && row.splitDetail
+                              ? `${row.splitDetail.traditional || 0}/${row.splitDetail.roth || 0}/${row.splitDetail.nq || 0}`
+                              : (sourceLabels[row.source] || 'Prop.')}
                           </span>
                         </td>
                       )}
@@ -1885,8 +2056,308 @@ export const ArchitectPage = ({
         );
       })()}
 
+      {/* PRINT PAGE: Executive Summary */}
+      {hasExecSummaryPage && (
+        <PrintPageWrapper pageNumber={(hasTaxStrategyPage ? 10 : 9) + cashFlowPageCount} totalPages={totalPrintPages} title="Executive Summary" subtitle="Intentional planning overview and value added">
+
+          {/* ===== SECTION 1: PLAN OVERVIEW ===== */}
+          {execSummaryPrint && <>
+          <h3 className="text-[12px] font-bold text-slate-800 mb-2 pb-1 border-b-2 border-mwm-green uppercase tracking-wide">Plan Overview</h3>
+
+          {/* Bucket Allocation Matrix */}
+          <div className="mb-2.5">
+            <p className="text-[10px] font-semibold text-slate-700 mb-1">Initial Bucket Allocation by Account Type</p>
+            <div className="border border-slate-200 rounded-lg overflow-hidden">
+              <table className="w-full text-[10px] border-collapse">
+                <thead>
+                  <tr className="bg-slate-100 text-slate-600 font-bold">
+                    <th className="p-1 text-left w-[90px]">Account</th>
+                    {['B1 Liquidity', 'B2 Bridge', 'B3 Tactical', 'B4 Income', 'B5 Equity'].map((name, idx) => (
+                      <th key={idx} className="p-1 text-center">{name}</th>
+                    ))}
+                    <th className="p-1 text-right">Total</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {['traditional', 'roth', 'nq'].map(acct => {
+                    const label = acct === 'traditional' ? 'Traditional' : acct === 'roth' ? 'Roth' : 'Non-Qualified';
+                    const colors = acct === 'traditional' ? 'text-orange-700 bg-orange-50' : acct === 'roth' ? 'text-green-700 bg-green-50' : 'text-purple-700 bg-purple-50';
+                    const rowTotal = ['b1', 'b2', 'b3', 'b4', 'b5'].reduce((s, bk) => s + (execSummaryPrint.matrix[acct][bk] || 0), 0);
+                    return (
+                      <tr key={acct} className={`border-t border-slate-100 ${colors}`}>
+                        <td className="p-1 text-left font-semibold">{label}</td>
+                        {['b1', 'b2', 'b3', 'b4', 'b5'].map(bk => (
+                          <td key={bk} className="p-1 text-center">
+                            {execSummaryPrint.matrix[acct][bk] > 0 ? execSummaryPrint.fmtShort(execSummaryPrint.matrix[acct][bk]) : '-'}
+                          </td>
+                        ))}
+                        <td className="p-1 text-right font-bold">{execSummaryPrint.fmtShort(rowTotal)}</td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+                <tfoot>
+                  <tr className="border-t-2 border-slate-300 bg-slate-50 font-bold">
+                    <td className="p-1 text-left">Total</td>
+                    {['b1', 'b2', 'b3', 'b4', 'b5'].map(bk => {
+                      const colTotal = ['traditional', 'roth', 'nq'].reduce((s, acct) => s + (execSummaryPrint.matrix[acct][bk] || 0), 0);
+                      return <td key={bk} className="p-1 text-center">{execSummaryPrint.fmtShort(colTotal)}</td>;
+                    })}
+                    <td className="p-1 text-right">{execSummaryPrint.fmtShort(inputs.totalPortfolio || 0)}</td>
+                  </tr>
+                </tfoot>
+              </table>
+            </div>
+          </div>
+
+          {/* Distribution Methodology & Roth Conversions — side by side */}
+          <div className="grid grid-cols-2 gap-2 mb-4">
+            {/* Distribution Methodology */}
+            <div className="border border-slate-200 rounded p-2">
+              <p className="text-[10px] font-semibold text-slate-700 mb-1">Distribution Methodology</p>
+              {execSummaryPrint.liqDesc.length > 0 ? (
+                <div className="space-y-0.5">
+                  {execSummaryPrint.liqDesc.map((desc, i) => (
+                    <p key={i} className="text-[9px] text-slate-600">{desc}</p>
+                  ))}
+                </div>
+              ) : (
+                <p className="text-[9px] text-slate-500">Proportionate — withdrawals taken from Traditional, Roth, and NQ accounts based on their relative allocation percentages ({inputs.traditionalPercent}% / {inputs.rothPercent}% / {inputs.nqPercent}%).</p>
+              )}
+            </div>
+
+            {/* Roth Conversion Protocol */}
+            <div className="border border-slate-200 rounded p-2">
+              <p className="text-[10px] font-semibold text-slate-700 mb-1">Roth Conversion Protocol</p>
+              {execSummaryPrint.rothAges.length > 0 ? (
+                <>
+                  <div className="flex items-baseline gap-3 mb-1">
+                    <span className="text-[10px] font-bold text-teal-600">{execSummaryPrint.fmt(execSummaryPrint.rothTotal)} total</span>
+                    <span className="text-[9px] text-slate-500">Ages {execSummaryPrint.rothAges[0]}–{execSummaryPrint.rothAges[execSummaryPrint.rothAges.length - 1]}</span>
+                  </div>
+                  <div className="flex flex-wrap gap-0.5">
+                    {execSummaryPrint.rothAges.map(age => (
+                      <div key={age} className="bg-teal-50 rounded px-1.5 py-0.5 text-[9px] border border-teal-100">
+                        <span className="font-semibold text-teal-700">{age}:</span> <span className="text-teal-600">{execSummaryPrint.fmtShort(execSummaryPrint.conversions[age])}</span>
+                      </div>
+                    ))}
+                  </div>
+                </>
+              ) : (
+                <p className="text-[9px] text-slate-500">No Roth conversions scheduled.</p>
+              )}
+            </div>
+          </div>
+
+          </>}
+
+          {/* ===== SECTION 2: VALUE ADDED ===== */}
+          <h3 className="text-[12px] font-bold text-slate-800 mb-2 pb-1 border-b-2 border-mwm-green uppercase tracking-wide">Value Added Through Intentional Planning</h3>
+
+          <div className="grid grid-cols-2 gap-3">
+            {/* SS Optimization Value — Benefits + Matrix Summary */}
+            {(() => {
+              const fmt = (v) => `$${Math.round(v).toLocaleString()}`;
+              const pct = (v) => `${(v * 100).toFixed(1)}%`;
+              const FRA = 67;
+
+              // Client benefit details
+              const cAge = inputs.ssStartAge;
+              const cReceiving = inputs.ssCurrentlyReceiving;
+              const cPIA = cReceiving ? getImpliedPIA(inputs.ssPIA, cAge) : inputs.ssPIA;
+              const cOwn = cReceiving ? inputs.ssPIA : getAdjustedSS(cPIA, cAge);
+              const cYearsEarly = Math.max(0, FRA - cAge);
+              const cYearsLate = Math.max(0, cAge - FRA);
+              const cReduction = cPIA > 0 && !cReceiving ? (1 - cOwn / cPIA) : 0;
+              const cBonus = cPIA > 0 && !cReceiving && cAge > FRA ? (cOwn / cPIA - 1) : 0;
+
+              // Spousal
+              const pPartnerPIA = clientInfo.isMarried
+                ? (inputs.partnerSSCurrentlyReceiving ? getImpliedPIA(inputs.partnerSSPIA, inputs.partnerSSStartAge) : inputs.partnerSSPIA)
+                : 0;
+              const dispAgeDiff = clientInfo.currentAge - (clientInfo.partnerAge || clientInfo.currentAge);
+              const cDispSpousalAge = clientInfo.isMarried ? Math.min(FRA, Math.max(cAge, inputs.partnerSSStartAge + dispAgeDiff)) : cAge;
+              const cAfterDeemed = clientInfo.isMarried ? applyDeemedFiling(cOwn, pPartnerPIA, true, cAge, cPIA, cDispSpousalAge) : cOwn;
+
+              // Partner
+              let pOwn = 0, pAfterDeemed = 0, pYearsEarly = 0, pYearsLate = 0, pReduction = 0, pBonus = 0, pPIA = 0;
+              if (clientInfo.isMarried) {
+                const pAge = inputs.partnerSSStartAge;
+                const pRec = inputs.partnerSSCurrentlyReceiving;
+                pPIA = pRec ? getImpliedPIA(inputs.partnerSSPIA, pAge) : inputs.partnerSSPIA;
+                pOwn = pRec ? inputs.partnerSSPIA : getAdjustedSS(pPIA, pAge);
+                pYearsEarly = Math.max(0, FRA - pAge);
+                pYearsLate = Math.max(0, pAge - FRA);
+                pReduction = pPIA > 0 && !pRec ? (1 - pOwn / pPIA) : 0;
+                pBonus = pPIA > 0 && !pRec && pAge > FRA ? (pOwn / pPIA - 1) : 0;
+                const pDispSpousalAge = Math.min(FRA, Math.max(pAge, cAge - dispAgeDiff));
+                pAfterDeemed = applyDeemedFiling(pOwn, cPIA, true, pAge, pPIA, pDispSpousalAge);
+              }
+              const totalMonthly = cAfterDeemed + pAfterDeemed;
+
+              // Benefit row renderer (compact print version)
+              const BenefitRow = ({ label, pia, claimAge, yearsEarly, yearsLate, reduction, bonus, ownBenefit, afterDeemed, receiving }) => (
+                <div className="text-[9px] leading-tight">
+                  <p className="font-bold text-slate-700 text-[10px] mb-0.5">{label}</p>
+                  <div className="grid grid-cols-2 gap-x-3">
+                    <span className="text-slate-500">PIA (FRA 67)</span><span className="text-right font-medium">{fmt(pia)}/mo</span>
+                    <span className="text-slate-500">Claim age</span>
+                    <span className="text-right font-medium">
+                      {claimAge}{yearsEarly > 0 && <span className="text-red-500"> ({yearsEarly}yr early)</span>}{yearsLate > 0 && <span className="text-mwm-green"> ({yearsLate}yr late)</span>}
+                    </span>
+                    {!receiving && reduction > 0 && <><span className="text-red-500">Early reduction</span><span className="text-right text-red-500">-{pct(reduction)}</span></>}
+                    {!receiving && bonus > 0 && <><span className="text-mwm-green">Delayed credits</span><span className="text-right text-mwm-green">+{pct(bonus)}</span></>}
+                    <span className="text-slate-500">Own benefit</span><span className="text-right font-medium">{fmt(ownBenefit)}/mo</span>
+                    {afterDeemed > ownBenefit && <><span className="text-blue-600">Spousal excess</span><span className="text-right text-blue-600">+{fmt(afterDeemed - ownBenefit)}/mo</span></>}
+                    <span className="text-slate-700 font-bold border-t border-slate-200 pt-0.5">Total benefit</span>
+                    <span className="text-right font-bold text-mwm-green/80 border-t border-slate-200 pt-0.5">{fmt(afterDeemed)}/mo</span>
+                  </div>
+                </div>
+              );
+
+              return (
+                <div className="border border-slate-200 rounded-lg p-2.5">
+                  <p className="text-[10px] font-semibold text-slate-700 mb-1.5">Social Security Optimization</p>
+
+                  {/* Benefits Calculation */}
+                  <div className={`grid ${clientInfo.isMarried ? 'grid-cols-2' : 'grid-cols-1'} gap-3 mb-2 p-2 bg-slate-50 rounded border border-slate-200`}>
+                    <BenefitRow label={clientInfo.name || 'Client'} pia={cPIA} claimAge={cAge} yearsEarly={cYearsEarly} yearsLate={cYearsLate} reduction={cReduction} bonus={cBonus} ownBenefit={cOwn} afterDeemed={cAfterDeemed} receiving={cReceiving} />
+                    {clientInfo.isMarried && (
+                      <BenefitRow label={clientInfo.partnerName || 'Partner'} pia={pPIA} claimAge={inputs.partnerSSStartAge} yearsEarly={pYearsEarly} yearsLate={pYearsLate} reduction={pReduction} bonus={pBonus} ownBenefit={pOwn} afterDeemed={pAfterDeemed} receiving={inputs.partnerSSCurrentlyReceiving} />
+                    )}
+                  </div>
+                  {clientInfo.isMarried && (
+                    <p className="text-[9px] font-bold text-mwm-green/80 text-right mb-2">Combined: {fmt(totalMonthly)}/mo ({fmt(totalMonthly * 12)}/yr)</p>
+                  )}
+
+                  {/* Matrix Summary — if matrix has been run */}
+                  {ssMatrixData && clientInfo.isMarried && (
+                    <div>
+                      <div className="bg-slate-800 text-white p-1.5 rounded mb-1 flex items-center gap-2">
+                        <p className="text-[9px] font-bold">
+                          Optimal: {clientInfo.name || 'Primary'} <span className="text-mwm-green">{ssMatrixData.winner.clientAge}</span> + {clientInfo.partnerName || 'Spouse'} <span className="text-mwm-green">{ssMatrixData.winner.partnerAge}</span>
+                          <span className="text-gray-400 font-normal ml-2">Portfolio at {targetMaxPortfolioAge}: {fmt(Math.round(ssMatrixData.winner.balance))}</span>
+                        </p>
+                      </div>
+                      {(() => {
+                        const allBal = ssMatrixData.matrix.map(m => m.balance);
+                        const minB = Math.min(...allBal);
+                        const maxB = Math.max(...allBal);
+                        const rng = maxB - minB || 1;
+                        return (
+                          <table className="w-full border-collapse text-[8px]">
+                            <thead>
+                              <tr>
+                                <th className="p-0.5 bg-slate-100 border border-slate-200 text-[7px] text-slate-500">
+                                  <div className="flex flex-col items-center leading-none"><span>Spouse</span><span>\</span><span>Primary</span></div>
+                                </th>
+                                {ssMatrixData.ages.map(a => (
+                                  <th key={a} className="p-0.5 bg-slate-100 border border-slate-200 text-center font-bold text-slate-700">{a}</th>
+                                ))}
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {ssMatrixData.ages.map(pAge => (
+                                <tr key={pAge}>
+                                  <td className="p-0.5 bg-slate-100 border border-slate-200 text-center font-bold text-slate-700">{pAge}</td>
+                                  {ssMatrixData.ages.map(cAge => {
+                                    const cell = ssMatrixData.matrix.find(m => m.clientAge === cAge && m.partnerAge === pAge);
+                                    const bal = cell?.balance || 0;
+                                    const isOpt = ssMatrixData.winner.clientAge === cAge && ssMatrixData.winner.partnerAge === pAge;
+                                    const isSel = inputs.ssStartAge === cAge && inputs.partnerSSStartAge === pAge;
+                                    const p = (bal - minB) / rng;
+                                    const bg = isOpt ? 'bg-mwm-green/30 font-bold' : isSel ? 'bg-blue-100' : p >= 0.85 ? 'bg-mwm-green/20' : p >= 0.6 ? 'bg-mwm-green/10' : p >= 0.35 ? 'bg-mwm-gold/10' : p >= 0.15 ? 'bg-orange-50' : 'bg-red-50';
+                                    return (
+                                      <td key={cAge} className={`p-0.5 border border-slate-200 text-center ${bg}`}>
+                                        ${(bal / 1000000).toFixed(2)}M
+                                        {isOpt && <span className="block text-[6px] text-mwm-green/80">BEST</span>}
+                                        {isSel && !isOpt && <span className="block text-[6px] text-blue-600">SEL</span>}
+                                      </td>
+                                    );
+                                  })}
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        );
+                      })()}
+                    </div>
+                  )}
+
+                  {/* Single client — show outcomes list */}
+                  {!clientInfo.isMarried && ssAnalysis?.outcomes && (
+                    <div className="mt-1">
+                      <p className="text-[9px] text-slate-500 font-semibold mb-0.5">Portfolio at Age {targetMaxPortfolioAge} by Claiming Age</p>
+                      <div className="flex flex-wrap gap-1">
+                        {ssAnalysis.outcomes.map(o => {
+                          const isSelected = o.age === inputs.ssStartAge;
+                          const isWinner = ssAnalysis.winner && o.age === ssAnalysis.winner.age;
+                          return (
+                            <div key={o.age} className={`rounded px-1.5 py-0.5 text-[8px] border ${isWinner ? 'bg-mwm-green/20 border-mwm-green font-bold' : isSelected ? 'bg-blue-50 border-blue-300' : 'bg-slate-50 border-slate-200'}`}>
+                              <span className="font-semibold">{o.age}:</span> ${(o.balance / 1000000).toFixed(2)}M
+                              {isWinner && <span className="text-mwm-green/80 ml-0.5">Best</span>}
+                              {isSelected && !isWinner && <span className="text-blue-600 ml-0.5">Sel</span>}
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              );
+            })()}
+
+            {/* Legacy Comparison */}
+            {execSummaryPrint?.baseline && (
+              <div className="border border-slate-200 rounded-lg p-2.5">
+                <p className="text-[10px] font-semibold text-slate-700 mb-1.5">Hypothetical Net Legacy to Heirs</p>
+                <div className="grid grid-cols-2 gap-2 mb-1.5">
+                  {/* Baseline */}
+                  <div className="bg-slate-50 rounded p-1.5">
+                    <p className="text-[8px] text-slate-400 uppercase font-semibold mb-0.5">Without Optimization</p>
+                    <div className="space-y-0.5 text-[10px]">
+                      <div className="flex justify-between"><span className="text-slate-500">Legacy Balance</span><span className="font-medium">{execSummaryPrint.fmtShort(execSummaryPrint.baseline.legacy)}</span></div>
+                      <div className="flex justify-between"><span className="text-red-400">Heir Taxes</span><span className="font-medium text-red-500">({execSummaryPrint.fmtShort(execSummaryPrint.baseline.heirTax)})</span></div>
+                      <div className="flex justify-between border-t border-slate-200 pt-0.5 font-bold"><span>Net Legacy</span><span className="text-slate-600">{execSummaryPrint.fmtShort(execSummaryPrint.baseline.afterTaxLegacy)}</span></div>
+                    </div>
+                  </div>
+                  {/* Prepared Plan */}
+                  <div className="bg-mwm-green/10 rounded p-1.5 border border-mwm-green/20">
+                    <p className="text-[8px] text-mwm-green/80 uppercase font-semibold mb-0.5">Prepared Plan</p>
+                    <div className="space-y-0.5 text-[10px]">
+                      <div className="flex justify-between"><span className="text-slate-500">Legacy Balance</span><span className="font-medium">{execSummaryPrint.fmtShort(execSummaryPrint.current.legacy)}</span></div>
+                      <div className="flex justify-between"><span className="text-red-400">Heir Taxes</span><span className="font-medium text-red-500">({execSummaryPrint.fmtShort(execSummaryPrint.current.heirTax)})</span></div>
+                      <div className="flex justify-between border-t border-slate-200 pt-0.5 font-bold"><span>Net Legacy</span><span className="text-mwm-green">{execSummaryPrint.fmtShort(execSummaryPrint.current.afterTaxLegacy)}</span></div>
+                    </div>
+                  </div>
+                </div>
+                {/* Net improvement */}
+                {(() => {
+                  const legacyImprove = execSummaryPrint.current.afterTaxLegacy - execSummaryPrint.baseline.afterTaxLegacy;
+                  return legacyImprove !== 0 ? (
+                    <div className={`text-center rounded p-1 ${legacyImprove > 0 ? 'bg-emerald-50 border border-emerald-200' : 'bg-red-50 border border-red-200'}`}>
+                      <p className="text-[8px] text-slate-500 uppercase font-semibold">Net Legacy Improvement</p>
+                      <p className={`text-sm font-bold ${legacyImprove > 0 ? 'text-emerald-600' : 'text-red-600'}`}>
+                        {legacyImprove > 0 ? '+' : ''}{execSummaryPrint.fmt(legacyImprove)}
+                      </p>
+                    </div>
+                  ) : null;
+                })()}
+              </div>
+            )}
+          </div>
+
+          {/* Explanatory note */}
+          {execSummaryPrint?.baseline && (
+            <div className="mt-2 bg-slate-50 border border-slate-200 rounded p-2 text-[9px] text-slate-500">
+              <strong className="text-slate-600">How this value is created:</strong> The differences above result from reducing lifetime federal and state income taxes through Roth conversions and withdrawal sequencing, lowering the tax burden inherited by heirs by shifting assets from tax-deferred to tax-free accounts, and minimizing lifetime IRMAA Medicare surcharges by managing MAGI in key years. Heir tax burden estimated at {Math.round(execSummaryPrint.heirFederalRate * 100)}% federal + {(execSummaryPrint.heirStateRate * 100).toFixed(1)}% state on inherited traditional IRA balances.
+            </div>
+          )}
+        </PrintPageWrapper>
+      )}
+
       {/* PRINT PAGE: Disclosures */}
-      <PrintPageWrapper pageNumber={(hasTaxStrategyPage ? 10 : 9) + cashFlowPageCount} totalPages={totalPrintPages} title="Important Disclosures" subtitle="Assumptions, methodology, and limitations">
+      <PrintPageWrapper pageNumber={(hasTaxStrategyPage ? 10 : 9) + cashFlowPageCount + (hasExecSummaryPage ? 1 : 0)} totalPages={totalPrintPages} title="Important Disclosures" subtitle="Assumptions, methodology, and limitations">
         <div className="space-y-2 text-[12px] text-slate-600">
           {/* Return Assumptions */}
           <div className="border border-slate-200 rounded-lg p-2">

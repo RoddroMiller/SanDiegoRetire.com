@@ -60,6 +60,7 @@ export const TaxMapTab = ({
   const [optimizerResult, setOptimizerResult] = useState(null);
   const [isOptimizing, setIsOptimizing] = useState(false);
   const [showOptimizer, setShowOptimizer] = useState(false);
+  const [targetOptimizeAge, setTargetOptimizeAge] = useState(null); // null = end of projection
   const [showConversionTable, setShowConversionTable] = useState(false);
   const [showLiquidation, setShowLiquidation] = useState(false);
   const [showCapGains, setShowCapGains] = useState(false);
@@ -162,7 +163,12 @@ export const TaxMapTab = ({
   // Live current strategy metrics — uses active projection (deterministic or MC scenario)
   const liveCurrentStrategy = useMemo(() => {
     if (!activeProjection || activeProjection.length === 0) return null;
-    const last = activeProjection[activeProjection.length - 1];
+    const last = targetOptimizeAge
+      ? (activeProjection.find(r => r.age >= targetOptimizeAge) || activeProjection[activeProjection.length - 1])
+      : activeProjection[activeProjection.length - 1];
+    const scopedProjection = targetOptimizeAge
+      ? activeProjection.filter(r => r.age <= targetOptimizeAge)
+      : activeProjection;
     const grossLegacy = last.total || 0;
     const tradLegacy = last.traditionalBalanceDetail || 0;
     const rothLegacy = last.rothBalanceDetail || 0;
@@ -171,17 +177,17 @@ export const TaxMapTab = ({
     const heirStateRate = (inputs.stateRate || 0) / 100;
     const heirTax = tradLegacy * (heirFederalRate + heirStateRate);
     const afterTaxLegacy = grossLegacy - heirTax;
-    const lifetimeTax = activeProjection.reduce((s, r) => s + (r.totalTax || 0), 0);
-    const lifetimeRMD = activeProjection.reduce((s, r) => s + (r.rmdAmount || 0), 0);
-    const lifetimeIrmaa = activeProjection.reduce((s, r) => s + (r.irmaaCost || 0), 0);
-    const totalConversions = activeProjection.reduce((s, r) => s + (r.rothConversion || 0), 0);
+    const lifetimeTax = scopedProjection.reduce((s, r) => s + (r.totalTax || 0), 0);
+    const lifetimeRMD = scopedProjection.reduce((s, r) => s + (r.rmdAmount || 0), 0);
+    const lifetimeIrmaa = scopedProjection.reduce((s, r) => s + (r.irmaaCost || 0), 0);
+    const totalConversions = scopedProjection.reduce((s, r) => s + (r.rothConversion || 0), 0);
     return {
       grossLegacy, afterTaxLegacy, lifetimeTax, lifetimeRMD, heirTax,
       lifetimeIrmaa, totalConversions,
       legacyBreakdown: { traditional: tradLegacy, roth: rothLegacy, nq: nqLegacy },
       totalBurden: lifetimeTax + heirTax + lifetimeIrmaa
     };
-  }, [activeProjection, inputs.stateRate]);
+  }, [activeProjection, inputs.stateRate, targetOptimizeAge]);
 
   // Active strategy indicators
   const hasActiveConversions = Object.keys(inputs.rothConversions || {}).length > 0;
@@ -194,11 +200,11 @@ export const TaxMapTab = ({
     setShowOptimizer(true);
     // Use setTimeout to allow UI to update with loading state
     setTimeout(() => {
-      const result = optimizeRetirementTaxStrategy(basePlan, assumptions, inputs, clientInfo, rebalanceFreq, rebalanceTargets, monteCarloData);
+      const result = optimizeRetirementTaxStrategy(basePlan, assumptions, inputs, clientInfo, rebalanceFreq, rebalanceTargets, monteCarloData, targetOptimizeAge);
       setOptimizerResult(result);
       setIsOptimizing(false);
     }, 50);
-  }, [basePlan, assumptions, inputs, clientInfo, rebalanceFreq, rebalanceTargets, monteCarloData]);
+  }, [basePlan, assumptions, inputs, clientInfo, rebalanceFreq, rebalanceTargets, monteCarloData, targetOptimizeAge]);
 
   // Active optimizer display data — switches based on MC mode toggle
   const activeOptimizer = useMemo(() => {
@@ -261,6 +267,11 @@ export const TaxMapTab = ({
                 formatter={(value, name) => [fmt(value), name]}
                 labelFormatter={(label) => `Age ${label}`}
                 contentStyle={{ fontSize: 12 }}
+                itemSorter={(item) => {
+                  // Show bracket lines on top, income components on bottom
+                  const bracketNames = ['Top of 12%', 'Top of 22%', 'Top of 24%'];
+                  return bracketNames.includes(item.name) ? -1 : 1;
+                }}
               />
               <Legend wrapperStyle={{ fontSize: 11 }} />
               <Bar dataKey="taxableSS" stackId="income" fill="#60a5fa" name="Taxable SS" />
@@ -349,7 +360,12 @@ export const TaxMapTab = ({
                     };
                     const updateSplit = (acct, val) => {
                       const newStrategies = [...inputs.liquidationStrategies];
-                      newStrategies[idx] = { ...newStrategies[idx], split: { ...(s.split || {}), [acct]: parseFloat(val) || 0 } };
+                      const newSplit = { ...(s.split || { traditional: 0, roth: 0, nq: 0 }), [acct]: parseFloat(val) || 0 };
+                      // Auto-adjust NQ so totals = 100%
+                      if (acct !== 'nq') {
+                        newSplit.nq = Math.max(0, 100 - (newSplit.traditional || 0) - (newSplit.roth || 0));
+                      }
+                      newStrategies[idx] = { ...newStrategies[idx], split: newSplit };
                       onLiquidationStrategyChange('priority', newStrategies);
                     };
                     const updatePriority = (pi, newAcct) => {
@@ -376,21 +392,20 @@ export const TaxMapTab = ({
                         {isSplit ? (
                           <>
                             <td className="p-2 text-center">
-                              <input type="number" value={s.split.traditional ?? 0} min={0} max={100}
+                              <input type="number" value={s.split.traditional ?? 0} min={0} max={100 - (s.split.roth ?? 0)}
                                 onChange={(e) => updateSplit('traditional', e.target.value)}
                                 className="w-14 text-center px-1 py-1 border rounded text-xs" />
                               <span className="text-[9px] text-slate-400">%</span>
                             </td>
                             <td className="p-2 text-center">
-                              <input type="number" value={s.split.roth ?? 0} min={0} max={100}
+                              <input type="number" value={s.split.roth ?? 0} min={0} max={100 - (s.split.traditional ?? 0)}
                                 onChange={(e) => updateSplit('roth', e.target.value)}
                                 className="w-14 text-center px-1 py-1 border rounded text-xs" />
                               <span className="text-[9px] text-slate-400">%</span>
                             </td>
                             <td className="p-2 text-center">
-                              <input type="number" value={s.split.nq ?? 0} min={0} max={100}
-                                onChange={(e) => updateSplit('nq', e.target.value)}
-                                className="w-14 text-center px-1 py-1 border rounded text-xs" />
+                              <input type="number" value={Math.max(0, 100 - (s.split.traditional ?? 0) - (s.split.roth ?? 0))} readOnly
+                                className="w-14 text-center px-1 py-1 border rounded text-xs bg-slate-50 text-slate-500" />
                               <span className="text-[9px] text-slate-400">%</span>
                             </td>
                           </>
@@ -557,6 +572,20 @@ export const TaxMapTab = ({
                 Clear All Strategies
               </button>
             )}
+            <div className="flex items-center gap-1">
+              <label className="text-[10px] text-slate-500 uppercase font-semibold whitespace-nowrap">Optimize at</label>
+              <select
+                value={targetOptimizeAge || ''}
+                onChange={(e) => setTargetOptimizeAge(e.target.value ? parseInt(e.target.value) : null)}
+                className="text-xs font-bold p-1 rounded border border-slate-300 bg-white text-slate-800"
+              >
+                <option value={80}>Age 80</option>
+                <option value={85}>Age 85</option>
+                <option value={90}>Age 90</option>
+                <option value={95}>Age 95</option>
+                <option value="">End of Plan</option>
+              </select>
+            </div>
             <button
               onClick={handleOptimize}
               disabled={isOptimizing}
@@ -569,7 +598,7 @@ export const TaxMapTab = ({
         </div>
         <div className="flex items-center justify-between mb-4">
           <p className="text-xs text-slate-500">
-            Optimizes Roth conversion schedule to maximize after-tax legacy{inputs.irmaaEnabled ? ', factoring in IRMAA surcharges' : ''}. Set your liquidation strategy and Roth conversions above, then optimize.
+            Optimizes Roth conversion schedule to maximize after-tax {targetOptimizeAge ? `portfolio at age ${targetOptimizeAge}` : 'legacy'}{inputs.irmaaEnabled ? ', factoring in IRMAA surcharges' : ''}. Set your liquidation strategy and Roth conversions above, then optimize.
           </p>
           {monteCarloData?.scenarios && (
             <div className="flex items-center gap-1 bg-slate-100 p-1 rounded-lg ml-4 shrink-0">
@@ -621,10 +650,10 @@ export const TaxMapTab = ({
         {/* Live Strategy Summary — always reflects current manual inputs */}
         {liveCurrentStrategy && (
           <div className="border border-blue-200 bg-blue-50/30 rounded-lg p-4">
-            <p className="text-xs text-blue-600 uppercase font-semibold mb-3">Active Strategy (Live)</p>
+            <p className="text-xs text-blue-600 uppercase font-semibold mb-3">Active Strategy (Live){targetOptimizeAge ? ` — Values at Age ${targetOptimizeAge}` : ''}</p>
             <div className={`grid grid-cols-2 ${inputs.irmaaEnabled && liveCurrentStrategy.lifetimeIrmaa > 0 ? 'md:grid-cols-5' : 'md:grid-cols-4'} gap-4 text-center`}>
               <div>
-                <p className="text-[10px] text-slate-500 uppercase">After-Tax Legacy</p>
+                <p className="text-[10px] text-slate-500 uppercase">{targetOptimizeAge ? `After-Tax at ${targetOptimizeAge}` : 'After-Tax Legacy'}</p>
                 <p className="text-lg font-bold text-blue-700">{fmt(liveCurrentStrategy.afterTaxLegacy)}</p>
               </div>
               <div>
@@ -661,10 +690,10 @@ export const TaxMapTab = ({
           <div className="space-y-4">
             {/* Optimizer Recommendation */}
             <div className="border border-mwm-green/30 bg-mwm-green/5 rounded-lg p-4">
-              <p className="text-xs text-mwm-green/80 uppercase font-semibold mb-3">Optimizer Recommendation: {optimizerResult.recommended.label}</p>
+              <p className="text-xs text-mwm-green/80 uppercase font-semibold mb-3">Optimizer Recommendation: {optimizerResult.recommended.label}{targetOptimizeAge ? ` — Values at Age ${targetOptimizeAge}` : ''}</p>
               <div className={`grid grid-cols-2 ${inputs.irmaaEnabled && activeOptimizer.comparison.optimizedLifetimeIrmaa > 0 ? 'md:grid-cols-5' : 'md:grid-cols-4'} gap-4 text-center`}>
                 <div>
-                  <p className="text-[10px] text-slate-500 uppercase">After-Tax Legacy</p>
+                  <p className="text-[10px] text-slate-500 uppercase">{targetOptimizeAge ? `After-Tax at ${targetOptimizeAge}` : 'After-Tax Legacy'}</p>
                   <p className="text-lg font-bold text-mwm-green">{fmt(activeOptimizer.comparison.optimizedAfterTaxLegacy)}</p>
                 </div>
                 <div>
