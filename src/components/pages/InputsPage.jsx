@@ -321,60 +321,6 @@ export const InputsPage = ({
                       )}
                     </div>
 
-                    {/* NQ Assumptions (only when NQ > 0) */}
-                    {inputs.nqPercent > 0 && (
-                      <div>
-                        <label className="text-xs text-slate-400 uppercase font-semibold">NQ Assumptions</label>
-                        <div className="grid grid-cols-3 gap-3 mt-1">
-                          <div className="relative group">
-                            <label className="text-xs text-slate-500 uppercase flex items-center gap-1">
-                              Div Yield % <Info className="w-3 h-3 text-slate-400" />
-                            </label>
-                            <div className="absolute left-0 bottom-full mb-1 hidden group-hover:block w-52 bg-slate-800 text-white text-xs p-2 rounded shadow-lg z-10">
-                              Annual dividend yield on NQ holdings. Dividends are taxed annually regardless of withdrawal.
-                            </div>
-                            <input
-                              type="number" step="0.25" min="0" max="10"
-                              name="nqDividendYield"
-                              value={inputs.nqDividendYield}
-                              onChange={onInputChange}
-                              className="w-full px-3 py-2 text-sm border rounded-md"
-                            />
-                          </div>
-                          <div className="relative group">
-                            <label className="text-xs text-slate-500 uppercase flex items-center gap-1">
-                              Qual Div % <Info className="w-3 h-3 text-slate-400" />
-                            </label>
-                            <div className="absolute left-0 bottom-full mb-1 hidden group-hover:block w-52 bg-slate-800 text-white text-xs p-2 rounded shadow-lg z-10">
-                              % of NQ dividends that qualify for preferential LTCG tax rates.
-                            </div>
-                            <input
-                              type="number" step="5" min="0" max="100"
-                              name="nqQualifiedDividendPercent"
-                              value={inputs.nqQualifiedDividendPercent}
-                              onChange={onInputChange}
-                              className="w-full px-3 py-2 text-sm border rounded-md"
-                            />
-                          </div>
-                          <div className="relative group">
-                            <label className="text-xs text-slate-500 uppercase flex items-center gap-1">
-                              Ann. CG % <Info className="w-3 h-3 text-slate-400" />
-                            </label>
-                            <div className="absolute left-0 bottom-full mb-1 hidden group-hover:block w-52 bg-slate-800 text-white text-xs p-2 rounded shadow-lg z-10">
-                              Annual % of NQ balance realized as capital gains (fund distributions, rebalancing, turnover). Typical: 2-6%.
-                            </div>
-                            <input
-                              type="number" step="0.5" min="0" max="20"
-                              name="nqCapitalGainRate"
-                              value={inputs.nqCapitalGainRate}
-                              onChange={onInputChange}
-                              className="w-full px-3 py-2 text-sm border rounded-md"
-                            />
-                          </div>
-                        </div>
-                      </div>
-                    )}
-
                     {/* Withdrawal Strategy Button */}
                     {projectionData && projectionData.length > 0 && (
                       <button
