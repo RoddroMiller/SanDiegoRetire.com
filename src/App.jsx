@@ -284,6 +284,36 @@ export default function BucketPortfolioBuilder() {
     window.location.reload();
   };
 
+  const handleNewPlan = () => {
+    setClientInfo({
+      name: '', email: '', phone: '',
+      isMarried: false, isRetired: false,
+      partnerName: '', partnerIsRetired: false,
+      currentAge: 55, retirementAge: 65,
+      partnerAge: 55, partnerRetirementAge: 65,
+      currentPortfolio: 500000, currentSpending: 8000,
+      annualSavings: 25000, annualIncome: 0, partnerAnnualIncome: 0,
+      expectedReturn: 7.0, additionalContributions: [],
+    });
+    setInputs(prev => ({
+      ...prev,
+      totalPortfolio: 0, monthlySpending: 0,
+      ssPIA: 2500, partnerSSPIA: 2500,
+      ssStartAge: 65, ssCurrentlyReceiving: false,
+      partnerSSStartAge: 65, partnerSSCurrentlyReceiving: false,
+      monthlyPension: 0, pensionStartAge: 65, pensionCOLA: false, pensionSurvivorBenefitPct: 0,
+      partnerMonthlyPension: 0, partnerPensionStartAge: 65, partnerPensionCOLA: false, partnerPensionSurvivorBenefitPct: 0,
+      expectedDeathAge: 95, partnerExpectedDeathAge: 95, spendingReductionAtFirstDeath: 25,
+      additionalIncomes: [], cashFlowAdjustments: [],
+      taxEnabled: false, withdrawalOverrides: {},
+      rothConversions: {}, nqCapGainOverrides: [],
+      liquidationStrategies: [], accounts: [],
+    }));
+    setUseManualAllocation(false);
+    setStep(1);
+    setAdvisorView('planning');
+  };
+
   const handleLoadScenario = (scenario) => {
     loadScenario(scenario, (s) => {
       setClientInfo({ ...s.clientInfo, partnerAnnualIncome: s.clientInfo.partnerAnnualIncome || 0, additionalContributions: s.clientInfo.additionalContributions || [] });
@@ -442,7 +472,7 @@ export default function BucketPortfolioBuilder() {
   const handleToggleVa = (enabled) => setVaEnabled(enabled);
 
   // --- Calculations (using imported utilities) ---
-  const accumulationData = useMemo(() => calculateAccumulation(clientInfo, inputs.inflationRate, inputs.additionalIncomes, inputs.accounts), [clientInfo, inputs.inflationRate, inputs.additionalIncomes, inputs.accounts]);
+  const accumulationData = useMemo(() => calculateAccumulation(clientInfo, inputs.inflationRate, inputs.additionalIncomes, inputs.accounts, inputs.cashFlowAdjustments, { filingStatus: inputs.filingStatus, stateRate: inputs.stateRate }), [clientInfo, inputs.inflationRate, inputs.additionalIncomes, inputs.accounts, inputs.cashFlowAdjustments, inputs.filingStatus, inputs.stateRate]);
 
   // Standard bucket calculations (no VA)
   const formulaBasePlan = useMemo(() => calculateBasePlan(inputs, assumptions, clientInfo), [inputs, assumptions, clientInfo]);
@@ -1307,6 +1337,7 @@ export default function BucketPortfolioBuilder() {
         currentUser={currentUser}
         savedScenarios={savedScenarios}
         isLoadingScenarios={isLoadingScenarios}
+        onNewPlan={handleNewPlan}
         onLoadScenario={(scenario) => {
           handleLoadScenario(scenario);
           setAdvisorView('planning');

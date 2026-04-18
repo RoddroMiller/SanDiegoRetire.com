@@ -787,12 +787,29 @@ export const calculateImpliedSpending = ({
  * @param {Array} additionalIncomes - Additional income streams including one-time events
  * @returns {Array} Array of yearly balance data points
  */
-export const calculateAccumulation = (clientInfo, inflationRate = 0, additionalIncomes = [], accounts = []) => {
+export const calculateAccumulation = (clientInfo, inflationRate = 0, additionalIncomes = [], accounts = [], cashFlowAdjustments = [], taxSettings = null) => {
   const { currentAge, retirementAge, currentPortfolio, annualSavings, expectedReturn } = clientInfo;
   const years = Math.max(0, retirementAge - currentAge);
   const data = [];
   const growthRate = (expectedReturn || 0) / 100;
   const inflRate = (inflationRate || 0) / 100;
+
+  // Estimate marginal tax on one-time taxable income during accumulation
+  const estimateOneTimeTax = (taxableAmount, yearInflFactor) => {
+    if (!taxSettings || taxableAmount <= 0) return 0;
+    const filingStatus = taxSettings.filingStatus || 'married';
+    const stateRate = (taxSettings.stateRate || 0) / 100;
+    // Base income: inflation-adjusted household employment income minus pre-tax savings
+    const baseIncome = ((clientInfo.annualIncome || 0) + (clientInfo.partnerAnnualIncome || 0)) * yearInflFactor;
+    const standardDeduction = STANDARD_DEDUCTION[filingStatus] || STANDARD_DEDUCTION.married;
+    const baseTaxableIncome = Math.max(0, baseIncome - annualSavings * yearInflFactor - standardDeduction);
+    // Marginal tax = tax with the event minus tax without
+    const taxWithout = calculateFederalTax(baseTaxableIncome, filingStatus);
+    const taxWith = calculateFederalTax(baseTaxableIncome + taxableAmount, filingStatus);
+    const federalTax = taxWith - taxWithout;
+    const stateTax = taxableAmount * stateRate;
+    return federalTax + stateTax;
+  };
 
   // Calculate additional contributions (401k match, company contributions, etc.)
   const additionalContribs = (clientInfo.additionalContributions || []).reduce((sum, c) => {
@@ -808,6 +825,35 @@ export const calculateAccumulation = (clientInfo, inflationRate = 0, additionalI
   const totalIncome = annualIncome + partnerAnnualIncome;
   const partnerRetirementAge = clientInfo.partnerRetirementAge || retirementAge;
 
+  // Calculate cash flow adjustment expense for a given year (accumulation phase only)
+  // Excludes retirement year to avoid double-counting with distribution phase
+  const getCashFlowExpense = (currentSimAge, currentPartnerAge, yearIdx) => {
+    let expense = 0;
+    if (!cashFlowAdjustments || cashFlowAdjustments.length === 0) return expense;
+    if (currentSimAge >= retirementAge) return expense; // distribution phase handles retirement+
+    const expenseInflation = Math.pow(1 + inflRate, yearIdx);
+    cashFlowAdjustments.forEach(adj => {
+      const ownerAge = adj.owner === 'partner' ? currentPartnerAge : currentSimAge;
+      if (adj.type === 'one-time') {
+        if (Math.floor(ownerAge) === adj.startAge) {
+          let amount = adj.amount;
+          if (adj.inflationAdjusted) amount *= expenseInflation;
+          expense += amount;
+        }
+      } else if (adj.type === 'increase' && ownerAge >= adj.startAge && ownerAge <= (adj.endAge || 100)) {
+        let amount = adj.amount * 12;
+        if (adj.inflationAdjusted) amount *= expenseInflation;
+        expense += amount;
+      } else if (adj.type === 'reduction' && ownerAge >= adj.startAge && ownerAge <= (adj.endAge || 100)) {
+        // Reductions during accumulation mean lower spending → higher savings (add to balance)
+        let amount = adj.amount * 12;
+        if (adj.inflationAdjusted) amount *= expenseInflation;
+        expense -= amount;
+      }
+    });
+    return expense;
+  };
+
   // --- Advanced mode: per-account accumulation ---
   if (accounts && accounts.length > 0) {
     // Initialize per-account balances
@@ -816,20 +862,39 @@ export const calculateAccumulation = (clientInfo, inflationRate = 0, additionalI
     for (let i = 0; i <= years; i++) {
       const currentSimAge = currentAge + i;
       const currentPartnerAge = (clientInfo.partnerAge || currentAge) + i;
+      const inflFactor = Math.pow(1 + inflRate, i);
 
-      // Add one-time events proportionally across accounts
+      // Add one-time events proportionally across accounts (net of taxes on taxable portion)
+      let yearAdditionalIncome = 0;
+      let yearAdditionalTax = 0;
       additionalIncomes.forEach(income => {
         if (income.isOneTime && income.startAge === currentSimAge && currentSimAge < retirementAge) {
           let amount = income.amount;
-          if (income.inflationAdjusted) amount *= Math.pow(1 + inflRate, i);
+          if (income.inflationAdjusted) amount *= inflFactor;
+          const taxablePct = (income.taxablePercent ?? 100) / 100;
+          const tax = estimateOneTimeTax(amount * taxablePct, inflFactor);
+          const netAmount = amount - tax;
+          yearAdditionalIncome += amount;
+          yearAdditionalTax += tax;
           const totalBal = acctBalances.reduce((s, a) => s + a.projected, 0);
           if (totalBal > 0) {
-            acctBalances.forEach(a => { a.projected += amount * (a.projected / totalBal); });
+            acctBalances.forEach(a => { a.projected += netAmount * (a.projected / totalBal); });
           } else if (acctBalances.length > 0) {
-            acctBalances[acctBalances.length - 1].projected += amount;
+            acctBalances[acctBalances.length - 1].projected += netAmount;
           }
         }
       });
+
+      // Deduct cash flow adjustment expenses (college, wedding, etc.) proportionally
+      const cfExpense = getCashFlowExpense(currentSimAge, currentPartnerAge, i);
+      if (cfExpense !== 0) {
+        const totalBal = acctBalances.reduce((s, a) => s + a.projected, 0);
+        if (totalBal > 0) {
+          acctBalances.forEach(a => { a.projected -= cfExpense * (a.projected / totalBal); });
+        } else if (acctBalances.length > 0) {
+          acctBalances[acctBalances.length - 1].projected -= cfExpense;
+        }
+      }
 
       const totalBalance = acctBalances.reduce((s, a) => s + a.projected, 0);
 
@@ -838,7 +903,9 @@ export const calculateAccumulation = (clientInfo, inflationRate = 0, additionalI
         id: a.id, type: a.type, owner: a.owner, projected: Math.round(a.projected)
       })) : undefined;
 
-      data.push({ age: currentSimAge, balance: Math.round(totalBalance), accountProjections });
+      // Compute savings and growth for this year
+      let yearSavings = 0;
+      let yearGrowth = 0;
 
       if (i < years) {
         // Determine staggered retirement savings reduction
@@ -863,11 +930,30 @@ export const calculateAccumulation = (clientInfo, inflationRate = 0, additionalI
             contribution += additionalContribs * share * (partnerRetired && a.owner === 'partner' ? 0 : 1);
           }
           // Inflation-adjust contributions
-          const adjContribution = contribution * Math.pow(1 + inflRate, i);
+          const adjContribution = contribution * inflFactor;
           a.projected += adjContribution;
+          yearSavings += adjContribution;
+          yearGrowth += a.projected * growthRate;
           a.projected *= (1 + growthRate);
         });
       }
+
+      // Inflation-adjusted household income
+      const yearClientIncome = annualIncome > 0 ? annualIncome * inflFactor : 0;
+      const partnerStillWorking = currentPartnerAge < partnerRetirementAge;
+      const yearPartnerIncome = partnerAnnualIncome > 0 && partnerStillWorking ? partnerAnnualIncome * inflFactor : 0;
+
+      data.push({
+        age: currentSimAge,
+        balance: Math.round(totalBalance),
+        accountProjections,
+        income: Math.round(yearClientIncome + yearPartnerIncome),
+        savings: Math.round(yearSavings),
+        growth: Math.round(yearGrowth),
+        additionalIncome: Math.round(yearAdditionalIncome),
+        additionalTax: Math.round(yearAdditionalTax),
+        cashFlowExpense: Math.round(cfExpense),
+      });
     }
     return data;
   }
@@ -878,19 +964,34 @@ export const calculateAccumulation = (clientInfo, inflationRate = 0, additionalI
   for (let i = 0; i <= years; i++) {
     const currentSimAge = currentAge + i;
     const currentPartnerAge = (clientInfo.partnerAge || currentAge) + i;
+    const inflFactor = Math.pow(1 + inflRate, i);
 
-    // Add one-time events that occur at this age BEFORE retirement
+    // One-time income events (net of taxes on taxable portion)
+    let yearAdditionalIncome = 0;
+    let yearAdditionalTax = 0;
     additionalIncomes.forEach(income => {
       if (income.isOneTime && income.startAge === currentSimAge && currentSimAge < retirementAge) {
         let amount = income.amount;
-        if (income.inflationAdjusted) {
-          amount *= Math.pow(1 + inflRate, i);
-        }
-        balance += amount;
+        if (income.inflationAdjusted) amount *= inflFactor;
+        const taxablePct = (income.taxablePercent ?? 100) / 100;
+        const tax = estimateOneTimeTax(amount * taxablePct, inflFactor);
+        yearAdditionalIncome += amount;
+        yearAdditionalTax += tax;
       }
     });
+    balance += yearAdditionalIncome - yearAdditionalTax;
 
-    data.push({ age: currentSimAge, balance: Math.round(balance) });
+    // Deduct cash flow adjustment expenses (college, wedding, LTC, etc.)
+    const cfExpense = getCashFlowExpense(currentSimAge, currentPartnerAge, i);
+    if (cfExpense !== 0) {
+      balance -= cfExpense;
+    }
+
+    // Compute year's savings and growth (for table display)
+    let yearSavings = 0;
+    let yearGrowth = 0;
+    const balanceBeforeGrowth = balance;
+
     if (i < years) {
       let effectiveSavings = annualSavings + additionalContribs;
 
@@ -900,10 +1001,27 @@ export const calculateAccumulation = (clientInfo, inflationRate = 0, additionalI
         effectiveSavings = (annualSavings + additionalContribs) * (1 - partnerIncomeShare);
       }
 
-      const inflationAdjustedSavings = effectiveSavings * Math.pow(1 + inflRate, i);
-      balance += inflationAdjustedSavings;
+      yearSavings = effectiveSavings * inflFactor;
+      balance += yearSavings;
+      yearGrowth = balance * growthRate;
       balance *= (1 + growthRate);
     }
+
+    // Inflation-adjusted household income
+    const yearClientIncome = annualIncome > 0 ? annualIncome * inflFactor : 0;
+    const partnerStillWorking = currentPartnerAge < partnerRetirementAge;
+    const yearPartnerIncome = partnerAnnualIncome > 0 && partnerStillWorking ? partnerAnnualIncome * inflFactor : 0;
+
+    data.push({
+      age: currentSimAge,
+      balance: Math.round(balance),
+      income: Math.round(yearClientIncome + yearPartnerIncome),
+      savings: Math.round(yearSavings),
+      growth: Math.round(yearGrowth),
+      additionalIncome: Math.round(yearAdditionalIncome),
+      additionalTax: Math.round(yearAdditionalTax),
+      cashFlowExpense: Math.round(cfExpense),
+    });
   }
   return data;
 };
@@ -1005,8 +1123,14 @@ export const calculateBasePlan = (inputs, assumptions, clientInfo, vaEnabled = f
     const currentPartnerAge = clientInfo.partnerAge + (simAge - clientInfo.currentAge);
     // Expenses use personal inflation rate
     const expenseInflationFactor = Math.pow(1 + (personalInflationRate / 100), yearIndex);
-    // Income (SS, pension) uses full inflation rate
+    // Income (SS, pension) uses full inflation rate from simulation start
     const incomeInflationFactor = Math.pow(1 + (inflationRate / 100), yearIndex);
+    // Employment income inflates from client's current age (not simulation start)
+    // so pre-retirement salary growth is reflected in distribution-phase cash flows
+    const preSimYears = simulationStartAge - clientInfo.currentAge;
+    const employmentInflationFactor = Math.pow(1 + (inflationRate / 100), yearIndex + preSimYears);
+    // Cash flow adjustments inflate from client's current age (consistent with accumulation phase)
+    const cashFlowInflationFactor = Math.pow(1 + (personalInflationRate / 100), yearIndex + preSimYears);
     // Death age tracking
     const clientExpectedDeathAge = expectedDeathAge || 95;
     const partnerExpectedDeathAge = partnerExpectedDeathAge_val || 95;
@@ -1031,13 +1155,13 @@ export const calculateBasePlan = (inputs, assumptions, clientInfo, vaEnabled = f
     let clientEmploymentIncome = 0;
     const clientAnnualIncome_ = clientInfo.annualIncome || 0;
     if (clientAlive && clientAnnualIncome_ > 0 && simAge < clientInfo.retirementAge) {
-      clientEmploymentIncome = clientAnnualIncome_ * (inflationRate > 0 ? incomeInflationFactor : 1);
+      clientEmploymentIncome = clientAnnualIncome_ * (inflationRate > 0 ? employmentInflationFactor : 1);
     }
     let partnerEmploymentIncome = 0;
     const partnerAnnualIncome = clientInfo.partnerAnnualIncome || 0;
     const partnerRetAge = clientInfo.partnerRetirementAge || clientInfo.retirementAge;
     if (clientInfo.isMarried && partnerAlive && partnerAnnualIncome > 0 && currentPartnerAge < partnerRetAge) {
-      partnerEmploymentIncome = partnerAnnualIncome * (inflationRate > 0 ? incomeInflationFactor : 1);
+      partnerEmploymentIncome = partnerAnnualIncome * (inflationRate > 0 ? employmentInflationFactor : 1);
     }
     const employmentIncome = clientEmploymentIncome + partnerEmploymentIncome;
 
@@ -1119,7 +1243,8 @@ export const calculateBasePlan = (inputs, assumptions, clientInfo, vaEnabled = f
     const income = ssIncome + pensionIncome + otherIncome + nonTaxableAdditionalIncome + vaIncome + employmentIncome;
 
     // One-time contributions - only if owner is alive
-    // Taxable portion is added to otherIncome; non-taxable portion goes directly to portfolio
+    // Full amount is added to the portfolio; taxable portion is also included in
+    // otherIncome so it flows through the tax calculation
     let oneTimeContributions = 0;
     additionalIncomes.forEach(stream => {
       const ownerAge = stream.owner === 'partner' ? currentPartnerAge : simAge;
@@ -1129,15 +1254,16 @@ export const calculateBasePlan = (inputs, assumptions, clientInfo, vaEnabled = f
         if (stream.inflationAdjusted) streamAmount *= incomeInflationFactor;
         const taxablePct = (stream.taxablePercent ?? 100) / 100;
         const taxablePortion = streamAmount * taxablePct;
-        const nonTaxablePortion = streamAmount - taxablePortion;
         // Taxable portion treated as ordinary income for the year
         otherIncome += taxablePortion;
-        // Non-taxable portion added directly to portfolio
-        oneTimeContributions += nonTaxablePortion;
+        // Full amount added to portfolio (tax is paid from the withdrawal side)
+        oneTimeContributions += streamAmount;
       }
     });
 
     // Apply cash flow adjustments to expenses
+    // Uses cashFlowInflationFactor (includes pre-sim years) so inflation is consistent
+    // with accumulation phase — amounts entered in today's dollars grow from current age
     let adjustedExpenses = expenses;
     if (cashFlowAdjustments && cashFlowAdjustments.length > 0) {
       let netAdjustment = 0;
@@ -1146,12 +1272,12 @@ export const calculateBasePlan = (inputs, assumptions, clientInfo, vaEnabled = f
         if (adj.type === 'one-time') {
           if (Math.floor(ownerAge) === adj.startAge) {
             let amount = adj.amount;
-            if (adj.inflationAdjusted) amount *= expenseInflationFactor;
+            if (adj.inflationAdjusted) amount *= cashFlowInflationFactor;
             netAdjustment += amount;
           }
         } else if (ownerAge >= adj.startAge && ownerAge <= (adj.endAge || 100)) {
           let amount = adj.amount * 12; // monthly to annual
-          if (adj.inflationAdjusted) amount *= expenseInflationFactor;
+          if (adj.inflationAdjusted) amount *= cashFlowInflationFactor;
           if (adj.type === 'reduction') {
             netAdjustment -= amount;
           } else if (adj.type === 'increase') {
@@ -1165,8 +1291,11 @@ export const calculateBasePlan = (inputs, assumptions, clientInfo, vaEnabled = f
     const gap = Math.max(0, adjustedExpenses - income);
     // Surplus: when income exceeds expenses, excess flows into the portfolio as savings
     const surplus = Math.max(0, income - adjustedExpenses);
+    const cashFlowAdjustmentDetail = adjustedExpenses - expenses;
     return {
       expenses: adjustedExpenses,
+      baseExpenses: expenses,
+      cashFlowAdjustmentDetail,
       income,
       gap,
       surplus,
@@ -1497,7 +1626,7 @@ export const runSimulation = (basePlan, assumptions, inputs, rebalanceFreq, isMo
       }
 
       const {
-        expenses, income, gap, surplus, simAge, currentPartnerAge, oneTimeContributions,
+        expenses, baseExpenses, cashFlowAdjustmentDetail, income, gap, surplus, simAge, currentPartnerAge, oneTimeContributions,
         ssIncome, pensionIncome, otherIncome, nonTaxableAdditionalIncome, vaIncome, employmentIncome
       } = getAnnualDetails(i - 1);
 
@@ -2082,7 +2211,8 @@ export const runSimulation = (basePlan, assumptions, inputs, rebalanceFreq, isMo
         ssIncome: Math.round(income + vaGuaranteedIncome), // Include VA income in reported income
         contribution: Math.round(oneTimeContributions),
         surplus: Math.round(netSurplus),
-        livingExpenses: Math.round(expenses),
+        livingExpenses: Math.round(baseExpenses),
+        cashFlowAdjustmentDetail: Math.round(cashFlowAdjustmentDetail),
         expenses: Math.round(expenses + taxData.totalTax + irmaaCost),
         distribution: Math.round(totalWithdrawal + rothConversionTax),
         total: Math.max(0, total),

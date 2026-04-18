@@ -335,6 +335,7 @@ export const ArchitectPage = ({
       return `$${rounded.toLocaleString()}`;
     };
     const hasEmployment = printData.some(r => r.employmentIncomeDetail > 0);
+    const hasCashFlowAdj = printData.some(r => (r.cashFlowAdjustmentDetail || 0) !== 0);
     const hasOther = printData.some(r => r.otherIncomeDetail > 0);
     const hasContributions = printData.some(r => r.contribution > 0);
     const hasSurplus = printData.some(r => (r.surplus || 0) > 0);
@@ -375,6 +376,13 @@ export const ArchitectPage = ({
       { label: '', cls: 'bg-slate-200', getValue: () => '', isSeparator: true },
       { label: 'Living Expenses', cls: 'text-slate-700', getValue: (r) => fmt(r.livingExpenses || r.expenses) },
     );
+    if (hasCashFlowAdj) {
+      rows.push({ label: 'Spending Adjustments', cls: 'text-orange-600', getValue: (r) => {
+        const val = r.cashFlowAdjustmentDetail || 0;
+        if (val === 0) return '-';
+        return val > 0 ? `+${fmt(val)}` : fmt(val);
+      }});
+    }
     if (inputs.taxEnabled) {
       rows.push(
         { label: 'Federal Tax', cls: 'text-red-600', getValue: (r) => fmt(r.federalTax || 0) },
@@ -618,7 +626,7 @@ export const ArchitectPage = ({
         <h1 className="text-5xl font-bold text-slate-900 mb-4">Retirement Strategy Illustration</h1>
         <div className="w-32 h-1.5 bg-mwm-green mx-auto mb-10"></div>
         <p className="text-3xl text-slate-600 mb-3">Prepared for</p>
-        <p className="text-4xl font-bold text-mwm-green/80 mb-16">{clientInfo.name || "Valued Client"}</p>
+        <p className="text-4xl font-bold text-mwm-green/80 mb-16">{clientInfo.name || "Valued Client"}{clientInfo.isMarried && clientInfo.partnerName ? ` & ${clientInfo.partnerName}` : ''}</p>
         <div className="text-left border-t border-slate-200 pt-10 w-full max-w-lg mx-auto space-y-4 text-lg text-slate-600">
           <p><strong>Email:</strong> {clientInfo.email || 'Not provided'}</p>
           <p><strong>Phone:</strong> {clientInfo.phone || 'Not provided'}</p>
@@ -752,14 +760,16 @@ export const ArchitectPage = ({
         {/* Cash Flow Table for Accumulation Phase */}
         <div className="border border-slate-200 rounded-lg p-3 mb-4">
           <h3 className="font-bold text-base text-slate-800 mb-2">Accumulation Cash Flow</h3>
+          {(() => { const hasPrintSpecial = accumulationData.some(r => (r.additionalIncome || 0) !== 0 || (r.cashFlowExpense || 0) !== 0); return (
           <table className="w-full text-[12px]">
             <thead>
               <tr className="bg-slate-100">
                 <th className="px-1 py-0.5 text-left">Age</th>
-                <th className="px-1 py-0.5 text-right">Start Balance</th>
+                <th className="px-1 py-0.5 text-right">Income</th>
                 <th className="px-1 py-0.5 text-right text-mwm-green">Savings</th>
                 <th className="px-1 py-0.5 text-right text-blue-600">Growth</th>
-                <th className="px-1 py-0.5 text-right font-bold">End Balance</th>
+                {hasPrintSpecial && <th className="px-1 py-0.5 text-right text-orange-600">Special Items</th>}
+                <th className="px-1 py-0.5 text-right font-bold">Balance</th>
               </tr>
             </thead>
             <tbody>
@@ -803,19 +813,19 @@ export const ArchitectPage = ({
                 displayIndices.forEach((idx, pos) => {
                   if (pos > 0 && idx > displayIndices[pos - 1] + 1) {
                     rows.push(
-                      <tr key={`gap-${idx}`}><td colSpan={5} className="py-0 leading-none text-center text-slate-300 text-[8px]">⋮</td></tr>
+                      <tr key={`gap-${idx}`}><td colSpan={hasPrintSpecial ? 6 : 5} className="py-0 leading-none text-center text-slate-300 text-[8px]">⋮</td></tr>
                     );
                   }
                   const row = accumulationData[idx];
-                  const prevBalance = idx > 0 ? accumulationData[idx - 1].balance : clientInfo.currentPortfolio;
-                  const savings = idx > 0 ? Math.round(clientInfo.annualSavings * Math.pow(1 + (inputs.inflationRate / 100), idx - 1)) : 0;
-                  const growth = idx > 0 ? row.balance - prevBalance - savings : 0;
+                  const tax = row.additionalTax || 0;
+                  const netSpecial = (row.additionalIncome || 0) - tax - (row.cashFlowExpense || 0);
                   rows.push(
                     <tr key={idx} className={pos % 2 === 0 ? 'bg-white' : 'bg-slate-50'}>
                       <td className="px-1 py-0.5">{row.age}</td>
-                      <td className="px-1 py-0.5 text-right">${prevBalance.toLocaleString()}</td>
-                      <td className="px-1 py-0.5 text-right text-mwm-green">{savings > 0 ? `+$${savings.toLocaleString()}` : '-'}</td>
-                      <td className="px-1 py-0.5 text-right text-blue-600">{growth > 0 ? `+$${Math.round(growth).toLocaleString()}` : '-'}</td>
+                      <td className="px-1 py-0.5 text-right">${(row.income || 0).toLocaleString()}</td>
+                      <td className="px-1 py-0.5 text-right text-mwm-green">{row.savings > 0 ? `+$${row.savings.toLocaleString()}` : '-'}</td>
+                      <td className="px-1 py-0.5 text-right text-blue-600">{row.growth > 0 ? `+$${row.growth.toLocaleString()}` : '-'}</td>
+                      {hasPrintSpecial && <td className={`px-1 py-0.5 text-right ${netSpecial < 0 ? 'text-orange-600' : netSpecial > 0 ? 'text-purple-600' : ''}`}>{netSpecial !== 0 ? (netSpecial < 0 ? `($${Math.abs(netSpecial).toLocaleString()})` : `+$${netSpecial.toLocaleString()}`) : '-'}</td>}
                       <td className="px-1 py-0.5 text-right font-bold">${row.balance.toLocaleString()}</td>
                     </tr>
                   );
@@ -824,6 +834,7 @@ export const ArchitectPage = ({
               })()}
             </tbody>
           </table>
+          ); })()}
         </div>
 
         <div className="bg-mwm-green/10 p-3 rounded-lg border border-mwm-green/30">

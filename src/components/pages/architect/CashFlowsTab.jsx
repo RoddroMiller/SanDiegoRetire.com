@@ -21,6 +21,7 @@ const CashFlowsTab = ({ projectionData, monteCarloData, inputs, clientInfo }) =>
     : projectionData;
 
   const hasEmployment = activeData.some(r => r.employmentIncomeDetail > 0);
+  const hasCashFlowAdj = activeData.some(r => (r.cashFlowAdjustmentDetail || 0) !== 0);
   const hasOther = activeData.some(r => r.otherIncomeDetail > 0);
   const hasContributions = activeData.some(r => r.contribution > 0);
   const hasSurplus = activeData.some(r => (r.surplus || 0) > 0);
@@ -65,6 +66,13 @@ const CashFlowsTab = ({ projectionData, monteCarloData, inputs, clientInfo }) =>
       { label: '', cls: 'bg-slate-200', getValue: () => '', isSeparator: true },
       { label: 'Living Expenses', cls: 'text-slate-700', getValue: (r) => fmt(r.livingExpenses || r.expenses) },
     );
+    if (hasCashFlowAdj) {
+      rows.push({ label: 'Spending Adjustments', cls: 'text-orange-600', getValue: (r) => {
+        const val = r.cashFlowAdjustmentDetail || 0;
+        if (val === 0) return '-';
+        return val > 0 ? `+${fmt(val)}` : fmt(val);
+      }});
+    }
     if (inputs.taxEnabled) {
       rows.push(
         { label: 'Federal Tax', cls: 'text-red-600', getValue: (r) => fmt(r.federalTax || 0) },

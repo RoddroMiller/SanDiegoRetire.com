@@ -7,6 +7,7 @@ import {
 
 import { estimatePIAFromIncome, STATE_TAX_DATA } from '../../utils';
 import { Card, FormattedNumberInput } from '../ui';
+import { WithdrawalOverrideModal } from './architect';
 
 /**
  * Inputs Page - Dedicated full-page layout for all retirement planning inputs.
@@ -853,8 +854,8 @@ export const InputsPage = ({
                       'Reverse Mortgage': { type: 'reduction' },
                       'Downsizing': { type: 'reduction' },
                       'Health Insurance (pre-Medicare)': { type: 'increase', endAge: 65 },
-                      'Long-Term Care Insurance': { type: 'increase' },
-                      'Grandchild College': { type: 'one-time' },
+                      'LTC': { type: 'increase' },
+                      'College': { type: 'one-time' },
                       'Wedding': { type: 'one-time' },
                       'Major Medical': { type: 'one-time' },
                       'Home Renovation': { type: 'one-time' }
@@ -876,8 +877,8 @@ export const InputsPage = ({
                   <option value="Reverse Mortgage">Reverse Mortgage</option>
                   <option value="Downsizing">Downsizing</option>
                   <option value="Health Insurance (pre-Medicare)">Health Insurance (pre-Medicare)</option>
-                  <option value="Long-Term Care Insurance">Long-Term Care Insurance</option>
-                  <option value="Grandchild College">Grandchild College</option>
+                  <option value="LTC">LTC</option>
+                  <option value="College">College</option>
                   <option value="Wedding">Wedding</option>
                   <option value="Major Medical">Major Medical</option>
                   <option value="Home Renovation">Home Renovation</option>
@@ -1064,6 +1065,16 @@ export const InputsPage = ({
           })}
         </div>
       </Card>
+
+      {/* Withdrawal Strategy Override Modal */}
+      {showWithdrawalOverrides && projectionData && (
+        <WithdrawalOverrideModal
+          projectionData={projectionData}
+          inputs={inputs}
+          onWithdrawalOverrideChange={onWithdrawalOverrideChange}
+          onClose={() => setShowWithdrawalOverrides(false)}
+        />
+      )}
     </div>
   );
 };

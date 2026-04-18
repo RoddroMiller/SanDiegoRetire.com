@@ -1,6 +1,6 @@
 import React, { useMemo, useState } from 'react';
 import { ResponsiveContainer, AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip } from 'recharts';
-import { User, DollarSign, ArrowRight, Info, AlertTriangle, ChevronDown, ChevronUp, Clock, Plus, Trash2, Settings } from 'lucide-react';
+import { User, DollarSign, ArrowRight, Info, AlertTriangle, ChevronDown, ChevronUp, Clock, Plus, Trash2, Settings, BarChart3, Table as TableIcon } from 'lucide-react';
 
 import { COLORS } from '../../constants';
 import { formatPhoneNumber, calculateImpliedSpending, STATE_TAX_DATA } from '../../utils';
@@ -29,6 +29,7 @@ export const AccumulationPage = ({
   onRemoveAccount,
 }) => {
   const [showTaxBreakdown, setShowTaxBreakdown] = useState(false);
+  const [showAccumTable, setShowAccumTable] = useState(false);
 
   const impliedSpending = useMemo(() => {
     if (!clientInfo.annualIncome || clientInfo.annualIncome <= 0) return null;
@@ -48,6 +49,8 @@ export const AccumulationPage = ({
 
   const hasStaggeredRetirement = clientInfo.isMarried &&
     clientInfo.retirementAge !== clientInfo.partnerRetirementAge;
+
+  const hasSpecialItems = accumulationData.some(r => (r.additionalIncome || 0) !== 0 || (r.cashFlowExpense || 0) !== 0);
 
   return (
     <div className="min-h-screen bg-slate-50 font-sans text-slate-800 p-3 sm:p-6 flex flex-col items-center">
@@ -623,46 +626,113 @@ export const AccumulationPage = ({
             )}
           </div>
 
-          {/* ===== PROJECTED GROWTH CHART — full width ===== */}
+          {/* ===== PROJECTED GROWTH — CHART / TABLE TOGGLE ===== */}
           <div className="bg-slate-50 p-6 rounded-xl border border-slate-100">
-            <h3 className="text-lg font-bold text-slate-800 mb-4">Projected Growth</h3>
-            <div className="h-[350px]">
-              <ResponsiveContainer width="100%" height="100%">
-                <AreaChart data={accumulationData}>
-                  <defs>
-                    <linearGradient id="colorGrowth" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="5%" stopColor={COLORS.hedged} stopOpacity={0.8} />
-                      <stop offset="95%" stopColor={COLORS.hedged} stopOpacity={0} />
-                    </linearGradient>
-                  </defs>
-                  <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e2e8f0" />
-                  <XAxis dataKey="age" tickLine={false} axisLine={false} tick={{ fill: '#64748b', fontSize: 12 }} />
-                  <YAxis
-                    tickFormatter={(val) => `$${val / 1000}k`}
-                    tickLine={false}
-                    axisLine={false}
-                    tick={{ fill: '#64748b', fontSize: 12 }}
-                  />
-                  <Tooltip
-                    formatter={(val) => `$${val.toLocaleString()}`}
-                    labelFormatter={(label) => `Age ${label}`}
-                  />
-                  <Area
-                    type="monotone"
-                    dataKey="balance"
-                    stroke={COLORS.hedged}
-                    fillOpacity={1}
-                    fill="url(#colorGrowth)"
-                  />
-                </AreaChart>
-              </ResponsiveContainer>
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-lg font-bold text-slate-800">Projected Growth</h3>
+              <div className="flex bg-white border rounded-lg overflow-hidden">
+                <button
+                  onClick={() => setShowAccumTable(false)}
+                  className={`flex items-center gap-1 px-3 py-1.5 text-sm font-medium transition-colors ${!showAccumTable ? 'bg-mwm-green/10 text-mwm-green' : 'text-slate-500 hover:text-slate-700'}`}
+                >
+                  <BarChart3 className="w-4 h-4" /> Chart
+                </button>
+                <button
+                  onClick={() => setShowAccumTable(true)}
+                  className={`flex items-center gap-1 px-3 py-1.5 text-sm font-medium transition-colors ${showAccumTable ? 'bg-mwm-green/10 text-mwm-green' : 'text-slate-500 hover:text-slate-700'}`}
+                >
+                  <TableIcon className="w-4 h-4" /> Table
+                </button>
+              </div>
             </div>
-            <div className="mt-4 text-center">
-              <p className="text-sm text-slate-500">Projected Portfolio at Retirement</p>
-              <p className="text-3xl font-bold text-mwm-green/80">
-                ${accumulationData[accumulationData.length - 1]?.balance.toLocaleString() || 0}
-              </p>
-            </div>
+
+            {!showAccumTable ? (
+              <>
+                <div className="h-[350px]">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <AreaChart data={accumulationData}>
+                      <defs>
+                        <linearGradient id="colorGrowth" x1="0" y1="0" x2="0" y2="1">
+                          <stop offset="5%" stopColor={COLORS.hedged} stopOpacity={0.8} />
+                          <stop offset="95%" stopColor={COLORS.hedged} stopOpacity={0} />
+                        </linearGradient>
+                      </defs>
+                      <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e2e8f0" />
+                      <XAxis dataKey="age" tickLine={false} axisLine={false} tick={{ fill: '#64748b', fontSize: 12 }} />
+                      <YAxis
+                        tickFormatter={(val) => `$${val / 1000}k`}
+                        tickLine={false}
+                        axisLine={false}
+                        tick={{ fill: '#64748b', fontSize: 12 }}
+                      />
+                      <Tooltip
+                        formatter={(val) => `$${val.toLocaleString()}`}
+                        labelFormatter={(label) => `Age ${label}`}
+                      />
+                      <Area
+                        type="monotone"
+                        dataKey="balance"
+                        stroke={COLORS.hedged}
+                        fillOpacity={1}
+                        fill="url(#colorGrowth)"
+                      />
+                    </AreaChart>
+                  </ResponsiveContainer>
+                </div>
+                <div className="mt-4 text-center">
+                  <p className="text-sm text-slate-500">Projected Portfolio at Retirement</p>
+                  <p className="text-3xl font-bold text-mwm-green/80">
+                    ${accumulationData[accumulationData.length - 1]?.balance.toLocaleString() || 0}
+                  </p>
+                </div>
+              </>
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="border-b-2 border-slate-200">
+                      <th className="text-left py-2 px-2 text-slate-600 font-semibold">Age</th>
+                      <th className="text-right py-2 px-2 text-slate-600 font-semibold">Income</th>
+                      <th className="text-right py-2 px-2 text-slate-600 font-semibold">Savings</th>
+                      <th className="text-right py-2 px-2 text-slate-600 font-semibold">Growth</th>
+                      {hasSpecialItems && <th className="text-right py-2 px-2 text-slate-600 font-semibold">Special Items</th>}
+                      <th className="text-right py-2 px-2 text-slate-600 font-semibold">Balance</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {accumulationData.map((row, idx) => {
+                      const tax = row.additionalTax || 0;
+                      const netSpecial = (row.additionalIncome || 0) - tax - (row.cashFlowExpense || 0);
+                      return (
+                        <tr key={row.age} className={`border-b border-slate-100 ${idx % 2 === 0 ? 'bg-white' : 'bg-slate-50/50'}`}>
+                          <td className="py-1.5 px-2 font-medium text-slate-700">{row.age}</td>
+                          <td className="py-1.5 px-2 text-right text-slate-600">${(row.income || 0).toLocaleString()}</td>
+                          <td className="py-1.5 px-2 text-right text-mwm-green/80">{row.savings > 0 ? `$${row.savings.toLocaleString()}` : '-'}</td>
+                          <td className="py-1.5 px-2 text-right text-blue-600">{row.growth !== 0 ? `$${row.growth.toLocaleString()}` : '-'}</td>
+                          {hasSpecialItems && (
+                            <td className={`py-1.5 px-2 text-right ${netSpecial > 0 ? 'text-purple-600' : netSpecial < 0 ? 'text-orange-600' : 'text-slate-400'}`}>
+                              {netSpecial !== 0 ? (
+                                <span title={tax > 0 ? `Gross: $${(row.additionalIncome || 0).toLocaleString()}, Tax: $${tax.toLocaleString()}` : ''}>
+                                  {netSpecial > 0 ? '+' : ''}{netSpecial < 0 ? `($${Math.abs(netSpecial).toLocaleString()})` : `$${netSpecial.toLocaleString()}`}
+                                  {tax > 0 && <span className="text-red-500 text-xs ml-0.5">*</span>}
+                                </span>
+                              ) : '-'}
+                            </td>
+                          )}
+                          <td className="py-1.5 px-2 text-right font-bold text-slate-800">${row.balance.toLocaleString()}</td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+                <div className="mt-4 text-center">
+                  <p className="text-sm text-slate-500">Projected Portfolio at Retirement</p>
+                  <p className="text-3xl font-bold text-mwm-green/80">
+                    ${accumulationData[accumulationData.length - 1]?.balance.toLocaleString() || 0}
+                  </p>
+                </div>
+              </div>
+            )}
           </div>
 
           {/* ===== PROCEED BUTTON ===== */}

@@ -3,7 +3,7 @@ import {
   Search, Trash2, UserCheck, Users, FileText, Calendar, Mail, Phone,
   ChevronDown, ChevronUp, Filter, RefreshCw, AlertCircle, Loader,
   DollarSign, TrendingUp, UserPlus, X, Check,
-  Link2, UserX, Send, Copy, CheckCircle
+  Link2, UserX, Send, Copy, CheckCircle, FilePlus
 } from 'lucide-react';
 
 import { COLORS } from '../../constants';
@@ -17,6 +17,7 @@ export const PlanManagement = ({
   currentUser,
   savedScenarios,
   isLoadingScenarios,
+  onNewPlan,
   onLoadScenario,
   onDeleteScenario,
   onReassignScenario,
@@ -329,6 +330,12 @@ Your Financial Advisor`;
       {/* Page Actions */}
       <div className="max-w-7xl mx-auto mb-4 sm:mb-6 md:mb-8">
         <div className="flex flex-wrap items-center justify-end gap-1.5 sm:gap-2">
+          <button
+            onClick={onNewPlan}
+            className="flex items-center gap-1 sm:gap-2 px-2 sm:px-4 py-1.5 sm:py-2 bg-mwm-green/80 hover:bg-mwm-emerald text-white rounded-lg transition-all text-xs sm:text-sm"
+          >
+            <FilePlus className="w-3 h-3 sm:w-4 sm:h-4" /> New Plan
+          </button>
           {userRole === 'master' && (
             <button
               onClick={() => setShowManageAdvisors(!showManageAdvisors)}
