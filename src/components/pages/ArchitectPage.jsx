@@ -714,18 +714,18 @@ export const ArchitectPage = ({
         return (
           <div className="hidden print:block break-after-page p-12 bg-white" style={{ minHeight: '10in' }}>
             <h2 className="text-3xl font-bold text-slate-900 mb-2">Table of Contents</h2>
-            <div className="w-20 h-1 bg-mwm-green mb-10"></div>
+            <div className="w-20 h-1 bg-mwm-green mb-6"></div>
             {tocItems.map((item, idx) => (
-              <div key={idx} className="flex items-baseline border-b border-slate-100 py-4">
-                <span className="w-10 text-mwm-green font-bold text-lg">{idx + 1}.</span>
+              <div key={idx} className="flex items-baseline border-b border-slate-100 py-2.5">
+                <span className="w-8 text-mwm-green font-bold text-base">{idx + 1}.</span>
                 <div>
-                  <span className="font-semibold text-slate-800 text-lg">{item.title}</span>
+                  <span className="font-semibold text-slate-800 text-base">{item.title}</span>
                   <br />
-                  <span className="text-sm text-slate-400">{item.desc}</span>
+                  <span className="text-xs text-slate-400">{item.desc}</span>
                 </div>
               </div>
             ))}
-            <div className="mt-16 text-xs text-slate-400 text-center">
+            <div className="mt-10 text-xs text-slate-400 text-center">
               <p>This illustration is for informational purposes only and does not constitute investment advice.</p>
             </div>
           </div>
