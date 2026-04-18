@@ -525,31 +525,88 @@ export const ArchitectPage = ({
     for (const acct of ACCT_TYPES) { matrix[acct] = {}; for (const bk of BK_KEYS) matrix[acct][bk] = 0; }
     const bucketRem = { ...bucketTargets };
     const acctRem = { ...accountBalances };
-    let fillOrder;
+    // Fill bucket allocation matrix based on liquidation strategy
+    // Buckets should reflect where distributions actually come from:
+    // spending buckets (B1, B2) filled with the account types that withdrawals target first
     const liqStrats = inputs.liquidationStrategies;
-    if (liqStrats && liqStrats.length > 0) {
-      const earlyStrategy = liqStrats.reduce((a, b) => a.startYear < b.startYear ? a : b);
-      const priority = earlyStrategy.priority || ['nq', 'traditional', 'roth'];
-      fillOrder = [
+    const hasLiqStrategy = inputs.liquidationMode === 'priority' && liqStrats && liqStrats.length > 0;
+    const earlyStrategy = hasLiqStrategy
+      ? liqStrats.reduce((a, b) => a.startYear < b.startYear ? a : b)
+      : null;
+
+    if (earlyStrategy && earlyStrategy.split) {
+      // Split-based strategy: fill each bucket proportionally by the split percentages
+      const sp = earlyStrategy.split;
+      const totalPct = (sp.traditional || 0) + (sp.roth || 0) + (sp.nq || 0);
+      if (totalPct > 0) {
+        for (const bk of BK_KEYS) {
+          const bkSize = bucketRem[bk] || 0;
+          for (const acct of ACCT_TYPES) {
+            const pct = (sp[acct] || 0) / totalPct;
+            const desired = bkSize * pct;
+            const fill = Math.min(desired, acctRem[acct] || 0, bucketRem[bk] || 0);
+            matrix[acct][bk] = fill;
+            acctRem[acct] -= fill;
+            bucketRem[bk] -= fill;
+          }
+        }
+        // Distribute any remaining account balances to unfilled buckets
+        for (const acct of ACCT_TYPES) {
+          if (acctRem[acct] <= 0) continue;
+          for (const bk of BK_KEYS) {
+            if (acctRem[acct] <= 0 || bucketRem[bk] <= 0) continue;
+            const fill = Math.min(acctRem[acct], bucketRem[bk]);
+            matrix[acct][bk] += fill;
+            acctRem[acct] -= fill;
+            bucketRem[bk] -= fill;
+          }
+        }
+      }
+    } else if (earlyStrategy && earlyStrategy.priority) {
+      // Priority-based: first-priority account fills spending buckets (B1→B2→B3),
+      // last-priority fills growth buckets (B5→B4)
+      const priority = earlyStrategy.priority;
+      const fillOrder = [
         { acct: priority[0], buckets: ['b1', 'b2', 'b3', 'b4', 'b5'] },
-        { acct: priority[1], buckets: ['b3', 'b2', 'b4', 'b1', 'b5'] },
+        { acct: priority[1], buckets: ['b2', 'b3', 'b4', 'b1', 'b5'] },
         { acct: priority[2], buckets: ['b5', 'b4', 'b3', 'b2', 'b1'] },
       ];
+      for (const { acct, buckets } of fillOrder) {
+        if ((acctRem[acct] || 0) <= 0) continue;
+        for (const bk of buckets) {
+          if (acctRem[acct] <= 0 || bucketRem[bk] <= 0) continue;
+          const fill = Math.min(acctRem[acct], bucketRem[bk]);
+          matrix[acct][bk] = fill;
+          acctRem[acct] -= fill;
+          bucketRem[bk] -= fill;
+        }
+      }
     } else {
-      fillOrder = [
-        { acct: 'nq', buckets: ['b1', 'b2', 'b3', 'b4', 'b5'] },
-        { acct: 'traditional', buckets: ['b3', 'b4', 'b2', 'b5', 'b1'] },
-        { acct: 'roth', buckets: ['b5', 'b4', 'b3', 'b2', 'b1'] },
-      ];
-    }
-    for (const { acct, buckets } of fillOrder) {
-      if ((acctRem[acct] || 0) <= 0) continue;
-      for (const bk of buckets) {
-        if (acctRem[acct] <= 0 || bucketRem[bk] <= 0) continue;
-        const fill = Math.min(acctRem[acct], bucketRem[bk]);
-        matrix[acct][bk] = fill;
-        acctRem[acct] -= fill;
-        bucketRem[bk] -= fill;
+      // Default (proportionate): fill each bucket matching the global account split
+      const tradPct = (inputs.traditionalPercent ?? 60) / 100;
+      const rothPct = (inputs.rothPercent ?? 25) / 100;
+      const nqPct = (inputs.nqPercent ?? 15) / 100;
+      const pcts = { traditional: tradPct, roth: rothPct, nq: nqPct };
+      for (const bk of BK_KEYS) {
+        const bkSize = bucketRem[bk] || 0;
+        for (const acct of ACCT_TYPES) {
+          const desired = bkSize * (pcts[acct] || 0);
+          const fill = Math.min(desired, acctRem[acct] || 0, bucketRem[bk] || 0);
+          matrix[acct][bk] = fill;
+          acctRem[acct] -= fill;
+          bucketRem[bk] -= fill;
+        }
+      }
+      // Distribute any remaining
+      for (const acct of ACCT_TYPES) {
+        if (acctRem[acct] <= 0) continue;
+        for (const bk of BK_KEYS) {
+          if (acctRem[acct] <= 0 || bucketRem[bk] <= 0) continue;
+          const fill = Math.min(acctRem[acct], bucketRem[bk]);
+          matrix[acct][bk] += fill;
+          acctRem[acct] -= fill;
+          bucketRem[bk] -= fill;
+        }
       }
     }
 

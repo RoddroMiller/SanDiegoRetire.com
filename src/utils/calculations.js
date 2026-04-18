@@ -1441,19 +1441,19 @@ export const calculateBasePlan = (inputs, assumptions, clientInfo, vaEnabled = f
 export const runSimulation = (basePlan, assumptions, inputs, rebalanceFreq, isMonteCarlo = false, vaInputs = null, rebalanceTargets = null) => {
   const { b1Val, b2Val, b3Val, b4Val, b5Val, getAnnualGap, getTaxAwareGap, getAnnualDetails, simulationStartAge, clientInfo } = basePlan;
 
-  // Run until the later-dying spouse's expected death age, capped at 40 years
+  // Run until the later-dying spouse's expected death age (inclusive), capped at 40 years
   const startAge = simulationStartAge || 65;
   const clientDeathAge = inputs.expectedDeathAge || 95;
-  const yearsToClientDeath = clientDeathAge - startAge;
-  let yearsToLastDeath = yearsToClientDeath;
+  let lastDeathClientAge = clientDeathAge;
   if (clientInfo?.isMarried) {
     const partnerDeathAge = inputs.partnerExpectedDeathAge || 95;
-    // Convert partner's death age to years from simulation start (client's timeline)
+    // Convert partner's death age to client's age at that point
     const ageDiff = (clientInfo.currentAge || 0) - (clientInfo.partnerAge || 0);
     const partnerDeathInClientAge = partnerDeathAge + ageDiff;
-    yearsToLastDeath = Math.max(yearsToClientDeath, partnerDeathInClientAge - startAge);
+    lastDeathClientAge = Math.max(clientDeathAge, partnerDeathInClientAge);
   }
-  const years = Math.min(40, Math.max(1, yearsToLastDeath));
+  // +1 so the death year itself is included in the projection
+  const years = Math.min(40, Math.max(1, lastDeathClientAge - startAge + 1));
   let results = [];
   let failureCount = 0;
   const iterations = isMonteCarlo ? 1000 : 1;
