@@ -118,6 +118,9 @@ export const ArchitectPage = ({
   // Compute legacy balance and final projection age
   const lastProjectionEntry = useMemo(() => projectionData[projectionData.length - 1], [projectionData]);
   const finalProjectionAge = lastProjectionEntry?.age || 95;
+  const retirementAge = clientInfo.retirementAge || 65;
+  const projectionYears = finalProjectionAge - retirementAge;
+  const legacyLabel = `Year ${projectionYears} (Retirement + ${projectionYears})`;
   const legacyAt95 = useMemo(() => {
     if (monteCarloData?.medianLegacy != null) return monteCarloData.medianLegacy;
     const entry = projectionData.find(p => p.age >= 95) || lastProjectionEntry;
@@ -699,17 +702,18 @@ export const ArchitectPage = ({
       {/* PRINT PAGE: Table of Contents */}
       {(() => {
         const tocItems = [
+          { title: 'Important Disclosures', desc: 'Assumptions, methodology, and limitations' },
           !printOptions?.excludeAccumulation && { title: 'Phase 1 — Accumulation', desc: 'Building your retirement portfolio' },
+          { title: 'Retirement Income & Planning Assumptions', desc: 'Income sources, spending adjustments, and longevity planning' },
           { title: 'Bucket Architecture', desc: 'Time-segmented allocation strategy' },
+          { title: 'Social Security Optimization', desc: 'Optimal claiming strategy analysis' },
           { title: 'Phase 2 — Distribution Strategy', desc: 'Bucket-based withdrawal sequence' },
           { title: 'Portfolio Sustainability', desc: printOptions?.mode === 'montecarlo' ? 'Monte Carlo simulation with probability analysis' : 'Projected portfolio balance and cash flow' },
           { title: 'Detailed Cash Flows', desc: 'Year-by-year income, expenses, and portfolio detail' },
-          { title: 'Social Security Optimization', desc: 'Optimal claiming strategy analysis' },
           printOptions?.mode !== 'montecarlo' && { title: 'Monte Carlo Simulation', desc: 'Probability analysis based on 1,000 market scenarios' },
           !printOptions?.excludeStrategyComparison && { title: 'Strategy Comparison', desc: 'Alternative allocation strategies analyzed' },
           hasTaxStrategyPage && { title: 'Tax Strategy Analysis', desc: 'Roth conversion schedule and liquidation strategy' },
           hasExecSummaryPage && { title: 'Executive Summary', desc: 'Plan overview, SS optimization value, and net legacy comparison' },
-          { title: 'Important Disclosures', desc: 'Assumptions, methodology, and limitations' },
         ].filter(Boolean);
         return (
           <div className="hidden print:block break-after-page p-12 bg-white" style={{ minHeight: '10in' }}>
@@ -731,6 +735,56 @@ export const ArchitectPage = ({
           </div>
         );
       })()}
+
+      {/* PRINT PAGE: Important Disclosures (immediately after TOC) */}
+      <PrintPageWrapper pageNumber={2} totalPages={totalPrintPages} title="Important Disclosures" subtitle="Assumptions, methodology, and limitations">
+        <div className="space-y-2 text-[12px] text-slate-600">
+          <div className="border border-slate-200 rounded-lg p-2">
+            <h3 className="font-bold text-[12px] text-slate-800 mb-1">Return & Interest Rate Assumptions</h3>
+            <div className="grid grid-cols-2 gap-2">
+              <div>
+                <p className="mb-0.5">Projected returns based on historical averages and forward-looking estimates:</p>
+                <ul className="list-disc list-inside ml-1">
+                  <li>B1 (Liquidity): {assumptions.b1.return}% return, {assumptions.b1.stdDev}% std dev</li>
+                  <li>B2 (Bridge): {assumptions.b2.return}% return, {assumptions.b2.stdDev}% std dev</li>
+                  <li>B3 (Tactical Balanced): {assumptions.b3.return}% return, {assumptions.b3.stdDev}% std dev</li>
+                  <li>B4 (Income & Growth): {assumptions.b4.return}% return, {assumptions.b4.stdDev}% std dev</li>
+                  <li>B5 (Permanent Equity): {assumptions.b5.return}% return, {assumptions.b5.stdDev}% std dev</li>
+                </ul>
+              </div>
+              <div>
+                <p className="mb-0.5">These assumptions are estimates and actual results may vary significantly. Past performance does not guarantee future results.</p>
+                <p className="mb-0.5"><strong>Inflation:</strong> {inputs.inflationRate}% annual rate for SS COLA and expense projections.</p>
+                <p><strong>Personal Inflation:</strong> {inputs.personalInflationRate}% applied to retirement spending projections.</p>
+              </div>
+            </div>
+          </div>
+          <div className="border border-slate-200 rounded-lg p-2">
+            <h3 className="font-bold text-[12px] text-slate-800 mb-1">Monte Carlo Simulation Methodology</h3>
+            <div className="grid grid-cols-2 gap-2">
+              <div>
+                <p className="mb-0.5">Success rates calculated using Monte Carlo simulation: 1,000 independent iterations with random returns using normal distribution, correlated based on historical relationships, with annual rebalancing over a 30-year projection horizon.</p>
+              </div>
+              <div>
+                <p className="mb-0.5"><strong>Success Definition:</strong> Portfolio maintains positive balance throughout the projection period.</p>
+                <p><strong>Limitations:</strong> Simulations cannot predict actual future returns. They provide a range of possible outcomes based on historical patterns and may not account for extreme market events or changes in tax law.</p>
+              </div>
+            </div>
+          </div>
+          <div className="border border-slate-200 rounded-lg p-2">
+            <h3 className="font-bold text-[12px] text-slate-800 mb-1">Social Security & Income Assumptions</h3>
+            <p>Social Security benefits adjusted based on claiming age: Before FRA (67): reduced ~6.67%/year. After FRA: increased 8%/year up to age 70. Annual COLA applied based on assumed inflation rate. Pension income assumes continued payment per stated terms with COLA only if indicated.</p>
+          </div>
+          <div className="border border-slate-200 rounded-lg p-2">
+            <h3 className="font-bold text-[12px] text-slate-800 mb-1">General Disclaimers</h3>
+            <p className="mb-0.5">This analysis is for educational and illustrative purposes only and should not be construed as personalized investment advice. Projections are hypothetical and do not represent actual investment results. Investment involves risk, including possible loss of principal. No guarantee any strategy will achieve its objectives. Diversification does not ensure profit or protect against loss. Tax considerations are important but not fully addressed here - consult a qualified tax professional.</p>
+            <p>Report generated {new Date().toLocaleDateString()}. Regular reviews and updates recommended.</p>
+          </div>
+          <div className="bg-slate-100 rounded-lg p-2">
+            <p>Securities offered through LPL Financial, Member FINRA/SIPC. Investment Advice offered through Miller Wealth Management, a Registered Investment Advisor. Miller Wealth Management is a separate entity from LPL Financial. The opinions voiced in this material are for general information only and are not intended to provide specific advice or recommendations for any individual.</p>
+          </div>
+        </div>
+      </PrintPageWrapper>
 
       {/* ACTION BAR */}
       <div className="max-w-7xl mx-auto mb-4 sm:mb-6 md:mb-8 print:hidden no-print">
@@ -785,125 +839,343 @@ export const ArchitectPage = ({
         </div>
       </div>
 
-      {/* PRINT PAGE 2: Phase 1 - Accumulation (excluded when client is retired or user opts out) */}
-      {!printOptions?.excludeAccumulation && <PrintPageWrapper pageNumber={2} totalPages={totalPrintPages} title="Phase 1 - Accumulation" subtitle="Building your retirement portfolio">
-        <div className="border rounded-lg p-3 mb-4">
-          <AreaChart width={670} height={200} data={accumulationData}>
-            <CartesianGrid strokeDasharray="3 3" vertical={false} />
-            <XAxis dataKey="age" tick={{ fontSize: 10 }} />
-            <YAxis tickFormatter={(val) => `$${val / 1000}k`} tick={{ fontSize: 10 }} />
-            <Area type="monotone" dataKey="balance" stroke={COLORS.hedged} fill={COLORS.hedged} fillOpacity={0.2} />
-          </AreaChart>
-        </div>
-        <div className="grid grid-cols-4 gap-3 text-sm mb-4">
-          <div className="bg-slate-50 p-2 rounded-lg">
-            <p className="text-[12px] text-slate-500">Current Age</p>
-            <p className="font-bold text-base">{clientInfo.currentAge}</p>
-          </div>
-          <div className="bg-slate-50 p-2 rounded-lg">
-            <p className="text-[12px] text-slate-500">Retirement Age</p>
-            <p className="font-bold text-base">{clientInfo.retirementAge}</p>
-          </div>
-          <div className="bg-slate-50 p-2 rounded-lg">
-            <p className="text-[12px] text-slate-500">Current Portfolio</p>
-            <p className="font-bold text-base">${clientInfo.currentPortfolio.toLocaleString()}</p>
-          </div>
-          <div className="bg-slate-50 p-2 rounded-lg">
-            <p className="text-[12px] text-slate-500">Annual Savings</p>
-            <p className="font-bold text-base">${clientInfo.annualSavings.toLocaleString()}</p>
-          </div>
-        </div>
+      {/* PRINT PAGE: Phase 1 - Accumulation (excluded when client is retired or user opts out) */}
+      {!printOptions?.excludeAccumulation && <PrintPageWrapper pageNumber={3} totalPages={totalPrintPages} title="Phase 1 - Accumulation" subtitle="Building your retirement portfolio">
+        {(() => {
+          const additionalContribs = (clientInfo.additionalContributions || []).reduce((sum, c) => {
+            if (c.mode === 'percent' && clientInfo.annualIncome > 0) return sum + (c.amount / 100) * clientInfo.annualIncome;
+            return sum + (c.amount || 0);
+          }, 0);
+          const totalAnnualSavings = clientInfo.annualSavings + additionalContribs;
+          const hasAccounts = inputs.accounts && inputs.accounts.length > 0;
+          const hasPartner = clientInfo.isMarried && clientInfo.partnerName;
+          const hasAdditionalContribs = additionalContribs > 0;
+          const hasPrintSpecial = accumulationData.some(r => (r.additionalIncome || 0) !== 0 || (r.cashFlowExpense || 0) !== 0);
 
-        {/* Cash Flow Table for Accumulation Phase */}
-        <div className="border border-slate-200 rounded-lg p-3 mb-4">
-          <h3 className="font-bold text-base text-slate-800 mb-2">Accumulation Cash Flow</h3>
-          {(() => { const hasPrintSpecial = accumulationData.some(r => (r.additionalIncome || 0) !== 0 || (r.cashFlowExpense || 0) !== 0); return (
-          <table className="w-full text-[12px]">
-            <thead>
-              <tr className="bg-slate-100">
-                <th className="px-1 py-0.5 text-left">Age</th>
-                <th className="px-1 py-0.5 text-right">Income</th>
-                <th className="px-1 py-0.5 text-right text-mwm-green">Savings</th>
-                <th className="px-1 py-0.5 text-right text-blue-600">Growth</th>
-                {hasPrintSpecial && <th className="px-1 py-0.5 text-right text-orange-600">Special Items</th>}
-                <th className="px-1 py-0.5 text-right font-bold">Balance</th>
-              </tr>
-            </thead>
-            <tbody>
-              {(() => {
-                const MAX_ROWS = 10;
-                const total = accumulationData.length;
-                // Build list of indices to display
-                let displayIndices;
-                if (total <= MAX_ROWS) {
-                  displayIndices = accumulationData.map((_, i) => i);
-                } else {
-                  const indexSet = new Set();
-                  // First 3
-                  for (let i = 0; i < 3 && i < total; i++) indexSet.add(i);
-                  // Last 3
-                  for (let i = Math.max(0, total - 3); i < total; i++) indexSet.add(i);
-                  // One-time event years during accumulation
-                  const retAge = clientInfo.retirementAge;
-                  (inputs.additionalIncomes || []).forEach(income => {
-                    if (income.isOneTime && income.startAge < retAge) {
-                      const idx = accumulationData.findIndex(r => r.age === income.startAge);
-                      if (idx >= 0) indexSet.add(idx);
-                    }
-                  });
-                  // Fill remaining slots with evenly spaced years
-                  const remaining = MAX_ROWS - indexSet.size;
-                  if (remaining > 0) {
-                    const candidates = [];
-                    for (let i = 0; i < total; i++) {
-                      if (!indexSet.has(i)) candidates.push(i);
-                    }
-                    const step = candidates.length / (remaining + 1);
-                    for (let j = 1; j <= remaining; j++) {
-                      indexSet.add(candidates[Math.round(step * j - 1)] ?? candidates[candidates.length - 1]);
-                    }
-                  }
-                  displayIndices = [...indexSet].sort((a, b) => a - b).slice(0, MAX_ROWS);
-                }
-                // Render rows with ellipsis separators for gaps
-                const rows = [];
-                displayIndices.forEach((idx, pos) => {
-                  if (pos > 0 && idx > displayIndices[pos - 1] + 1) {
-                    rows.push(
-                      <tr key={`gap-${idx}`}><td colSpan={hasPrintSpecial ? 6 : 5} className="py-0 leading-none text-center text-slate-300 text-[8px]">⋮</td></tr>
-                    );
-                  }
-                  const row = accumulationData[idx];
+          return (
+          <>
+          {/* Client Overview */}
+          <div className="grid grid-cols-2 gap-4 mb-4">
+            <div className="border border-slate-200 rounded-lg p-3">
+              <h3 className="font-bold text-[13px] text-slate-800 mb-2 border-b pb-1">Client Profile</h3>
+              <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-[12px]">
+                <div className="flex justify-between"><span className="text-slate-500">{clientInfo.name?.split(' ')[0] || 'Client'} Age:</span><span className="font-medium">{clientInfo.currentAge}</span></div>
+                <div className="flex justify-between"><span className="text-slate-500">Retirement Age:</span><span className="font-medium">{clientInfo.retirementAge}</span></div>
+                {hasPartner && <>
+                  <div className="flex justify-between"><span className="text-slate-500">{clientInfo.partnerName?.split(' ')[0]} Age:</span><span className="font-medium">{clientInfo.partnerAge}</span></div>
+                  <div className="flex justify-between"><span className="text-slate-500">Partner Ret. Age:</span><span className="font-medium">{clientInfo.partnerRetirementAge}</span></div>
+                </>}
+                <div className="flex justify-between"><span className="text-slate-500">Years to Retirement:</span><span className="font-medium">{Math.max(0, clientInfo.retirementAge - clientInfo.currentAge)}</span></div>
+                <div className="flex justify-between"><span className="text-slate-500">Expected Return:</span><span className="font-medium">{clientInfo.expectedReturn}%</span></div>
+              </div>
+            </div>
+            <div className="border border-slate-200 rounded-lg p-3">
+              <h3 className="font-bold text-[13px] text-slate-800 mb-2 border-b pb-1">Financial Summary</h3>
+              <div className="grid grid-cols-1 gap-y-1 text-[12px]">
+                <div className="flex justify-between"><span className="text-slate-500">Current Portfolio:</span><span className="font-bold">${clientInfo.currentPortfolio.toLocaleString()}</span></div>
+                {clientInfo.annualIncome > 0 && <div className="flex justify-between"><span className="text-slate-500">Household Income:</span><span className="font-medium">${((clientInfo.annualIncome || 0) + (clientInfo.partnerAnnualIncome || 0)).toLocaleString()}</span></div>}
+                <div className="flex justify-between"><span className="text-slate-500">Annual Savings:</span><span className="font-medium">${clientInfo.annualSavings.toLocaleString()}</span></div>
+                {hasAdditionalContribs && <div className="flex justify-between"><span className="text-slate-500">Employer/Additional:</span><span className="font-medium text-mwm-green">+${Math.round(additionalContribs).toLocaleString()}</span></div>}
+                {hasAdditionalContribs && <div className="flex justify-between border-t border-slate-200 pt-1"><span className="text-slate-500 font-semibold">Total Annual Savings:</span><span className="font-bold">${Math.round(totalAnnualSavings).toLocaleString()}</span></div>}
+                {clientInfo.currentSpending > 0 && <div className="flex justify-between"><span className="text-slate-500">Monthly Spending:</span><span className="font-medium">${clientInfo.currentSpending.toLocaleString()}</span></div>}
+              </div>
+            </div>
+          </div>
+
+          {/* Account Details (if per-account mode) */}
+          {hasAccounts && (
+            <div className="border border-slate-200 rounded-lg p-3 mb-4">
+              <h3 className="font-bold text-[13px] text-slate-800 mb-2">Account Details</h3>
+              <table className="w-full text-[11px]">
+                <thead>
+                  <tr className="bg-slate-100">
+                    <th className="px-2 py-1 text-left">Account</th>
+                    <th className="px-2 py-1 text-left">Owner</th>
+                    <th className="px-2 py-1 text-left">Type</th>
+                    <th className="px-2 py-1 text-right">Balance</th>
+                    <th className="px-2 py-1 text-right">Ann. Contribution</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {inputs.accounts.map((acct, i) => (
+                    <tr key={acct.id} className={i % 2 === 0 ? 'bg-white' : 'bg-slate-50'}>
+                      <td className="px-2 py-0.5 font-medium">{acct.label || 'Account'}</td>
+                      <td className="px-2 py-0.5 text-slate-600">{acct.owner === 'partner' ? (clientInfo.partnerName?.split(' ')[0] || 'Partner') : (clientInfo.name?.split(' ')[0] || 'Client')}</td>
+                      <td className="px-2 py-0.5 text-slate-600">{acct.type === 'traditional' ? 'Tax-Deferred' : acct.type === 'roth' ? 'Roth' : 'Non-Qualified'}</td>
+                      <td className="px-2 py-0.5 text-right">${(acct.balance || 0).toLocaleString()}</td>
+                      <td className="px-2 py-0.5 text-right text-mwm-green">{acct.annualContribution > 0 ? `$${acct.annualContribution.toLocaleString()}` : '-'}</td>
+                    </tr>
+                  ))}
+                  <tr className="border-t-2 border-slate-300 font-bold">
+                    <td className="px-2 py-1" colSpan={3}>Total</td>
+                    <td className="px-2 py-1 text-right">${inputs.accounts.reduce((s, a) => s + (a.balance || 0), 0).toLocaleString()}</td>
+                    <td className="px-2 py-1 text-right text-mwm-green">${inputs.accounts.reduce((s, a) => s + (a.annualContribution || 0), 0).toLocaleString()}</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          )}
+
+          {/* Accumulation Cash Flow Table */}
+          <div className="border border-slate-200 rounded-lg p-3 mb-4">
+            <h3 className="font-bold text-[13px] text-slate-800 mb-2">Accumulation Cash Flow</h3>
+            <table className="w-full text-[11px]">
+              <thead>
+                <tr className="bg-slate-100">
+                  <th className="px-1.5 py-1 text-left">Age</th>
+                  <th className="px-1.5 py-1 text-right">Income</th>
+                  <th className="px-1.5 py-1 text-right text-mwm-green">Savings</th>
+                  <th className="px-1.5 py-1 text-right text-blue-600">Growth</th>
+                  {hasPrintSpecial && <th className="px-1.5 py-1 text-right text-orange-600">Special Items</th>}
+                  <th className="px-1.5 py-1 text-right font-bold">Balance</th>
+                </tr>
+              </thead>
+              <tbody>
+                {accumulationData.map((row, idx) => {
                   const tax = row.additionalTax || 0;
                   const netSpecial = (row.additionalIncome || 0) - tax - (row.cashFlowExpense || 0);
-                  rows.push(
-                    <tr key={idx} className={pos % 2 === 0 ? 'bg-white' : 'bg-slate-50'}>
-                      <td className="px-1 py-0.5">{row.age}</td>
-                      <td className="px-1 py-0.5 text-right">${(row.income || 0).toLocaleString()}</td>
-                      <td className="px-1 py-0.5 text-right text-mwm-green">{row.savings > 0 ? `+$${row.savings.toLocaleString()}` : '-'}</td>
-                      <td className="px-1 py-0.5 text-right text-blue-600">{row.growth > 0 ? `+$${row.growth.toLocaleString()}` : '-'}</td>
-                      {hasPrintSpecial && <td className={`px-1 py-0.5 text-right ${netSpecial < 0 ? 'text-orange-600' : netSpecial > 0 ? 'text-purple-600' : ''}`}>{netSpecial !== 0 ? (netSpecial < 0 ? `($${Math.abs(netSpecial).toLocaleString()})` : `+$${netSpecial.toLocaleString()}`) : '-'}</td>}
-                      <td className="px-1 py-0.5 text-right font-bold">${row.balance.toLocaleString()}</td>
+                  return (
+                    <tr key={row.age} className={idx % 2 === 0 ? 'bg-white' : 'bg-slate-50'}>
+                      <td className="px-1.5 py-0.5">{row.age}</td>
+                      <td className="px-1.5 py-0.5 text-right">${(row.income || 0).toLocaleString()}</td>
+                      <td className="px-1.5 py-0.5 text-right text-mwm-green">{row.savings > 0 ? `$${row.savings.toLocaleString()}` : '-'}</td>
+                      <td className="px-1.5 py-0.5 text-right text-blue-600">{row.growth > 0 ? `$${row.growth.toLocaleString()}` : '-'}</td>
+                      {hasPrintSpecial && <td className={`px-1.5 py-0.5 text-right ${netSpecial < 0 ? 'text-orange-600' : netSpecial > 0 ? 'text-purple-600' : ''}`}>{netSpecial !== 0 ? (netSpecial < 0 ? `($${Math.abs(netSpecial).toLocaleString()})` : `+$${netSpecial.toLocaleString()}`) : '-'}</td>}
+                      <td className="px-1.5 py-0.5 text-right font-bold">${row.balance.toLocaleString()}</td>
                     </tr>
                   );
-                });
-                return rows;
-              })()}
-            </tbody>
-          </table>
-          ); })()}
-        </div>
-
-        <div className="bg-mwm-green/10 p-3 rounded-lg border border-mwm-green/30">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-mwm-emerald font-bold text-[13px]">Projected Portfolio at Retirement (Age {clientInfo.retirementAge})</p>
-              <p className="text-xs text-mwm-green">Based on {clientInfo.expectedReturn}% expected return</p>
-            </div>
-            <p className="text-2xl font-bold text-mwm-green/80">${inputs.totalPortfolio.toLocaleString()}</p>
+                })}
+              </tbody>
+            </table>
           </div>
-        </div>
+
+          {/* Projected Portfolio at Retirement */}
+          <div className="bg-mwm-green/10 p-3 rounded-lg border border-mwm-green/30">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-mwm-emerald font-bold text-[13px]">Projected Portfolio at Retirement (Age {clientInfo.retirementAge})</p>
+                <p className="text-xs text-mwm-green">Based on {clientInfo.expectedReturn}% expected return, {inputs.inflationRate}% inflation adjustment on savings</p>
+              </div>
+              <p className="text-2xl font-bold text-mwm-green/80">${inputs.totalPortfolio.toLocaleString()}</p>
+            </div>
+          </div>
+          </>
+          );
+        })()}
       </PrintPageWrapper>}
+
+      {/* PRINT PAGE: Retirement Income & Planning Assumptions */}
+      <PrintPageWrapper pageNumber={printOptions?.excludeAccumulation ? 3 : 4} totalPages={totalPrintPages} title="Retirement Income & Planning Assumptions" subtitle="Income sources, spending adjustments, and longevity planning">
+        {(() => {
+          const fmtAge = (age) => `Age ${age}`;
+          const clientFirst = (clientInfo.name || 'Client').split(' ')[0];
+          const partnerFirst = (clientInfo.partnerName || 'Partner').split(' ')[0];
+          const hasPartner = clientInfo.isMarried;
+          const hasClientPension = (inputs.monthlyPension || 0) > 0;
+          const hasPartnerPension = hasPartner && (inputs.partnerMonthlyPension || 0) > 0;
+          const hasAdditionalIncomes = (inputs.additionalIncomes || []).length > 0;
+          const recurringIncomes = (inputs.additionalIncomes || []).filter(i => !i.isOneTime);
+          const oneTimeIncomes = (inputs.additionalIncomes || []).filter(i => i.isOneTime);
+          const hasCashFlowAdj = (inputs.cashFlowAdjustments || []).length > 0;
+
+          return (
+          <div className="space-y-4">
+            {/* Retirement Spending */}
+            <div className="grid grid-cols-2 gap-4">
+              <div className="border border-slate-200 rounded-lg p-3">
+                <h3 className="font-bold text-[13px] text-slate-800 mb-2 border-b pb-1">Retirement Spending</h3>
+                <div className="space-y-1 text-[12px]">
+                  <div className="flex justify-between"><span className="text-slate-500">Monthly Income Need:</span><span className="font-bold">${(inputs.monthlySpending || 0).toLocaleString()}/mo</span></div>
+                  <div className="flex justify-between"><span className="text-slate-500">Annual Spending:</span><span className="font-medium">${((inputs.monthlySpending || 0) * 12).toLocaleString()}</span></div>
+                  <div className="flex justify-between"><span className="text-slate-500">Spending Inflation:</span><span className="font-medium">{inputs.personalInflationRate}% annually</span></div>
+                  {hasPartner && <div className="flex justify-between"><span className="text-slate-500">Reduction at First Death:</span><span className="font-medium">{inputs.spendingReductionAtFirstDeath}%</span></div>}
+                </div>
+              </div>
+              <div className="border border-slate-200 rounded-lg p-3">
+                <h3 className="font-bold text-[13px] text-slate-800 mb-2 border-b pb-1">Longevity & Inflation</h3>
+                <div className="space-y-1 text-[12px]">
+                  <div className="flex justify-between"><span className="text-slate-500">{clientFirst} Life Expectancy:</span><span className="font-medium">{fmtAge(inputs.expectedDeathAge || 95)}</span></div>
+                  {hasPartner && <div className="flex justify-between"><span className="text-slate-500">{partnerFirst} Life Expectancy:</span><span className="font-medium">{fmtAge(inputs.partnerExpectedDeathAge || 95)}</span></div>}
+                  <div className="flex justify-between"><span className="text-slate-500">Income/COLA Inflation:</span><span className="font-medium">{inputs.inflationRate}%</span></div>
+                  <div className="flex justify-between"><span className="text-slate-500">Advisory Fee:</span><span className="font-medium">{inputs.advisoryFee}% annually</span></div>
+                  {inputs.taxEnabled && <div className="flex justify-between"><span className="text-slate-500">Filing Status:</span><span className="font-medium">{inputs.filingStatus === 'married' ? 'Married Filing Jointly' : 'Single'}</span></div>}
+                </div>
+              </div>
+            </div>
+
+            {/* Social Security */}
+            <div className="border border-slate-200 rounded-lg p-3">
+              <h3 className="font-bold text-[13px] text-slate-800 mb-2 border-b pb-1">Social Security Benefits</h3>
+              <table className="w-full text-[12px]">
+                <thead>
+                  <tr className="bg-slate-50">
+                    <th className="px-2 py-1 text-left text-slate-600">Beneficiary</th>
+                    <th className="px-2 py-1 text-right text-slate-600">Monthly PIA</th>
+                    <th className="px-2 py-1 text-right text-slate-600">Annual (at PIA)</th>
+                    <th className="px-2 py-1 text-center text-slate-600">Claiming Age</th>
+                    <th className="px-2 py-1 text-left text-slate-600">Status</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr>
+                    <td className="px-2 py-1 font-medium">{clientFirst}</td>
+                    <td className="px-2 py-1 text-right">${(inputs.ssPIA || 0).toLocaleString()}</td>
+                    <td className="px-2 py-1 text-right">${((inputs.ssPIA || 0) * 12).toLocaleString()}</td>
+                    <td className="px-2 py-1 text-center">{inputs.ssStartAge}</td>
+                    <td className="px-2 py-1 text-slate-500">{inputs.ssCurrentlyReceiving ? 'Currently receiving' : `Begins ${fmtAge(inputs.ssStartAge)}`}</td>
+                  </tr>
+                  {hasPartner && (
+                    <tr className="bg-slate-50">
+                      <td className="px-2 py-1 font-medium">{partnerFirst}</td>
+                      <td className="px-2 py-1 text-right">${(inputs.partnerSSPIA || 0).toLocaleString()}</td>
+                      <td className="px-2 py-1 text-right">${((inputs.partnerSSPIA || 0) * 12).toLocaleString()}</td>
+                      <td className="px-2 py-1 text-center">{inputs.partnerSSStartAge}</td>
+                      <td className="px-2 py-1 text-slate-500">{inputs.partnerSSCurrentlyReceiving ? 'Currently receiving' : `Begins ${fmtAge(inputs.partnerSSStartAge)}`}</td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
+
+            {/* Pension Income */}
+            {(hasClientPension || hasPartnerPension) && (
+              <div className="border border-slate-200 rounded-lg p-3">
+                <h3 className="font-bold text-[13px] text-slate-800 mb-2 border-b pb-1">Pension Income</h3>
+                <table className="w-full text-[12px]">
+                  <thead>
+                    <tr className="bg-slate-50">
+                      <th className="px-2 py-1 text-left text-slate-600">Recipient</th>
+                      <th className="px-2 py-1 text-right text-slate-600">Monthly</th>
+                      <th className="px-2 py-1 text-right text-slate-600">Annual</th>
+                      <th className="px-2 py-1 text-center text-slate-600">Start Age</th>
+                      <th className="px-2 py-1 text-center text-slate-600">COLA</th>
+                      <th className="px-2 py-1 text-center text-slate-600">Survivor %</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {hasClientPension && (
+                      <tr>
+                        <td className="px-2 py-1 font-medium">{clientFirst}</td>
+                        <td className="px-2 py-1 text-right">${inputs.monthlyPension.toLocaleString()}</td>
+                        <td className="px-2 py-1 text-right">${(inputs.monthlyPension * 12).toLocaleString()}</td>
+                        <td className="px-2 py-1 text-center">{inputs.pensionStartAge}</td>
+                        <td className="px-2 py-1 text-center">{inputs.pensionCOLA ? 'Yes' : 'No'}</td>
+                        <td className="px-2 py-1 text-center">{inputs.pensionSurvivorBenefitPct}%</td>
+                      </tr>
+                    )}
+                    {hasPartnerPension && (
+                      <tr className="bg-slate-50">
+                        <td className="px-2 py-1 font-medium">{partnerFirst}</td>
+                        <td className="px-2 py-1 text-right">${inputs.partnerMonthlyPension.toLocaleString()}</td>
+                        <td className="px-2 py-1 text-right">${(inputs.partnerMonthlyPension * 12).toLocaleString()}</td>
+                        <td className="px-2 py-1 text-center">{inputs.partnerPensionStartAge}</td>
+                        <td className="px-2 py-1 text-center">{inputs.partnerPensionCOLA ? 'Yes' : 'No'}</td>
+                        <td className="px-2 py-1 text-center">{inputs.partnerPensionSurvivorBenefitPct}%</td>
+                      </tr>
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            )}
+
+            {/* Additional Income Streams & One-Time Events */}
+            {hasAdditionalIncomes && (
+              <div className="border border-slate-200 rounded-lg p-3">
+                <h3 className="font-bold text-[13px] text-slate-800 mb-2 border-b pb-1">Additional Income & One-Time Events</h3>
+                <table className="w-full text-[12px]">
+                  <thead>
+                    <tr className="bg-slate-50">
+                      <th className="px-2 py-1 text-left text-slate-600">Source</th>
+                      <th className="px-2 py-1 text-right text-slate-600">Amount</th>
+                      <th className="px-2 py-1 text-center text-slate-600">Timing</th>
+                      <th className="px-2 py-1 text-center text-slate-600">Taxable</th>
+                      <th className="px-2 py-1 text-center text-slate-600">Inflation Adj.</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {recurringIncomes.map((inc, i) => (
+                      <tr key={inc.id} className={i % 2 === 1 ? 'bg-slate-50' : ''}>
+                        <td className="px-2 py-1 font-medium">{inc.name || 'Income'}</td>
+                        <td className="px-2 py-1 text-right">${(inc.amount || 0).toLocaleString()}/mo</td>
+                        <td className="px-2 py-1 text-center">Ages {inc.startAge}–{inc.endAge || 'end'}</td>
+                        <td className="px-2 py-1 text-center">{inc.taxablePercent ?? 100}%</td>
+                        <td className="px-2 py-1 text-center">{inc.inflationAdjusted ? 'Yes' : 'No'}</td>
+                      </tr>
+                    ))}
+                    {oneTimeIncomes.map((inc, i) => (
+                      <tr key={inc.id} className={(recurringIncomes.length + i) % 2 === 1 ? 'bg-slate-50' : ''}>
+                        <td className="px-2 py-1 font-medium">{inc.name || 'One-Time'}</td>
+                        <td className="px-2 py-1 text-right">${(inc.amount || 0).toLocaleString()}</td>
+                        <td className="px-2 py-1 text-center">{fmtAge(inc.startAge)} (one-time)</td>
+                        <td className="px-2 py-1 text-center">{inc.taxablePercent ?? 100}%</td>
+                        <td className="px-2 py-1 text-center">{inc.inflationAdjusted ? 'Yes' : 'No'}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+
+            {/* Cash Flow Adjustments */}
+            {hasCashFlowAdj && (
+              <div className="border border-slate-200 rounded-lg p-3">
+                <h3 className="font-bold text-[13px] text-slate-800 mb-2 border-b pb-1">Spending Adjustments</h3>
+                <table className="w-full text-[12px]">
+                  <thead>
+                    <tr className="bg-slate-50">
+                      <th className="px-2 py-1 text-left text-slate-600">Item</th>
+                      <th className="px-2 py-1 text-center text-slate-600">Type</th>
+                      <th className="px-2 py-1 text-right text-slate-600">Amount</th>
+                      <th className="px-2 py-1 text-center text-slate-600">Timing</th>
+                      <th className="px-2 py-1 text-center text-slate-600">Inflation Adj.</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {(inputs.cashFlowAdjustments || []).map((adj, i) => (
+                      <tr key={adj.id} className={i % 2 === 1 ? 'bg-slate-50' : ''}>
+                        <td className="px-2 py-1 font-medium">{adj.name || 'Adjustment'}</td>
+                        <td className="px-2 py-1 text-center">
+                          <span className={`px-1.5 py-0.5 rounded text-[10px] font-semibold ${adj.type === 'reduction' ? 'bg-green-100 text-green-700' : adj.type === 'one-time' ? 'bg-orange-100 text-orange-700' : 'bg-red-100 text-red-700'}`}>
+                            {adj.type === 'reduction' ? 'Reduction' : adj.type === 'one-time' ? 'One-Time' : 'Increase'}
+                          </span>
+                        </td>
+                        <td className="px-2 py-1 text-right">${(adj.amount || 0).toLocaleString()}{adj.type !== 'one-time' ? '/mo' : ''}</td>
+                        <td className="px-2 py-1 text-center">{adj.type === 'one-time' ? fmtAge(adj.startAge) : `Ages ${adj.startAge}–${adj.endAge || 'end'}`}</td>
+                        <td className="px-2 py-1 text-center">{adj.inflationAdjusted ? 'Yes' : 'No'}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+
+            {/* Tax Account Mix */}
+            {inputs.taxEnabled && (
+              <div className="border border-slate-200 rounded-lg p-3">
+                <h3 className="font-bold text-[13px] text-slate-800 mb-2 border-b pb-1">Portfolio Tax Composition</h3>
+                <div className="grid grid-cols-3 gap-4 text-[12px] text-center">
+                  <div className="bg-blue-50 rounded-lg p-2">
+                    <p className="text-slate-500 text-[11px]">Tax-Deferred</p>
+                    <p className="font-bold text-lg text-blue-700">{inputs.traditionalPercent}%</p>
+                    <p className="text-slate-500 text-[10px]">${Math.round(inputs.totalPortfolio * (inputs.traditionalPercent / 100)).toLocaleString()}</p>
+                  </div>
+                  <div className="bg-green-50 rounded-lg p-2">
+                    <p className="text-slate-500 text-[11px]">Roth</p>
+                    <p className="font-bold text-lg text-green-700">{inputs.rothPercent}%</p>
+                    <p className="text-slate-500 text-[10px]">${Math.round(inputs.totalPortfolio * (inputs.rothPercent / 100)).toLocaleString()}</p>
+                  </div>
+                  <div className="bg-amber-50 rounded-lg p-2">
+                    <p className="text-slate-500 text-[11px]">Non-Qualified</p>
+                    <p className="font-bold text-lg text-amber-700">{inputs.nqPercent}%</p>
+                    <p className="text-slate-500 text-[10px]">${Math.round(inputs.totalPortfolio * (inputs.nqPercent / 100)).toLocaleString()}</p>
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
+          );
+        })()}
+      </PrintPageWrapper>
 
       {/* MAIN ARCHITECT PAGE */}
       <div className="max-w-7xl mx-auto print:hidden no-print">
@@ -943,18 +1215,18 @@ export const ArchitectPage = ({
                 : `${(monteCarloData?.successRate || 0).toFixed(1)}%`}
               subtext={adjustedProjections.hasChanges
                 ? <><span className="line-through opacity-60">{(monteCarloData?.successRate || 0).toFixed(1)}%</span> → +{(adjustedProjections.successRate - (monteCarloData?.successRate || 0)).toFixed(1)}%</>
-                : `Positive balance through age ${finalProjectionAge}`}
+                : `Positive balance through ${legacyLabel}`}
               icon={Activity}
               colorClass={`${(() => { const sr = adjustedProjections.hasChanges ? adjustedProjections.successRate : monteCarloData?.successRate; return sr >= 85 ? "bg-mwm-green" : sr >= 65 ? "bg-orange-500" : "bg-red-600"; })()} text-white ${adjustedProjections.hasChanges ? 'ring-2 ring-mwm-gold/60' : ''}`}
             />
             <StatBox
-              label={`Legacy Balance (Age ${finalProjectionAge})`}
+              label={`Legacy Balance (${legacyLabel})`}
               value={adjustedProjections.hasChanges
                 ? `$${(adjustedProjections.legacyBalance / 1000000).toFixed(2)}M`
                 : `$${((legacyAt95) / 1000000).toFixed(2)}M`}
               subtext={adjustedProjections.hasChanges
                 ? <><span className="line-through opacity-60">${((legacyAt95) / 1000000).toFixed(2)}M</span> → +${((adjustedProjections.legacyBalance - (legacyAt95)) / 1000).toFixed(0)}k</>
-                : `Projected value at age ${finalProjectionAge}`}
+                : `Projected value at ${legacyLabel}`}
               icon={Shield}
               colorClass={`bg-mwm-emerald text-white ${adjustedProjections.hasChanges ? 'ring-2 ring-mwm-gold/60' : ''}`}
             />
@@ -1124,6 +1396,7 @@ export const ArchitectPage = ({
               inputs={inputs}
               basePlan={basePlan}
               vaAdjustedBasePlan={vaAdjustedBasePlan}
+              clientInfo={clientInfo}
             />
           )}
 
@@ -1307,46 +1580,181 @@ export const ArchitectPage = ({
                 <th className="p-3 text-left">Bucket</th>
                 <th className="p-3 text-center">Expected Return</th>
                 <th className="p-3 text-center">Std Deviation</th>
-                <th className="p-3 text-left">Investment Type</th>
+                <th className="p-3 text-left">Portfolio Composition</th>
               </tr>
             </thead>
             <tbody>
-              <tr className="border-b">
-                <td className="p-3 font-medium">B1 - Liquidity</td>
-                <td className="p-3 text-center">{assumptions.b1.return}%</td>
-                <td className="p-3 text-center">{assumptions.b1.stdDev}%</td>
-                <td className="p-3">Cash, Money Market, Short-term Bonds</td>
-              </tr>
-              <tr className="border-b bg-slate-50">
-                <td className="p-3 font-medium">B2 - Bridge</td>
-                <td className="p-3 text-center">{assumptions.b2.return}%</td>
-                <td className="p-3 text-center">{assumptions.b2.stdDev}%</td>
-                <td className="p-3">Intermediate Bonds, Conservative Allocation</td>
-              </tr>
-              <tr className="border-b">
-                <td className="p-3 font-medium">B3 - Tactical Balanced</td>
-                <td className="p-3 text-center">{assumptions.b3.return}%</td>
-                <td className="p-3 text-center">{assumptions.b3.stdDev}%</td>
-                <td className="p-3">60/40 Balanced Portfolio</td>
-              </tr>
-              <tr className="border-b bg-slate-50">
-                <td className="p-3 font-medium">B4 - Income & Growth</td>
-                <td className="p-3 text-center">{assumptions.b4.return}%</td>
-                <td className="p-3 text-center">{assumptions.b4.stdDev}%</td>
-                <td className="p-3">Dividend Stocks, REITs, Preferred</td>
-              </tr>
-              <tr>
-                <td className="p-3 font-medium">B5 - Permanent Equity</td>
-                <td className="p-3 text-center">{assumptions.b5.return}%</td>
-                <td className="p-3 text-center">{assumptions.b5.stdDev}%</td>
-                <td className="p-3">Equity Growth, Small Cap, International</td>
-              </tr>
+              {['b1', 'b2', 'b3', 'b4', 'b5'].map((key, i) => (
+                <tr key={key} className={`border-b ${i % 2 === 1 ? 'bg-slate-50' : ''}`}>
+                  <td className="p-3 font-medium">{assumptions[key].name}</td>
+                  <td className="p-3 text-center">{assumptions[key].return}%</td>
+                  <td className="p-3 text-center">{assumptions[key].stdDev}%</td>
+                  <td className="p-3 text-slate-600">{assumptions[key].subtitle || '-'}</td>
+                </tr>
+              ))}
             </tbody>
           </table>
         </div>
       </PrintPageWrapper>
 
-      {/* PRINT PAGE 4: Phase 2 - Distribution Phase Flowchart */}
+      {/* PRINT PAGE: Social Security Optimization */}
+      <PrintPageWrapper pageNumber={6} totalPages={totalPrintPages} title="Social Security Optimization" subtitle="Optimal claiming strategy analysis">
+        {(() => {
+          const FRA = 67;
+          const fmt = (v) => `$${Math.round(v).toLocaleString()}`;
+          const pct = (v) => `${(v * 100).toFixed(1)}%`;
+          const cAge = inputs.ssStartAge;
+          const cInputPIA = inputs.ssPIA;
+          const cReceiving = inputs.ssCurrentlyReceiving;
+          const cPIA = cReceiving ? getImpliedPIA(cInputPIA, cAge) : cInputPIA;
+          const cOwn = cReceiving ? cInputPIA : getAdjustedSS(cPIA, cAge);
+          const cYearsEarly = Math.max(0, FRA - cAge);
+          const cYearsLate = Math.max(0, cAge - FRA);
+          const cReduction = cPIA > 0 && !cReceiving ? (1 - cOwn / cPIA) : 0;
+          const cBonus = cPIA > 0 && !cReceiving && cAge > FRA ? (cOwn / cPIA - 1) : 0;
+          const pPartnerPIA = clientInfo.isMarried
+            ? (inputs.partnerSSCurrentlyReceiving ? getImpliedPIA(inputs.partnerSSPIA, inputs.partnerSSStartAge) : inputs.partnerSSPIA) : 0;
+          const cSpousalExcess = clientInfo.isMarried ? Math.max(0, pPartnerPIA * 0.5 - cPIA) : 0;
+          const dispAgeDiff = clientInfo.currentAge - (clientInfo.partnerAge || clientInfo.currentAge);
+          const cDispSpousalAge = clientInfo.isMarried ? Math.min(FRA, Math.max(cAge, inputs.partnerSSStartAge + dispAgeDiff)) : cAge;
+          const cAfterDeemed = clientInfo.isMarried ? applyDeemedFiling(cOwn, pPartnerPIA, true, cAge, cPIA, cDispSpousalAge) : cOwn;
+          const cSpousalApplies = cAfterDeemed > cOwn;
+          let pOwn = 0, pAfterDeemed = 0, pYearsEarly = 0, pYearsLate = 0, pReduction = 0, pBonus = 0, pSpousalExcess = 0, pSpousalApplies = false, pPIA = 0;
+          if (clientInfo.isMarried) {
+            const pAge = inputs.partnerSSStartAge;
+            const pInputPIA = inputs.partnerSSPIA;
+            const pRec = inputs.partnerSSCurrentlyReceiving;
+            pPIA = pRec ? getImpliedPIA(pInputPIA, pAge) : pInputPIA;
+            pOwn = pRec ? pInputPIA : getAdjustedSS(pPIA, pAge);
+            pYearsEarly = Math.max(0, FRA - pAge);
+            pYearsLate = Math.max(0, pAge - FRA);
+            pReduction = pPIA > 0 && !pRec ? (1 - pOwn / pPIA) : 0;
+            pBonus = pPIA > 0 && !pRec && pAge > FRA ? (pOwn / pPIA - 1) : 0;
+            pSpousalExcess = Math.max(0, cPIA * 0.5 - pPIA);
+            const pDispSpousalAge = Math.min(FRA, Math.max(pAge, cAge - dispAgeDiff));
+            pAfterDeemed = applyDeemedFiling(pOwn, cPIA, true, pAge, pPIA, pDispSpousalAge);
+            pSpousalApplies = pAfterDeemed > pOwn;
+          }
+          const totalMonthly = cAfterDeemed + pAfterDeemed;
+          const BenefitRow = ({ label, pia, claimAge, yearsEarly, yearsLate, reduction, bonus, ownBenefit, spousalExcess, spousalApplies, afterDeemed, receiving }) => (
+            <div className="text-[9px] leading-tight">
+              <p className="font-bold text-slate-700 text-[10px] mb-0.5">{label}</p>
+              <div className="grid grid-cols-2 gap-x-3">
+                <span className="text-slate-500">PIA (FRA 67)</span><span className="text-right font-medium">{fmt(pia)}/mo</span>
+                <span className="text-slate-500">Claim age</span>
+                <span className="text-right font-medium">
+                  {claimAge}{yearsEarly > 0 && <span className="text-red-500"> ({yearsEarly}yr early)</span>}{yearsLate > 0 && <span className="text-mwm-green"> ({yearsLate}yr late)</span>}
+                </span>
+                {!receiving && reduction > 0 && <><span className="text-red-500">Early reduction</span><span className="text-right text-red-500">-{pct(reduction)}</span></>}
+                {!receiving && bonus > 0 && <><span className="text-mwm-green">Delayed credits</span><span className="text-right text-mwm-green">+{pct(bonus)}</span></>}
+                <span className="text-slate-500">Own benefit</span><span className="text-right font-medium">{fmt(ownBenefit)}/mo</span>
+                {clientInfo.isMarried && spousalExcess > 0 && <><span className="text-blue-600">Spousal excess</span><span className="text-right text-blue-600">+{fmt(afterDeemed - ownBenefit)}/mo</span></>}
+                <span className="text-slate-700 font-bold border-t border-slate-200 pt-0.5">Total benefit</span>
+                <span className="text-right font-bold text-mwm-green/80 border-t border-slate-200 pt-0.5">{fmt(afterDeemed)}/mo</span>
+              </div>
+            </div>
+          );
+          return (
+            <>
+              <div className={`grid ${clientInfo.isMarried ? 'grid-cols-2' : 'grid-cols-1 max-w-sm'} gap-4 mb-3 p-3 border border-slate-200 rounded-lg`}>
+                <BenefitRow label={clientInfo.name || 'Client'} pia={cPIA} claimAge={cAge} yearsEarly={cYearsEarly} yearsLate={cYearsLate} reduction={cReduction} bonus={cBonus} ownBenefit={cOwn} spousalExcess={cSpousalExcess} spousalApplies={cSpousalApplies} afterDeemed={cAfterDeemed} receiving={cReceiving} />
+                {clientInfo.isMarried && (
+                  <BenefitRow label={clientInfo.partnerName || 'Partner'} pia={pPIA} claimAge={inputs.partnerSSStartAge} yearsEarly={pYearsEarly} yearsLate={pYearsLate} reduction={pReduction} bonus={pBonus} ownBenefit={pOwn} spousalExcess={pSpousalExcess} spousalApplies={pSpousalApplies} afterDeemed={pAfterDeemed} receiving={inputs.partnerSSCurrentlyReceiving} />
+                )}
+              </div>
+              {clientInfo.isMarried && (
+                <div className="flex justify-end mb-3">
+                  <span className="text-[10px] font-bold text-mwm-green/80">Combined: {fmt(totalMonthly)}/mo ({fmt(totalMonthly * 12)}/yr)</span>
+                </div>
+              )}
+              {clientInfo.isMarried && ssMatrixData ? (
+                <>
+                  <div className="bg-black text-white p-2 rounded-lg mb-2 flex items-center gap-2">
+                    <CheckCircle className="w-5 h-5 text-mwm-green flex-shrink-0" />
+                    <p className="text-[11px] font-bold">
+                      Optimal: Primary <span className="text-mwm-green">{ssMatrixData.winner.clientAge}</span> + Spouse <span className="text-mwm-green">{ssMatrixData.winner.partnerAge}</span>
+                      <span className="text-gray-400 font-normal ml-2">Portfolio at {targetMaxPortfolioAge}: {fmt(Math.round(ssMatrixData.winner.balance))}</span>
+                    </p>
+                  </div>
+                  {(() => {
+                    const allBal = ssMatrixData.matrix.map(m => m.balance);
+                    const minB = Math.min(...allBal);
+                    const maxB = Math.max(...allBal);
+                    const rng = maxB - minB || 1;
+                    return (
+                      <table className="w-full border-collapse text-[9px] mb-2">
+                        <thead>
+                          <tr>
+                            <th className="p-1 bg-slate-100 border border-slate-200 text-[8px] text-slate-500">
+                              <div className="flex flex-col items-center leading-none"><span>Spouse</span><span>\</span><span>Primary</span></div>
+                            </th>
+                            {ssMatrixData.ages.map(a => (
+                              <th key={a} className="p-1 bg-slate-100 border border-slate-200 text-center font-bold text-slate-700">{a}</th>
+                            ))}
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {ssMatrixData.ages.map(pAge => (
+                            <tr key={pAge}>
+                              <td className="p-1 bg-slate-100 border border-slate-200 text-center font-bold text-slate-700">{pAge}</td>
+                              {ssMatrixData.ages.map(cAge => {
+                                const cell = ssMatrixData.matrix.find(m => m.clientAge === cAge && m.partnerAge === pAge);
+                                const bal = cell?.balance || 0;
+                                const isOpt = ssMatrixData.winner.clientAge === cAge && ssMatrixData.winner.partnerAge === pAge;
+                                const isSel = inputs.ssStartAge === cAge && inputs.partnerSSStartAge === pAge;
+                                const p = (bal - minB) / rng;
+                                const bg = isOpt ? 'bg-mwm-green/30 font-bold' : isSel ? 'bg-blue-100' : p >= 0.85 ? 'bg-mwm-green/20' : p >= 0.6 ? 'bg-mwm-green/10' : p >= 0.35 ? 'bg-mwm-gold/10' : p >= 0.15 ? 'bg-orange-50' : 'bg-red-50';
+                                return (
+                                  <td key={cAge} className={`p-1 border border-slate-200 text-center ${bg}`}>
+                                    ${(bal / 1000000).toFixed(2)}M
+                                    {isOpt && <span className="block text-[7px] text-mwm-green/80">BEST</span>}
+                                  </td>
+                                );
+                              })}
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    );
+                  })()}
+                  <p className="text-[8px] text-slate-400 text-center">Portfolio balance at age {targetMaxPortfolioAge}. Primary claiming age across top, spouse claiming age down left.</p>
+                </>
+              ) : !clientInfo.isMarried ? (
+                <>
+                  <div className="bg-black text-white p-2 rounded-lg mb-2 flex items-center gap-2">
+                    <CheckCircle className="w-5 h-5 text-mwm-green flex-shrink-0" />
+                    <p className="text-[11px]"><span className="text-slate-400">Recommendation:</span> Claim at Age <span className="text-mwm-green font-bold">{ssWinnerForDisplay.age}</span> to maximize portfolio at age {targetMaxPortfolioAge}</p>
+                  </div>
+                  <div className="grid grid-cols-9 gap-1 mb-2">
+                    {ssOutcomesForDisplay.map((o) => (
+                      <div key={o.age} className={`p-1 rounded border text-center ${o.age === ssWinnerForDisplay.age ? 'border-mwm-green bg-mwm-green/10' : 'border-slate-200 bg-slate-50'}`}>
+                        <p className="text-[9px] font-bold text-slate-500">{o.age}</p>
+                        <p className={`text-[10px] font-bold ${o.age === ssWinnerForDisplay.age ? 'text-mwm-green/80' : 'text-slate-700'}`}>
+                          ${Math.round(o.balance / 1000).toLocaleString()}k
+                        </p>
+                      </div>
+                    ))}
+                  </div>
+                </>
+              ) : (
+                <div className="border border-dashed border-slate-300 rounded-lg p-4 text-center mb-2">
+                  <p className="text-[10px] text-slate-400">Run the Claiming Age Optimization Matrix from the SS Optimizer tab to include the 81-scenario grid here.</p>
+                </div>
+              )}
+              <div className="border border-slate-200 rounded-lg p-2 mt-1">
+                <p className="text-[9px] text-slate-600 leading-relaxed">
+                  <strong>Strategy:</strong> With IRA withdrawals, each $1 costs ${inputs.ssMarginalTaxRate > 0 ? `$${(1 / (1 - inputs.ssMarginalTaxRate / 100)).toFixed(2)}` : '$1.00'} after tax.
+                  At {inputs.ssReinvestRate || 4.5}% growth, delaying to 67 breaks even at <strong>{ssBreakevenResults?.vs67?.breakevenAge?.toFixed(1) || 'N/A'}</strong>,
+                  to 70 at <strong>{ssBreakevenResults?.vs70?.breakevenAge?.toFixed(1) || 'N/A'}</strong>.
+                  {clientInfo.isMarried && ' Deemed filing: lower earner receives the higher of own benefit or 50% of higher earner\'s PIA.'}
+                </p>
+              </div>
+            </>
+          );
+        })()}
+      </PrintPageWrapper>
+
+      {/* PRINT PAGE: Phase 2 - Distribution Phase Flowchart */}
       {(() => {
         // Helper function for conditional formatting
         const fmtMoney = (val) => val >= 1000000 ? `$${(val / 1000000).toFixed(2)}M` : `$${Math.round(val / 1000)}k`;
@@ -1433,16 +1841,34 @@ export const ArchitectPage = ({
               ))}
             </div>
 
-            {/* Flow explanation */}
+            {/* Rebalancing Strategy Info */}
             <div className="bg-slate-50 border border-slate-200 rounded-lg p-3 mb-4">
-              <div className="flex items-center gap-2 mb-2">
-                <span className="text-base">→</span>
-                <p className="text-xs text-slate-700">
-                  <strong>Sequential Withdrawal Strategy:</strong> Withdrawals are taken from B1 first (years 1-3), then B2 (years 4-6),
-                  then B3 (years 7-15), then B4 (years 16-20). Meanwhile, B5 remains invested for maximum growth over 20 years before being tapped.
+              <p className="text-xs font-bold text-slate-700 uppercase tracking-wide mb-1.5">
+                {rebalanceFreq === 0 ? 'Sequential Distribution (Illustrated)' : `Scheduled Rebalancing — Every ${rebalanceFreq === 1 ? 'Year' : `${rebalanceFreq} Years`} (Illustrated)`}
+              </p>
+              {rebalanceFreq === 0 ? (
+                <p className="text-xs text-slate-600 leading-relaxed">
+                  This illustration uses a <strong>sequential distribution</strong> strategy. Withdrawals are taken from B1 first (years 1–3), then B2 (years 4–6),
+                  B3 (years 7–15), and B4 (years 16–20), while B5 remains fully invested for long-term growth. Each bucket is depleted before the next is tapped,
+                  preserving the equity allocation for maximum compounding. This approach avoids selling growth assets during market downturns, but does not actively
+                  replenish near-term buckets from equity gains.
                 </p>
-              </div>
-              <div className="flex items-center gap-3 text-xs">
+              ) : (
+                <>
+                  <p className="text-xs text-slate-600 leading-relaxed">
+                    This illustration uses a <strong>scheduled rebalancing</strong> strategy. Every {rebalanceFreq === 1 ? 'year' : `${rebalanceFreq} years`}, the portfolio
+                    is rebalanced back toward its target bucket allocations. When equity buckets (B3–B5) outperform, gains are harvested to replenish near-term
+                    spending buckets (B1–B2), maintaining liquidity without forced selling during downturns. This systematic approach locks in gains during strong markets
+                    and extends portfolio sustainability.
+                  </p>
+                  <p className="text-xs text-slate-500 mt-1.5 leading-relaxed">
+                    <strong>Alternative — Sequential Distribution:</strong> Rather than periodic rebalancing, a sequential approach depletes each bucket in order (B1 → B2 → B3 → B4 → B5)
+                    without redistribution. This maximizes growth potential in equity buckets but forgoes the opportunity to harvest gains into safer allocations.
+                    The optimal strategy depends on market conditions, risk tolerance, and income needs.
+                  </p>
+                </>
+              )}
+              <div className="flex items-center gap-3 text-xs mt-2 pt-2 border-t border-slate-200">
                 <span className="flex items-center gap-1"><span className="w-2.5 h-2.5 rounded" style={{ backgroundColor: COLORS.shortTerm }}></span> Liquidity</span>
                 <span className="flex items-center gap-1"><span className="w-2.5 h-2.5 rounded" style={{ backgroundColor: COLORS.midTerm }}></span> Bridge</span>
                 <span className="flex items-center gap-1"><span className="w-2.5 h-2.5 rounded" style={{ backgroundColor: COLORS.hedged }}></span> Tactical Balanced</span>
@@ -1454,7 +1880,7 @@ export const ArchitectPage = ({
             {/* Bottom Stats */}
             <div className="grid grid-cols-2 gap-4">
               <div className="border-2 border-slate-200 rounded-lg p-3 text-center">
-                <p className="text-xs text-slate-500 uppercase tracking-wide mb-1">Success Probability (Age {finalProjectionAge})</p>
+                <p className="text-xs text-slate-500 uppercase tracking-wide mb-1">Success Probability ({legacyLabel})</p>
                 <div className={`text-3xl font-bold ${monteCarloData.successRate >= 85 ? 'text-mwm-green' : monteCarloData.successRate >= 65 ? 'text-orange-600' : 'text-red-600'}`}>
                   {monteCarloData.successRate.toFixed(1)}%
                 </div>
@@ -1467,7 +1893,7 @@ export const ArchitectPage = ({
                 </div>
               </div>
               <div className="border-2 border-slate-200 rounded-lg p-3 text-center">
-                <p className="text-xs text-slate-500 uppercase tracking-wide mb-1">Projected Legacy (Age {finalProjectionAge})</p>
+                <p className="text-xs text-slate-500 uppercase tracking-wide mb-1">Projected Legacy ({legacyLabel})</p>
                 <div className="text-2xl font-bold text-indigo-600">
                   {fmtMoney(legacyAt95)}
                 </div>
@@ -1599,178 +2025,7 @@ export const ArchitectPage = ({
         );
       })}
 
-      {/* PRINT PAGE: Social Security Optimization */}
-      <PrintPageWrapper pageNumber={6 + cashFlowPageCount} totalPages={totalPrintPages} title="Social Security Optimization" subtitle="Optimal claiming strategy analysis">
-        {(() => {
-          const FRA = 67;
-          const fmt = (v) => `$${Math.round(v).toLocaleString()}`;
-          const pct = (v) => `${(v * 100).toFixed(1)}%`;
-
-          // Client benefit details
-          const cAge = inputs.ssStartAge;
-          const cInputPIA = inputs.ssPIA;
-          const cReceiving = inputs.ssCurrentlyReceiving;
-          const cPIA = cReceiving ? getImpliedPIA(cInputPIA, cAge) : cInputPIA;
-          const cOwn = cReceiving ? cInputPIA : getAdjustedSS(cPIA, cAge);
-          const cYearsEarly = Math.max(0, FRA - cAge);
-          const cYearsLate = Math.max(0, cAge - FRA);
-          const cReduction = cPIA > 0 && !cReceiving ? (1 - cOwn / cPIA) : 0;
-          const cBonus = cPIA > 0 && !cReceiving && cAge > FRA ? (cOwn / cPIA - 1) : 0;
-
-          const pPartnerPIA = clientInfo.isMarried
-            ? (inputs.partnerSSCurrentlyReceiving ? getImpliedPIA(inputs.partnerSSPIA, inputs.partnerSSStartAge) : inputs.partnerSSPIA)
-            : 0;
-          const cSpousalExcess = clientInfo.isMarried ? Math.max(0, pPartnerPIA * 0.5 - cPIA) : 0;
-          const dispAgeDiff = clientInfo.currentAge - (clientInfo.partnerAge || clientInfo.currentAge);
-          const cDispSpousalAge = clientInfo.isMarried ? Math.min(FRA, Math.max(cAge, inputs.partnerSSStartAge + dispAgeDiff)) : cAge;
-          const cAfterDeemed = clientInfo.isMarried ? applyDeemedFiling(cOwn, pPartnerPIA, true, cAge, cPIA, cDispSpousalAge) : cOwn;
-          const cSpousalApplies = cAfterDeemed > cOwn;
-
-          // Partner benefit details
-          let pOwn = 0, pAfterDeemed = 0, pYearsEarly = 0, pYearsLate = 0, pReduction = 0, pBonus = 0, pSpousalExcess = 0, pSpousalApplies = false, pPIA = 0;
-          if (clientInfo.isMarried) {
-            const pAge = inputs.partnerSSStartAge;
-            const pInputPIA = inputs.partnerSSPIA;
-            const pRec = inputs.partnerSSCurrentlyReceiving;
-            pPIA = pRec ? getImpliedPIA(pInputPIA, pAge) : pInputPIA;
-            pOwn = pRec ? pInputPIA : getAdjustedSS(pPIA, pAge);
-            pYearsEarly = Math.max(0, FRA - pAge);
-            pYearsLate = Math.max(0, pAge - FRA);
-            pReduction = pPIA > 0 && !pRec ? (1 - pOwn / pPIA) : 0;
-            pBonus = pPIA > 0 && !pRec && pAge > FRA ? (pOwn / pPIA - 1) : 0;
-            pSpousalExcess = Math.max(0, cPIA * 0.5 - pPIA);
-            const pDispSpousalAge = Math.min(FRA, Math.max(pAge, cAge - dispAgeDiff));
-            pAfterDeemed = applyDeemedFiling(pOwn, cPIA, true, pAge, pPIA, pDispSpousalAge);
-            pSpousalApplies = pAfterDeemed > pOwn;
-          }
-
-          const totalMonthly = cAfterDeemed + pAfterDeemed;
-
-          // Compact benefit row renderer
-          const BenefitRow = ({ label, pia, claimAge, yearsEarly, yearsLate, reduction, bonus, ownBenefit, spousalExcess, spousalApplies, afterDeemed, receiving }) => (
-            <div className="text-[9px] leading-tight">
-              <p className="font-bold text-slate-700 text-[10px] mb-0.5">{label}</p>
-              <div className="grid grid-cols-2 gap-x-3">
-                <span className="text-slate-500">PIA (FRA 67)</span><span className="text-right font-medium">{fmt(pia)}/mo</span>
-                <span className="text-slate-500">Claim age</span>
-                <span className="text-right font-medium">
-                  {claimAge}{yearsEarly > 0 && <span className="text-red-500"> ({yearsEarly}yr early)</span>}{yearsLate > 0 && <span className="text-mwm-green"> ({yearsLate}yr late)</span>}
-                </span>
-                {!receiving && reduction > 0 && <><span className="text-red-500">Early reduction</span><span className="text-right text-red-500">-{pct(reduction)}</span></>}
-                {!receiving && bonus > 0 && <><span className="text-mwm-green">Delayed credits</span><span className="text-right text-mwm-green">+{pct(bonus)}</span></>}
-                <span className="text-slate-500">Own benefit</span><span className="text-right font-medium">{fmt(ownBenefit)}/mo</span>
-                {clientInfo.isMarried && spousalExcess > 0 && <><span className="text-blue-600">Spousal excess</span><span className="text-right text-blue-600">+{fmt(afterDeemed - ownBenefit)}/mo</span></>}
-                <span className="text-slate-700 font-bold border-t border-slate-200 pt-0.5">Total benefit</span>
-                <span className="text-right font-bold text-mwm-green/80 border-t border-slate-200 pt-0.5">{fmt(afterDeemed)}/mo</span>
-              </div>
-            </div>
-          );
-
-          return (
-            <>
-              {/* Benefits Calculation Detail — side-by-side compact */}
-              <div className={`grid ${clientInfo.isMarried ? 'grid-cols-2' : 'grid-cols-1 max-w-sm'} gap-4 mb-3 p-3 border border-slate-200 rounded-lg`}>
-                <BenefitRow label={clientInfo.name || 'Client'} pia={cPIA} claimAge={cAge} yearsEarly={cYearsEarly} yearsLate={cYearsLate} reduction={cReduction} bonus={cBonus} ownBenefit={cOwn} spousalExcess={cSpousalExcess} spousalApplies={cSpousalApplies} afterDeemed={cAfterDeemed} receiving={cReceiving} />
-                {clientInfo.isMarried && (
-                  <BenefitRow label={clientInfo.partnerName || 'Partner'} pia={pPIA} claimAge={inputs.partnerSSStartAge} yearsEarly={pYearsEarly} yearsLate={pYearsLate} reduction={pReduction} bonus={pBonus} ownBenefit={pOwn} spousalExcess={pSpousalExcess} spousalApplies={pSpousalApplies} afterDeemed={pAfterDeemed} receiving={inputs.partnerSSCurrentlyReceiving} />
-                )}
-              </div>
-              {clientInfo.isMarried && (
-                <div className="flex justify-end mb-3">
-                  <span className="text-[10px] font-bold text-mwm-green/80">Combined: {fmt(totalMonthly)}/mo ({fmt(totalMonthly * 12)}/yr)</span>
-                </div>
-              )}
-
-              {/* Claiming Age Matrix */}
-              {clientInfo.isMarried && ssMatrixData ? (
-                <>
-                  <div className="bg-black text-white p-2 rounded-lg mb-2 flex items-center gap-2">
-                    <CheckCircle className="w-5 h-5 text-mwm-green flex-shrink-0" />
-                    <p className="text-[11px] font-bold">
-                      Optimal: Primary <span className="text-mwm-green">{ssMatrixData.winner.clientAge}</span> + Spouse <span className="text-mwm-green">{ssMatrixData.winner.partnerAge}</span>
-                      <span className="text-gray-400 font-normal ml-2">Portfolio at {targetMaxPortfolioAge}: {fmt(Math.round(ssMatrixData.winner.balance))}</span>
-                    </p>
-                  </div>
-                  {(() => {
-                    const allBal = ssMatrixData.matrix.map(m => m.balance);
-                    const minB = Math.min(...allBal);
-                    const maxB = Math.max(...allBal);
-                    const rng = maxB - minB || 1;
-                    return (
-                      <table className="w-full border-collapse text-[9px] mb-2">
-                        <thead>
-                          <tr>
-                            <th className="p-1 bg-slate-100 border border-slate-200 text-[8px] text-slate-500">
-                              <div className="flex flex-col items-center leading-none"><span>Spouse</span><span>\</span><span>Primary</span></div>
-                            </th>
-                            {ssMatrixData.ages.map(a => (
-                              <th key={a} className="p-1 bg-slate-100 border border-slate-200 text-center font-bold text-slate-700">{a}</th>
-                            ))}
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {ssMatrixData.ages.map(pAge => (
-                            <tr key={pAge}>
-                              <td className="p-1 bg-slate-100 border border-slate-200 text-center font-bold text-slate-700">{pAge}</td>
-                              {ssMatrixData.ages.map(cAge => {
-                                const cell = ssMatrixData.matrix.find(m => m.clientAge === cAge && m.partnerAge === pAge);
-                                const bal = cell?.balance || 0;
-                                const isOpt = ssMatrixData.winner.clientAge === cAge && ssMatrixData.winner.partnerAge === pAge;
-                                const isSel = inputs.ssStartAge === cAge && inputs.partnerSSStartAge === pAge;
-                                const p = (bal - minB) / rng;
-                                const bg = isOpt ? 'bg-mwm-green/30 font-bold' : isSel ? 'bg-blue-100' : p >= 0.85 ? 'bg-mwm-green/20' : p >= 0.6 ? 'bg-mwm-green/10' : p >= 0.35 ? 'bg-mwm-gold/10' : p >= 0.15 ? 'bg-orange-50' : 'bg-red-50';
-                                return (
-                                  <td key={cAge} className={`p-1 border border-slate-200 text-center ${bg}`}>
-                                    ${(bal / 1000000).toFixed(2)}M
-                                    {isOpt && <span className="block text-[7px] text-mwm-green/80">BEST</span>}
-                                  </td>
-                                );
-                              })}
-                            </tr>
-                          ))}
-                        </tbody>
-                      </table>
-                    );
-                  })()}
-                  <p className="text-[8px] text-slate-400 text-center">Portfolio balance at age {targetMaxPortfolioAge}. Primary claiming age across top, spouse claiming age down left.</p>
-                </>
-              ) : !clientInfo.isMarried ? (
-                /* Single client — compact 9-card row */
-                <>
-                  <div className="bg-black text-white p-2 rounded-lg mb-2 flex items-center gap-2">
-                    <CheckCircle className="w-5 h-5 text-mwm-green flex-shrink-0" />
-                    <p className="text-[11px]"><span className="text-slate-400">Recommendation:</span> Claim at Age <span className="text-mwm-green font-bold">{ssWinnerForDisplay.age}</span> to maximize portfolio at age {targetMaxPortfolioAge}</p>
-                  </div>
-                  <div className="grid grid-cols-9 gap-1 mb-2">
-                    {ssOutcomesForDisplay.map((o) => (
-                      <div key={o.age} className={`p-1 rounded border text-center ${o.age === ssWinnerForDisplay.age ? 'border-mwm-green bg-mwm-green/10' : 'border-slate-200 bg-slate-50'}`}>
-                        <p className="text-[9px] font-bold text-slate-500">{o.age}</p>
-                        <p className={`text-[10px] font-bold ${o.age === ssWinnerForDisplay.age ? 'text-mwm-green/80' : 'text-slate-700'}`}>
-                          ${Math.round(o.balance / 1000).toLocaleString()}k
-                        </p>
-                      </div>
-                    ))}
-                  </div>
-                </>
-              ) : (
-                <div className="border border-dashed border-slate-300 rounded-lg p-4 text-center mb-2">
-                  <p className="text-[10px] text-slate-400">Run the Claiming Age Optimization Matrix from the SS Optimizer tab to include the 81-scenario grid here.</p>
-                </div>
-              )}
-
-              {/* Compact rationale */}
-              <div className="border border-slate-200 rounded-lg p-2 mt-1">
-                <p className="text-[9px] text-slate-600 leading-relaxed">
-                  <strong>Strategy:</strong> With IRA withdrawals, each $1 costs ${inputs.ssMarginalTaxRate > 0 ? `$${(1 / (1 - inputs.ssMarginalTaxRate / 100)).toFixed(2)}` : '$1.00'} after tax.
-                  At {inputs.ssReinvestRate || 4.5}% growth, delaying to 67 breaks even at <strong>{ssBreakevenResults?.vs67?.breakevenAge?.toFixed(1) || 'N/A'}</strong>,
-                  to 70 at <strong>{ssBreakevenResults?.vs70?.breakevenAge?.toFixed(1) || 'N/A'}</strong>.
-                  {clientInfo.isMarried && ' Deemed filing: lower earner receives the higher of own benefit or 50% of higher earner\'s PIA.'}
-                </p>
-              </div>
-            </>
-          );
-        })()}
-      </PrintPageWrapper>
+      {/* SS Optimization moved before Distribution Strategy */}
 
       {/* PRINT PAGE: Monte Carlo Simulation (hidden when Monte Carlo is already the print mode) */}
       {printOptions?.mode !== 'montecarlo' && <PrintPageWrapper pageNumber={7 + cashFlowPageCount} totalPages={totalPrintPages} title="Monte Carlo Simulation" subtitle="Probability analysis based on 1,000 market scenarios">
@@ -1823,7 +2078,7 @@ export const ArchitectPage = ({
                 <th className="p-1.5 text-center">B4</th>
                 <th className="p-1.5 text-center">B5</th>
                 <th className="p-1.5 text-center whitespace-nowrap">Success Rate</th>
-                <th className="p-1.5 text-center whitespace-nowrap">Legacy (Age {finalProjectionAge})</th>
+                <th className="p-1.5 text-center whitespace-nowrap">Legacy ({legacyLabel})</th>
               </tr>
             </thead>
             <tbody>
@@ -2125,363 +2380,185 @@ export const ArchitectPage = ({
       })()}
 
       {/* PRINT PAGE: Executive Summary */}
-      {hasExecSummaryPage && (
-        <PrintPageWrapper pageNumber={(hasTaxStrategyPage ? 10 : 9) + cashFlowPageCount} totalPages={totalPrintPages} title="Executive Summary" subtitle="Intentional planning overview and value added">
+      {hasExecSummaryPage && execSummaryPrint && (
+        <PrintPageWrapper pageNumber={(hasTaxStrategyPage ? 10 : 9) + cashFlowPageCount} totalPages={totalPrintPages} title="Executive Summary" subtitle="Allocation, income distribution, and projected legacy">
 
-          {/* ===== SECTION 1: PLAN OVERVIEW ===== */}
-          {execSummaryPrint && <>
-          <h3 className="text-[12px] font-bold text-slate-800 mb-2 pb-1 border-b-2 border-mwm-green uppercase tracking-wide">Plan Overview</h3>
-
-          {/* Bucket Allocation Matrix */}
-          <div className="mb-2.5">
-            <p className="text-[10px] font-semibold text-slate-700 mb-1">Initial Bucket Allocation by Account Type</p>
+          {/* 1. Allocation by Account Type and Bucket */}
+          <h3 className="text-[12px] font-bold text-slate-800 mb-2 pb-1 border-b-2 border-mwm-green uppercase tracking-wide">Bucket Allocation by Account Type</h3>
+          <div className="mb-4">
             <div className="border border-slate-200 rounded-lg overflow-hidden">
-              <table className="w-full text-[10px] border-collapse">
+              <table className="w-full text-[11px] border-collapse">
                 <thead>
                   <tr className="bg-slate-100 text-slate-600 font-bold">
-                    <th className="p-1 text-left w-[90px]">Account</th>
+                    <th className="p-1.5 text-left w-[100px]">Account Type</th>
                     {['B1 Liquidity', 'B2 Bridge', 'B3 Tactical', 'B4 Income', 'B5 Equity'].map((name, idx) => (
-                      <th key={idx} className="p-1 text-center">{name}</th>
+                      <th key={idx} className="p-1.5 text-center">{name}</th>
                     ))}
-                    <th className="p-1 text-right">Total</th>
+                    <th className="p-1.5 text-right">Total</th>
                   </tr>
                 </thead>
                 <tbody>
                   {['traditional', 'roth', 'nq'].map(acct => {
-                    const label = acct === 'traditional' ? 'Traditional' : acct === 'roth' ? 'Roth' : 'Non-Qualified';
-                    const colors = acct === 'traditional' ? 'text-orange-700 bg-orange-50' : acct === 'roth' ? 'text-green-700 bg-green-50' : 'text-purple-700 bg-purple-50';
+                    const label = acct === 'traditional' ? 'Tax-Deferred' : acct === 'roth' ? 'Roth' : 'Non-Qualified';
+                    const colors = acct === 'traditional' ? 'text-blue-700 bg-blue-50' : acct === 'roth' ? 'text-green-700 bg-green-50' : 'text-amber-700 bg-amber-50';
                     const rowTotal = ['b1', 'b2', 'b3', 'b4', 'b5'].reduce((s, bk) => s + (execSummaryPrint.matrix[acct][bk] || 0), 0);
                     return (
                       <tr key={acct} className={`border-t border-slate-100 ${colors}`}>
-                        <td className="p-1 text-left font-semibold">{label}</td>
+                        <td className="p-1.5 text-left font-semibold">{label}</td>
                         {['b1', 'b2', 'b3', 'b4', 'b5'].map(bk => (
-                          <td key={bk} className="p-1 text-center">
+                          <td key={bk} className="p-1.5 text-center">
                             {execSummaryPrint.matrix[acct][bk] > 0 ? execSummaryPrint.fmtShort(execSummaryPrint.matrix[acct][bk]) : '-'}
                           </td>
                         ))}
-                        <td className="p-1 text-right font-bold">{execSummaryPrint.fmtShort(rowTotal)}</td>
+                        <td className="p-1.5 text-right font-bold">{execSummaryPrint.fmtShort(rowTotal)}</td>
                       </tr>
                     );
                   })}
                 </tbody>
                 <tfoot>
                   <tr className="border-t-2 border-slate-300 bg-slate-50 font-bold">
-                    <td className="p-1 text-left">Total</td>
+                    <td className="p-1.5 text-left">Total</td>
                     {['b1', 'b2', 'b3', 'b4', 'b5'].map(bk => {
                       const colTotal = ['traditional', 'roth', 'nq'].reduce((s, acct) => s + (execSummaryPrint.matrix[acct][bk] || 0), 0);
-                      return <td key={bk} className="p-1 text-center">{execSummaryPrint.fmtShort(colTotal)}</td>;
+                      return <td key={bk} className="p-1.5 text-center">{execSummaryPrint.fmtShort(colTotal)}</td>;
                     })}
-                    <td className="p-1 text-right">{execSummaryPrint.fmtShort(inputs.totalPortfolio || 0)}</td>
+                    <td className="p-1.5 text-right">{execSummaryPrint.fmtShort(inputs.totalPortfolio || 0)}</td>
                   </tr>
                 </tfoot>
               </table>
             </div>
-          </div>
-
-          {/* Distribution Methodology & Roth Conversions — side by side */}
-          <div className="grid grid-cols-2 gap-2 mb-4">
-            {/* Distribution Methodology */}
-            <div className="border border-slate-200 rounded p-2">
-              <p className="text-[10px] font-semibold text-slate-700 mb-1">Distribution Methodology</p>
-              {execSummaryPrint.liqDesc.length > 0 ? (
-                <div className="space-y-0.5">
-                  {execSummaryPrint.liqDesc.map((desc, i) => (
-                    <p key={i} className="text-[9px] text-slate-600">{desc}</p>
-                  ))}
-                </div>
-              ) : (
-                <p className="text-[9px] text-slate-500">Proportionate — withdrawals taken from Traditional, Roth, and NQ accounts based on their relative allocation percentages ({inputs.traditionalPercent}% / {inputs.rothPercent}% / {inputs.nqPercent}%).</p>
-              )}
-            </div>
-
-            {/* Roth Conversion Protocol */}
-            <div className="border border-slate-200 rounded p-2">
-              <p className="text-[10px] font-semibold text-slate-700 mb-1">Roth Conversion Protocol</p>
-              {execSummaryPrint.rothAges.length > 0 ? (
-                <>
-                  <div className="flex items-baseline gap-3 mb-1">
-                    <span className="text-[10px] font-bold text-teal-600">{execSummaryPrint.fmt(execSummaryPrint.rothTotal)} total</span>
-                    <span className="text-[9px] text-slate-500">Ages {execSummaryPrint.rothAges[0]}–{execSummaryPrint.rothAges[execSummaryPrint.rothAges.length - 1]}</span>
-                  </div>
-                  <div className="flex flex-wrap gap-0.5">
-                    {execSummaryPrint.rothAges.map(age => (
-                      <div key={age} className="bg-teal-50 rounded px-1.5 py-0.5 text-[9px] border border-teal-100">
-                        <span className="font-semibold text-teal-700">{age}:</span> <span className="text-teal-600">{execSummaryPrint.fmtShort(execSummaryPrint.conversions[age])}</span>
-                      </div>
-                    ))}
-                  </div>
-                </>
-              ) : (
-                <p className="text-[9px] text-slate-500">No Roth conversions scheduled.</p>
+            {/* Distribution methodology note */}
+            <div className="mt-2 p-2 bg-slate-50 border border-slate-200 rounded text-[10px] text-slate-600">
+              <strong>Distribution Methodology:</strong>{' '}
+              {execSummaryPrint.liqDesc.length > 0
+                ? execSummaryPrint.liqDesc.join(' | ')
+                : `Proportionate — withdrawals from Tax-Deferred (${inputs.traditionalPercent}%), Roth (${inputs.rothPercent}%), NQ (${inputs.nqPercent}%)`
+              }
+              {execSummaryPrint.rothAges.length > 0 && (
+                <span className="ml-2 text-teal-600">| Roth Conversions: {execSummaryPrint.fmt(execSummaryPrint.rothTotal)} (Ages {execSummaryPrint.rothAges[0]}–{execSummaryPrint.rothAges[execSummaryPrint.rothAges.length - 1]})</span>
               )}
             </div>
           </div>
 
-          </>}
-
-          {/* ===== SECTION 2: VALUE ADDED ===== */}
-          <h3 className="text-[12px] font-bold text-slate-800 mb-2 pb-1 border-b-2 border-mwm-green uppercase tracking-wide">Value Added Through Intentional Planning</h3>
-
-          <div className="grid grid-cols-2 gap-3">
-            {/* SS Optimization Value — Benefits + Matrix Summary */}
+          {/* 2. Income Distribution Summary */}
+          <h3 className="text-[12px] font-bold text-slate-800 mb-2 pb-1 border-b-2 border-mwm-green uppercase tracking-wide">Income Distribution Summary</h3>
+          <div className="mb-4">
             {(() => {
               const fmt = (v) => `$${Math.round(v).toLocaleString()}`;
-              const pct = (v) => `${(v * 100).toFixed(1)}%`;
-              const FRA = 67;
-
-              // Client benefit details
-              const cAge = inputs.ssStartAge;
-              const cReceiving = inputs.ssCurrentlyReceiving;
-              const cPIA = cReceiving ? getImpliedPIA(inputs.ssPIA, cAge) : inputs.ssPIA;
-              const cOwn = cReceiving ? inputs.ssPIA : getAdjustedSS(cPIA, cAge);
-              const cYearsEarly = Math.max(0, FRA - cAge);
-              const cYearsLate = Math.max(0, cAge - FRA);
-              const cReduction = cPIA > 0 && !cReceiving ? (1 - cOwn / cPIA) : 0;
-              const cBonus = cPIA > 0 && !cReceiving && cAge > FRA ? (cOwn / cPIA - 1) : 0;
-
-              // Spousal
-              const pPartnerPIA = clientInfo.isMarried
-                ? (inputs.partnerSSCurrentlyReceiving ? getImpliedPIA(inputs.partnerSSPIA, inputs.partnerSSStartAge) : inputs.partnerSSPIA)
-                : 0;
-              const dispAgeDiff = clientInfo.currentAge - (clientInfo.partnerAge || clientInfo.currentAge);
-              const cDispSpousalAge = clientInfo.isMarried ? Math.min(FRA, Math.max(cAge, inputs.partnerSSStartAge + dispAgeDiff)) : cAge;
-              const cAfterDeemed = clientInfo.isMarried ? applyDeemedFiling(cOwn, pPartnerPIA, true, cAge, cPIA, cDispSpousalAge) : cOwn;
-
-              // Partner
-              let pOwn = 0, pAfterDeemed = 0, pYearsEarly = 0, pYearsLate = 0, pReduction = 0, pBonus = 0, pPIA = 0;
-              if (clientInfo.isMarried) {
-                const pAge = inputs.partnerSSStartAge;
-                const pRec = inputs.partnerSSCurrentlyReceiving;
-                pPIA = pRec ? getImpliedPIA(inputs.partnerSSPIA, pAge) : inputs.partnerSSPIA;
-                pOwn = pRec ? inputs.partnerSSPIA : getAdjustedSS(pPIA, pAge);
-                pYearsEarly = Math.max(0, FRA - pAge);
-                pYearsLate = Math.max(0, pAge - FRA);
-                pReduction = pPIA > 0 && !pRec ? (1 - pOwn / pPIA) : 0;
-                pBonus = pPIA > 0 && !pRec && pAge > FRA ? (pOwn / pPIA - 1) : 0;
-                const pDispSpousalAge = Math.min(FRA, Math.max(pAge, cAge - dispAgeDiff));
-                pAfterDeemed = applyDeemedFiling(pOwn, cPIA, true, pAge, pPIA, pDispSpousalAge);
-              }
-              const totalMonthly = cAfterDeemed + pAfterDeemed;
-
-              // Benefit row renderer (compact print version)
-              const BenefitRow = ({ label, pia, claimAge, yearsEarly, yearsLate, reduction, bonus, ownBenefit, afterDeemed, receiving }) => (
-                <div className="text-[9px] leading-tight">
-                  <p className="font-bold text-slate-700 text-[10px] mb-0.5">{label}</p>
-                  <div className="grid grid-cols-2 gap-x-3">
-                    <span className="text-slate-500">PIA (FRA 67)</span><span className="text-right font-medium">{fmt(pia)}/mo</span>
-                    <span className="text-slate-500">Claim age</span>
-                    <span className="text-right font-medium">
-                      {claimAge}{yearsEarly > 0 && <span className="text-red-500"> ({yearsEarly}yr early)</span>}{yearsLate > 0 && <span className="text-mwm-green"> ({yearsLate}yr late)</span>}
-                    </span>
-                    {!receiving && reduction > 0 && <><span className="text-red-500">Early reduction</span><span className="text-right text-red-500">-{pct(reduction)}</span></>}
-                    {!receiving && bonus > 0 && <><span className="text-mwm-green">Delayed credits</span><span className="text-right text-mwm-green">+{pct(bonus)}</span></>}
-                    <span className="text-slate-500">Own benefit</span><span className="text-right font-medium">{fmt(ownBenefit)}/mo</span>
-                    {afterDeemed > ownBenefit && <><span className="text-blue-600">Spousal excess</span><span className="text-right text-blue-600">+{fmt(afterDeemed - ownBenefit)}/mo</span></>}
-                    <span className="text-slate-700 font-bold border-t border-slate-200 pt-0.5">Total benefit</span>
-                    <span className="text-right font-bold text-mwm-green/80 border-t border-slate-200 pt-0.5">{fmt(afterDeemed)}/mo</span>
-                  </div>
-                </div>
-              );
-
+              const firstRow = printData[0] || {};
+              const midIdx = Math.min(Math.floor(printData.length / 2), printData.length - 1);
+              const midRow = printData[midIdx] || {};
+              const lastRow = printData[printData.length - 1] || {};
+              const snapshots = [
+                { label: `Year 1 (Age ${firstRow.age || '-'})`, data: firstRow },
+                { label: `Year ${midIdx + 1} (Age ${midRow.age || '-'})`, data: midRow },
+                { label: `Year ${printData.length} (Age ${lastRow.age || '-'})`, data: lastRow },
+              ];
               return (
-                <div className="border border-slate-200 rounded-lg p-2.5">
-                  <p className="text-[10px] font-semibold text-slate-700 mb-1.5">Social Security Optimization</p>
-
-                  {/* Benefits Calculation */}
-                  <div className={`grid ${clientInfo.isMarried ? 'grid-cols-2' : 'grid-cols-1'} gap-3 mb-2 p-2 bg-slate-50 rounded border border-slate-200`}>
-                    <BenefitRow label={clientInfo.name || 'Client'} pia={cPIA} claimAge={cAge} yearsEarly={cYearsEarly} yearsLate={cYearsLate} reduction={cReduction} bonus={cBonus} ownBenefit={cOwn} afterDeemed={cAfterDeemed} receiving={cReceiving} />
-                    {clientInfo.isMarried && (
-                      <BenefitRow label={clientInfo.partnerName || 'Partner'} pia={pPIA} claimAge={inputs.partnerSSStartAge} yearsEarly={pYearsEarly} yearsLate={pYearsLate} reduction={pReduction} bonus={pBonus} ownBenefit={pOwn} afterDeemed={pAfterDeemed} receiving={inputs.partnerSSCurrentlyReceiving} />
+                <table className="w-full text-[11px] border-collapse border border-slate-200 rounded-lg overflow-hidden">
+                  <thead>
+                    <tr className="bg-slate-100 text-slate-600 font-bold">
+                      <th className="p-1.5 text-left">Income Source</th>
+                      {snapshots.map((s, i) => <th key={i} className="p-1.5 text-right">{s.label}</th>)}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <tr className="border-t border-slate-100">
+                      <td className="p-1.5 text-slate-600">Social Security</td>
+                      {snapshots.map((s, i) => <td key={i} className="p-1.5 text-right">{fmt(s.data.ssIncomeDetail || 0)}</td>)}
+                    </tr>
+                    <tr className="border-t border-slate-100 bg-slate-50">
+                      <td className="p-1.5 text-slate-600">Pension</td>
+                      {snapshots.map((s, i) => <td key={i} className="p-1.5 text-right">{fmt(s.data.pensionIncomeDetail || 0)}</td>)}
+                    </tr>
+                    {printData.some(r => (r.employmentIncomeDetail || 0) > 0) && (
+                      <tr className="border-t border-slate-100">
+                        <td className="p-1.5 text-slate-600">Employment</td>
+                        {snapshots.map((s, i) => <td key={i} className="p-1.5 text-right">{fmt(s.data.employmentIncomeDetail || 0)}</td>)}
+                      </tr>
                     )}
-                  </div>
-                  {clientInfo.isMarried && (
-                    <p className="text-[9px] font-bold text-mwm-green/80 text-right mb-2">Combined: {fmt(totalMonthly)}/mo ({fmt(totalMonthly * 12)}/yr)</p>
-                  )}
-
-                  {/* Matrix Summary — if matrix has been run */}
-                  {ssMatrixData && clientInfo.isMarried && (
-                    <div>
-                      <div className="bg-slate-800 text-white p-1.5 rounded mb-1 flex items-center gap-2">
-                        <p className="text-[9px] font-bold">
-                          Optimal: {clientInfo.name || 'Primary'} <span className="text-mwm-green">{ssMatrixData.winner.clientAge}</span> + {clientInfo.partnerName || 'Spouse'} <span className="text-mwm-green">{ssMatrixData.winner.partnerAge}</span>
-                          <span className="text-gray-400 font-normal ml-2">Portfolio at {targetMaxPortfolioAge}: {fmt(Math.round(ssMatrixData.winner.balance))}</span>
-                        </p>
-                      </div>
-                      {(() => {
-                        const allBal = ssMatrixData.matrix.map(m => m.balance);
-                        const minB = Math.min(...allBal);
-                        const maxB = Math.max(...allBal);
-                        const rng = maxB - minB || 1;
-                        return (
-                          <table className="w-full border-collapse text-[8px]">
-                            <thead>
-                              <tr>
-                                <th className="p-0.5 bg-slate-100 border border-slate-200 text-[7px] text-slate-500">
-                                  <div className="flex flex-col items-center leading-none"><span>Spouse</span><span>\</span><span>Primary</span></div>
-                                </th>
-                                {ssMatrixData.ages.map(a => (
-                                  <th key={a} className="p-0.5 bg-slate-100 border border-slate-200 text-center font-bold text-slate-700">{a}</th>
-                                ))}
-                              </tr>
-                            </thead>
-                            <tbody>
-                              {ssMatrixData.ages.map(pAge => (
-                                <tr key={pAge}>
-                                  <td className="p-0.5 bg-slate-100 border border-slate-200 text-center font-bold text-slate-700">{pAge}</td>
-                                  {ssMatrixData.ages.map(cAge => {
-                                    const cell = ssMatrixData.matrix.find(m => m.clientAge === cAge && m.partnerAge === pAge);
-                                    const bal = cell?.balance || 0;
-                                    const isOpt = ssMatrixData.winner.clientAge === cAge && ssMatrixData.winner.partnerAge === pAge;
-                                    const isSel = inputs.ssStartAge === cAge && inputs.partnerSSStartAge === pAge;
-                                    const p = (bal - minB) / rng;
-                                    const bg = isOpt ? 'bg-mwm-green/30 font-bold' : isSel ? 'bg-blue-100' : p >= 0.85 ? 'bg-mwm-green/20' : p >= 0.6 ? 'bg-mwm-green/10' : p >= 0.35 ? 'bg-mwm-gold/10' : p >= 0.15 ? 'bg-orange-50' : 'bg-red-50';
-                                    return (
-                                      <td key={cAge} className={`p-0.5 border border-slate-200 text-center ${bg}`}>
-                                        ${(bal / 1000000).toFixed(2)}M
-                                        {isOpt && <span className="block text-[6px] text-mwm-green/80">BEST</span>}
-                                        {isSel && !isOpt && <span className="block text-[6px] text-blue-600">SEL</span>}
-                                      </td>
-                                    );
-                                  })}
-                                </tr>
-                              ))}
-                            </tbody>
-                          </table>
-                        );
-                      })()}
-                    </div>
-                  )}
-
-                  {/* Single client — show outcomes list */}
-                  {!clientInfo.isMarried && ssAnalysis?.outcomes && (
-                    <div className="mt-1">
-                      <p className="text-[9px] text-slate-500 font-semibold mb-0.5">Portfolio at Age {targetMaxPortfolioAge} by Claiming Age</p>
-                      <div className="flex flex-wrap gap-1">
-                        {ssAnalysis.outcomes.map(o => {
-                          const isSelected = o.age === inputs.ssStartAge;
-                          const isWinner = ssAnalysis.winner && o.age === ssAnalysis.winner.age;
-                          return (
-                            <div key={o.age} className={`rounded px-1.5 py-0.5 text-[8px] border ${isWinner ? 'bg-mwm-green/20 border-mwm-green font-bold' : isSelected ? 'bg-blue-50 border-blue-300' : 'bg-slate-50 border-slate-200'}`}>
-                              <span className="font-semibold">{o.age}:</span> ${(o.balance / 1000000).toFixed(2)}M
-                              {isWinner && <span className="text-mwm-green/80 ml-0.5">Best</span>}
-                              {isSelected && !isWinner && <span className="text-blue-600 ml-0.5">Sel</span>}
-                            </div>
-                          );
-                        })}
-                      </div>
-                    </div>
-                  )}
-                </div>
+                    {printData.some(r => (r.otherIncomeDetail || 0) > 0) && (
+                      <tr className="border-t border-slate-100 bg-slate-50">
+                        <td className="p-1.5 text-slate-600">Other Income</td>
+                        {snapshots.map((s, i) => <td key={i} className="p-1.5 text-right">{fmt(s.data.otherIncomeDetail || 0)}</td>)}
+                      </tr>
+                    )}
+                    <tr className="border-t border-slate-100">
+                      <td className="p-1.5 text-slate-600">Portfolio Withdrawals</td>
+                      {snapshots.map((s, i) => <td key={i} className="p-1.5 text-right text-orange-600">{fmt(s.data.distribution || 0)}</td>)}
+                    </tr>
+                    <tr className="border-t-2 border-slate-300 bg-blue-50 font-bold">
+                      <td className="p-1.5 text-blue-800">Total Income</td>
+                      {snapshots.map((s, i) => <td key={i} className="p-1.5 text-right text-blue-800">{fmt((s.data.ssIncome || 0) + (s.data.distribution || 0))}</td>)}
+                    </tr>
+                    <tr className="border-t border-slate-100">
+                      <td className="p-1.5 text-slate-600">Living Expenses</td>
+                      {snapshots.map((s, i) => <td key={i} className="p-1.5 text-right">{fmt(s.data.livingExpenses || s.data.expenses || 0)}</td>)}
+                    </tr>
+                    {inputs.taxEnabled && (
+                      <tr className="border-t border-slate-100 bg-slate-50">
+                        <td className="p-1.5 text-red-600">Estimated Taxes</td>
+                        {snapshots.map((s, i) => <td key={i} className="p-1.5 text-right text-red-600">({fmt(s.data.totalTax || 0)})</td>)}
+                      </tr>
+                    )}
+                  </tbody>
+                </table>
               );
             })()}
-
-            {/* Legacy Comparison */}
-            {execSummaryPrint?.baseline && (
-              <div className="border border-slate-200 rounded-lg p-2.5">
-                <p className="text-[10px] font-semibold text-slate-700 mb-1.5">Hypothetical Net Legacy to Heirs</p>
-                <div className="grid grid-cols-2 gap-2 mb-1.5">
-                  {/* Baseline */}
-                  <div className="bg-slate-50 rounded p-1.5">
-                    <p className="text-[8px] text-slate-400 uppercase font-semibold mb-0.5">Without Optimization</p>
-                    <div className="space-y-0.5 text-[10px]">
-                      <div className="flex justify-between"><span className="text-slate-500">Legacy Balance</span><span className="font-medium">{execSummaryPrint.fmtShort(execSummaryPrint.baseline.legacy)}</span></div>
-                      <div className="flex justify-between"><span className="text-red-400">Heir Taxes</span><span className="font-medium text-red-500">({execSummaryPrint.fmtShort(execSummaryPrint.baseline.heirTax)})</span></div>
-                      <div className="flex justify-between border-t border-slate-200 pt-0.5 font-bold"><span>Net Legacy</span><span className="text-slate-600">{execSummaryPrint.fmtShort(execSummaryPrint.baseline.afterTaxLegacy)}</span></div>
-                    </div>
-                  </div>
-                  {/* Prepared Plan */}
-                  <div className="bg-mwm-green/10 rounded p-1.5 border border-mwm-green/20">
-                    <p className="text-[8px] text-mwm-green/80 uppercase font-semibold mb-0.5">Prepared Plan</p>
-                    <div className="space-y-0.5 text-[10px]">
-                      <div className="flex justify-between"><span className="text-slate-500">Legacy Balance</span><span className="font-medium">{execSummaryPrint.fmtShort(execSummaryPrint.current.legacy)}</span></div>
-                      <div className="flex justify-between"><span className="text-red-400">Heir Taxes</span><span className="font-medium text-red-500">({execSummaryPrint.fmtShort(execSummaryPrint.current.heirTax)})</span></div>
-                      <div className="flex justify-between border-t border-slate-200 pt-0.5 font-bold"><span>Net Legacy</span><span className="text-mwm-green">{execSummaryPrint.fmtShort(execSummaryPrint.current.afterTaxLegacy)}</span></div>
-                    </div>
-                  </div>
-                </div>
-                {/* Net improvement */}
-                {(() => {
-                  const legacyImprove = execSummaryPrint.current.afterTaxLegacy - execSummaryPrint.baseline.afterTaxLegacy;
-                  return legacyImprove !== 0 ? (
-                    <div className={`text-center rounded p-1 ${legacyImprove > 0 ? 'bg-emerald-50 border border-emerald-200' : 'bg-red-50 border border-red-200'}`}>
-                      <p className="text-[8px] text-slate-500 uppercase font-semibold">Net Legacy Improvement</p>
-                      <p className={`text-sm font-bold ${legacyImprove > 0 ? 'text-emerald-600' : 'text-red-600'}`}>
-                        {legacyImprove > 0 ? '+' : ''}{execSummaryPrint.fmt(legacyImprove)}
-                      </p>
-                    </div>
-                  ) : null;
-                })()}
-              </div>
-            )}
           </div>
 
-          {/* Explanatory note */}
-          {execSummaryPrint?.baseline && (
-            <div className="mt-2 bg-slate-50 border border-slate-200 rounded p-2 text-[9px] text-slate-500">
-              <strong className="text-slate-600">How this value is created:</strong> The differences above result from reducing lifetime federal and state income taxes through Roth conversions and withdrawal sequencing, lowering the tax burden inherited by heirs by shifting assets from tax-deferred to tax-free accounts, and minimizing lifetime IRMAA Medicare surcharges by managing MAGI in key years. Heir tax burden estimated at {Math.round(execSummaryPrint.heirFederalRate * 100)}% federal + {(execSummaryPrint.heirStateRate * 100).toFixed(1)}% state on inherited traditional IRA balances.
+          {/* 3. Projected Legacy */}
+          <h3 className="text-[12px] font-bold text-slate-800 mb-2 pb-1 border-b-2 border-mwm-green uppercase tracking-wide">Projected Legacy ({legacyLabel})</h3>
+          <div className="grid grid-cols-3 gap-4">
+            <div className="border border-slate-200 rounded-lg p-3 text-center">
+              <p className="text-[10px] text-slate-500 uppercase font-semibold mb-1">Portfolio Balance</p>
+              <p className="text-2xl font-bold text-slate-800">{execSummaryPrint.fmtShort(execSummaryPrint.current.legacy)}</p>
+            </div>
+            {inputs.taxEnabled && (
+              <div className="border border-slate-200 rounded-lg p-3 text-center">
+                <p className="text-[10px] text-slate-500 uppercase font-semibold mb-1">Est. Heir Tax Burden</p>
+                <p className="text-2xl font-bold text-red-600">({execSummaryPrint.fmtShort(execSummaryPrint.current.heirTax)})</p>
+                <p className="text-[9px] text-slate-400 mt-0.5">{Math.round(execSummaryPrint.heirFederalRate * 100)}% fed + {(execSummaryPrint.heirStateRate * 100).toFixed(1)}% state on tax-deferred</p>
+              </div>
+            )}
+            <div className={`rounded-lg p-3 text-center ${inputs.taxEnabled ? 'bg-mwm-green/10 border border-mwm-green/30' : 'border border-slate-200'}`}>
+              <p className="text-[10px] text-slate-500 uppercase font-semibold mb-1">{inputs.taxEnabled ? 'After-Tax Legacy' : 'Legacy Balance'}</p>
+              <p className="text-2xl font-bold text-mwm-green">{execSummaryPrint.fmtShort(inputs.taxEnabled ? execSummaryPrint.current.afterTaxLegacy : execSummaryPrint.current.legacy)}</p>
+            </div>
+          </div>
+          {inputs.taxEnabled && execSummaryPrint.current.tradLegacy > 0 && (
+            <div className="mt-2 grid grid-cols-3 gap-2 text-[10px]">
+              <div className="bg-blue-50 rounded p-2 text-center">
+                <p className="text-slate-500">Tax-Deferred</p>
+                <p className="font-bold text-blue-700">{execSummaryPrint.fmtShort(execSummaryPrint.current.tradLegacy)}</p>
+              </div>
+              <div className="bg-green-50 rounded p-2 text-center">
+                <p className="text-slate-500">Roth (tax-free)</p>
+                <p className="font-bold text-green-700">{execSummaryPrint.fmtShort(execSummaryPrint.current.rothLegacy)}</p>
+              </div>
+              <div className="bg-amber-50 rounded p-2 text-center">
+                <p className="text-slate-500">Non-Qualified</p>
+                <p className="font-bold text-amber-700">{execSummaryPrint.fmtShort(execSummaryPrint.current.nqLegacy)}</p>
+              </div>
             </div>
           )}
+
+          {/* Monte Carlo success rate */}
+          <div className="mt-4 p-3 border border-slate-200 rounded-lg flex items-center justify-between">
+            <div>
+              <p className="text-[11px] font-bold text-slate-700">Portfolio Sustainability</p>
+              <p className="text-[10px] text-slate-500">Based on 1,000 Monte Carlo simulations through {legacyLabel}</p>
+            </div>
+            <div className={`text-3xl font-bold ${monteCarloData.successRate >= 85 ? 'text-mwm-green' : monteCarloData.successRate >= 65 ? 'text-orange-600' : 'text-red-600'}`}>
+              {monteCarloData.successRate.toFixed(1)}%
+            </div>
+          </div>
+
         </PrintPageWrapper>
       )}
 
       {/* PRINT PAGE: Disclosures */}
-      <PrintPageWrapper pageNumber={(hasTaxStrategyPage ? 10 : 9) + cashFlowPageCount + (hasExecSummaryPage ? 1 : 0)} totalPages={totalPrintPages} title="Important Disclosures" subtitle="Assumptions, methodology, and limitations">
-        <div className="space-y-2 text-[12px] text-slate-600">
-          {/* Return Assumptions */}
-          <div className="border border-slate-200 rounded-lg p-2">
-            <h3 className="font-bold text-[12px] text-slate-800 mb-1">Return & Interest Rate Assumptions</h3>
-            <div className="grid grid-cols-2 gap-2">
-              <div>
-                <p className="mb-0.5">Projected returns based on historical averages and forward-looking estimates:</p>
-                <ul className="list-disc list-inside ml-1">
-                  <li>B1 (Liquidity): {assumptions.b1.return}% return, {assumptions.b1.stdDev}% std dev</li>
-                  <li>B2 (Bridge): {assumptions.b2.return}% return, {assumptions.b2.stdDev}% std dev</li>
-                  <li>B3 (Tactical Balanced): {assumptions.b3.return}% return, {assumptions.b3.stdDev}% std dev</li>
-                  <li>B4 (Income & Growth): {assumptions.b4.return}% return, {assumptions.b4.stdDev}% std dev</li>
-                  <li>B5 (Permanent Equity): {assumptions.b5.return}% return, {assumptions.b5.stdDev}% std dev</li>
-                </ul>
-              </div>
-              <div>
-                <p className="mb-0.5">These assumptions are estimates and actual results may vary significantly. Past performance does not guarantee future results.</p>
-                <p className="mb-0.5"><strong>Inflation:</strong> {inputs.inflationRate}% annual rate for SS COLA and expense projections.</p>
-                <p><strong>Personal Inflation:</strong> {inputs.personalInflationRate}% applied to retirement spending projections.</p>
-              </div>
-            </div>
-          </div>
-
-          {/* Monte Carlo Methodology */}
-          <div className="border border-slate-200 rounded-lg p-2">
-            <h3 className="font-bold text-[12px] text-slate-800 mb-1">Monte Carlo Simulation Methodology</h3>
-            <div className="grid grid-cols-2 gap-2">
-              <div>
-                <p className="mb-0.5">Success rates calculated using Monte Carlo simulation: 1,000 independent iterations with random returns using normal distribution, correlated based on historical relationships, with annual rebalancing over a 30-year projection horizon.</p>
-              </div>
-              <div>
-                <p className="mb-0.5"><strong>Success Definition:</strong> Portfolio maintains positive balance throughout the projection period.</p>
-                <p><strong>Limitations:</strong> Simulations cannot predict actual future returns. They provide a range of possible outcomes based on historical patterns and may not account for extreme market events or changes in tax law.</p>
-              </div>
-            </div>
-          </div>
-
-          {/* Social Security Assumptions */}
-          <div className="border border-slate-200 rounded-lg p-2">
-            <h3 className="font-bold text-[12px] text-slate-800 mb-1">Social Security & Income Assumptions</h3>
-            <p>Social Security benefits adjusted based on claiming age: Before FRA (67): reduced ~6.67%/year. After FRA: increased 8%/year up to age 70. Annual COLA applied based on assumed inflation rate. Pension income assumes continued payment per stated terms with COLA only if indicated.</p>
-          </div>
-
-          {/* General Disclaimers */}
-          <div className="border border-slate-200 rounded-lg p-2">
-            <h3 className="font-bold text-[12px] text-slate-800 mb-1">General Disclaimers</h3>
-            <p className="mb-0.5">This analysis is for educational and illustrative purposes only and should not be construed as personalized investment advice. Projections are hypothetical and do not represent actual investment results. Investment involves risk, including possible loss of principal. No guarantee any strategy will achieve its objectives. Diversification does not ensure profit or protect against loss. Tax considerations are important but not fully addressed here - consult a qualified tax professional.</p>
-            <p>Report generated {new Date().toLocaleDateString()}. Regular reviews and updates recommended.</p>
-          </div>
-
-          {/* Regulatory Disclosure */}
-          <div className="bg-slate-100 rounded-lg p-2">
-            <p>Securities offered through LPL Financial, Member FINRA/SIPC. Investment Advice offered through Miller Wealth Management, a Registered Investment Advisor. Miller Wealth Management is a separate entity from LPL Financial. The opinions voiced in this material are for general information only and are not intended to provide specific advice or recommendations for any individual.</p>
-          </div>
-        </div>
-      </PrintPageWrapper>
+      {/* Disclosures moved to after TOC */}
 
       {/* PRINT PAGE 10: Back Cover - The One Process */}
       <div className="hidden print:flex flex-col min-h-[10in] break-after-page p-12 bg-white">

@@ -956,7 +956,13 @@ export const InputsPage = ({
                   {data.name}
                   <Info className="w-3 h-3 text-slate-400 cursor-help" />
                 </p>
-                {data.subtitle && <p className="text-[10px] text-slate-400 font-medium">{data.subtitle}</p>}
+                <input
+                  type="text"
+                  value={data.subtitle || ''}
+                  onChange={(e) => onAssumptionChange(key, 'subtitle', e.target.value)}
+                  className="text-[10px] text-slate-400 font-medium bg-transparent border-b border-transparent hover:border-slate-300 focus:border-mwm-green focus:outline-none px-1 py-0.5 max-w-[200px]"
+                  placeholder="Portfolio description..."
+                />
               </div>
               <div className="absolute left-4 bottom-full mb-1 hidden group-hover:block w-80 bg-slate-800 text-white text-[11px] p-3 rounded shadow-lg z-20 leading-relaxed">
                 {forwardNotes[key]}

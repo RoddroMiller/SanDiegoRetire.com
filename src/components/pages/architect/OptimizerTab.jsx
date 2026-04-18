@@ -12,6 +12,8 @@ export const OptimizerTab = ({ optimizerData, inputs, basePlan, monteCarloData, 
   const [selectedIPSStrategy, setSelectedIPSStrategy] = useState(null);
   const [selectedIPSRebalanceFreq, setSelectedIPSRebalanceFreq] = useState(optimizerRebalanceFreq);
   const optimizerFinalAge = projectionData[projectionData.length - 1]?.age || inputs.expectedDeathAge || 95;
+  const optimizerYears = optimizerFinalAge - (clientInfo?.retirementAge || 65);
+  const optimizerLegacyLabel = `Year ${optimizerYears} (Retirement + ${optimizerYears})`;
   const [showVaResults, setShowVaResults] = useState(false);
 
   // Use VA optimizer data when VA is enabled and toggle is on
@@ -156,7 +158,7 @@ export const OptimizerTab = ({ optimizerData, inputs, basePlan, monteCarloData, 
 
         {/* Projected Legacy */}
         <div className="mb-4 p-3 bg-slate-100 rounded-lg">
-          <p className="text-xs text-slate-500">Projected Legacy (Age {optimizerFinalAge})</p>
+          <p className="text-xs text-slate-500">Projected Legacy ({optimizerLegacyLabel})</p>
           <p className="font-bold text-lg text-slate-800">${Math.round(legacy).toLocaleString()}</p>
         </div>
 

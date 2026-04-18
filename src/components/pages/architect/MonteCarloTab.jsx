@@ -13,11 +13,13 @@ import { Activity, Shield, TrendingUp } from 'lucide-react';
 import { COLORS } from '../../../constants';
 import { Card, StatBox } from '../../ui';
 
-export const MonteCarloTab = ({ monteCarloData, rebalanceFreq, onSetRebalanceFreq, assumptions, vaEnabled, vaInputs, onToggleVa, onVaInputChange, vaMonteCarloData, inputs, basePlan, vaAdjustedBasePlan }) => {
+export const MonteCarloTab = ({ monteCarloData, rebalanceFreq, onSetRebalanceFreq, assumptions, vaEnabled, vaInputs, onToggleVa, onVaInputChange, vaMonteCarloData, inputs, basePlan, vaAdjustedBasePlan, clientInfo }) => {
   const [scenario, setScenario] = useState('median');
   const simYears = monteCarloData?.data?.length || 30;
   const startAge = basePlan?.simulationStartAge || 65;
   const finalProjectionAge = startAge + simYears;
+  const projectionYears = finalProjectionAge - (clientInfo?.retirementAge || 65);
+  const legacyLabel = `Year ${projectionYears} (Retirement + ${projectionYears})`;
 
   const vaAllocationAmount = vaInputs && vaEnabled
     ? (vaInputs.allocationType === 'percentage'
@@ -270,7 +272,7 @@ export const MonteCarloTab = ({ monteCarloData, rebalanceFreq, onSetRebalanceFre
 
       {/* Monte Carlo Range Chart */}
       <Card className="p-6">
-        <h3 className="font-bold text-lg text-slate-800 mb-6">Portfolio Range (Through Age {finalProjectionAge})</h3>
+        <h3 className="font-bold text-lg text-slate-800 mb-6">Portfolio Range (Through {legacyLabel})</h3>
         <div className="h-80 w-full">
           <ResponsiveContainer width="100%" height="100%">
             <ComposedChart data={monteCarloData.data}>
