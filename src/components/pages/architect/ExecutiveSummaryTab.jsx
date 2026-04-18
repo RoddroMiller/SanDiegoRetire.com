@@ -34,7 +34,7 @@ const fmtShort = (val) => {
  * 4. Middle-priority fills B3.
  * 5. If no liquidation strategy: NQ → B1/B2, Traditional → B3/B4, Roth → B5.
  */
-const optimizeAllocation = (bucketTargets, accountBalances, liquidationStrategies) => {
+const optimizeAllocation = (bucketTargets, accountBalances, liquidationStrategies, liquidationMode, globalPcts) => {
   // Matrix: matrix[accountType][bucketKey] = dollar amount
   const matrix = {};
   for (const acct of ACCOUNT_TYPES) {
@@ -44,45 +44,82 @@ const optimizeAllocation = (bucketTargets, accountBalances, liquidationStrategie
     }
   }
 
-  // Remaining capacity in each bucket and remaining balance in each account
   const bucketRemaining = { ...bucketTargets };
   const acctRemaining = { ...accountBalances };
 
-  // Determine fill order: which account type fills which buckets first
-  // Based on liquidation priority — accounts spent FIRST go into near-term buckets
-  let fillOrder;
+  const hasLiqStrategy = liquidationMode === 'priority' && liquidationStrategies && liquidationStrategies.length > 0;
+  const earlyStrategy = hasLiqStrategy
+    ? liquidationStrategies.reduce((a, b) => a.startYear < b.startYear ? a : b)
+    : null;
 
-  if (liquidationStrategies && liquidationStrategies.length > 0) {
-    // Use the first (earliest) strategy to determine primary liquidation order
-    const earlyStrategy = liquidationStrategies.reduce((a, b) => a.startYear < b.startYear ? a : b);
-    const priority = earlyStrategy.priority || ['nq', 'traditional', 'roth'];
-
-    // First priority account → B1, B2 (spent first)
-    // Second priority → B3 (middle)
-    // Third priority → B5, B4 (preserved longest)
-    fillOrder = [
+  if (earlyStrategy && earlyStrategy.split) {
+    // Split-based strategy: fill each bucket proportionally by the split percentages
+    const sp = earlyStrategy.split;
+    const totalPct = (sp.traditional || 0) + (sp.roth || 0) + (sp.nq || 0);
+    if (totalPct > 0) {
+      for (const bk of BUCKET_KEYS) {
+        const bkSize = bucketRemaining[bk] || 0;
+        for (const acct of ACCOUNT_TYPES) {
+          const pct = (sp[acct] || 0) / totalPct;
+          const desired = bkSize * pct;
+          const fill = Math.min(desired, acctRemaining[acct] || 0, bucketRemaining[bk] || 0);
+          matrix[acct][bk] = fill;
+          acctRemaining[acct] -= fill;
+          bucketRemaining[bk] -= fill;
+        }
+      }
+      // Distribute any remaining account balances to unfilled buckets
+      for (const acct of ACCOUNT_TYPES) {
+        if (acctRemaining[acct] <= 0) continue;
+        for (const bk of BUCKET_KEYS) {
+          if (acctRemaining[acct] <= 0 || bucketRemaining[bk] <= 0) continue;
+          const fill = Math.min(acctRemaining[acct], bucketRemaining[bk]);
+          matrix[acct][bk] += fill;
+          acctRemaining[acct] -= fill;
+          bucketRemaining[bk] -= fill;
+        }
+      }
+    }
+  } else if (earlyStrategy && earlyStrategy.priority) {
+    // Priority-based: first-priority fills spending buckets, last fills growth buckets
+    const priority = earlyStrategy.priority;
+    const fillOrder = [
       { acct: priority[0], buckets: ['b1', 'b2', 'b3', 'b4', 'b5'] },
-      { acct: priority[1], buckets: ['b3', 'b2', 'b4', 'b1', 'b5'] },
+      { acct: priority[1], buckets: ['b2', 'b3', 'b4', 'b1', 'b5'] },
       { acct: priority[2], buckets: ['b5', 'b4', 'b3', 'b2', 'b1'] },
     ];
+    for (const { acct, buckets } of fillOrder) {
+      if ((acctRemaining[acct] || 0) <= 0) continue;
+      for (const bk of buckets) {
+        if (acctRemaining[acct] <= 0 || bucketRemaining[bk] <= 0) continue;
+        const fill = Math.min(acctRemaining[acct], bucketRemaining[bk]);
+        matrix[acct][bk] = fill;
+        acctRemaining[acct] -= fill;
+        bucketRemaining[bk] -= fill;
+      }
+    }
   } else {
-    // Default tax-efficient mapping
-    fillOrder = [
-      { acct: 'nq', buckets: ['b1', 'b2', 'b3', 'b4', 'b5'] },           // NQ spent first (near-term)
-      { acct: 'traditional', buckets: ['b3', 'b4', 'b2', 'b5', 'b1'] },   // Traditional in middle
-      { acct: 'roth', buckets: ['b5', 'b4', 'b3', 'b2', 'b1'] },          // Roth preserved longest
-    ];
-  }
-
-  // Fill the matrix greedily: for each account type in priority order, fill its preferred buckets
-  for (const { acct, buckets } of fillOrder) {
-    if ((acctRemaining[acct] || 0) <= 0) continue;
-    for (const bk of buckets) {
-      if (acctRemaining[acct] <= 0 || bucketRemaining[bk] <= 0) continue;
-      const fill = Math.min(acctRemaining[acct], bucketRemaining[bk]);
-      matrix[acct][bk] = fill;
-      acctRemaining[acct] -= fill;
-      bucketRemaining[bk] -= fill;
+    // Default (proportionate): fill each bucket matching the global account split
+    const pcts = globalPcts || { traditional: 0.6, roth: 0.25, nq: 0.15 };
+    for (const bk of BUCKET_KEYS) {
+      const bkSize = bucketRemaining[bk] || 0;
+      for (const acct of ACCOUNT_TYPES) {
+        const desired = bkSize * (pcts[acct] || 0);
+        const fill = Math.min(desired, acctRemaining[acct] || 0, bucketRemaining[bk] || 0);
+        matrix[acct][bk] = fill;
+        acctRemaining[acct] -= fill;
+        bucketRemaining[bk] -= fill;
+      }
+    }
+    for (const acct of ACCOUNT_TYPES) {
+      if (acctRemaining[acct] <= 0) continue;
+      for (const bk of BUCKET_KEYS) {
+        if (acctRemaining[acct] <= 0 || bucketRemaining[bk] <= 0) continue;
+        const fill = Math.min(acctRemaining[acct], bucketRemaining[bk]);
+        matrix[acct][bk] += fill;
+        acctRemaining[acct] -= fill;
+        bucketRemaining[bk] -= fill;
+      }
     }
   }
 
@@ -132,8 +169,13 @@ export const ExecutiveSummaryTab = ({
 
   // Auto-optimized matrix
   const autoMatrix = useMemo(() => {
-    return optimizeAllocation(bucketTargets, accountBalances, inputs.liquidationStrategies);
-  }, [bucketTargets, accountBalances, inputs.liquidationStrategies]);
+    const globalPcts = {
+      traditional: (inputs.traditionalPercent ?? 60) / 100,
+      roth: (inputs.rothPercent ?? 25) / 100,
+      nq: (inputs.nqPercent ?? 15) / 100,
+    };
+    return optimizeAllocation(bucketTargets, accountBalances, inputs.liquidationStrategies, inputs.liquidationMode, globalPcts);
+  }, [bucketTargets, accountBalances, inputs.liquidationStrategies, inputs.liquidationMode, inputs.traditionalPercent, inputs.rothPercent, inputs.nqPercent]);
 
   // Active matrix (manual overrides or auto)
   const matrix = manualOverrides || autoMatrix;
