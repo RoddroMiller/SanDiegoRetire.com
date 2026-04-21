@@ -76,7 +76,7 @@ export const ArchitectureTab = ({ inputs, basePlan, assumptions, projectionData 
               <div className="flex justify-between items-center">
                 <div>
                   <p className="font-bold text-slate-800">Bucket 1: Liquidity</p>
-                  <p className="text-xs text-slate-500">Years 1-3 • Immediate liquidity</p>
+                  <p className="text-xs text-slate-500">~Years 1-3 • Immediate liquidity</p>
                 </div>
                 <div className="text-right">
                   <p className="font-bold text-lg">${basePlan.b1Val.toLocaleString()}</p>
@@ -88,7 +88,7 @@ export const ArchitectureTab = ({ inputs, basePlan, assumptions, projectionData 
               <div className="flex justify-between items-center">
                 <div>
                   <p className="font-bold text-slate-800">Bucket 2: Bridge</p>
-                  <p className="text-xs text-slate-500">Years 4-6 • Conservative growth</p>
+                  <p className="text-xs text-slate-500">~Years 4-6 • Conservative growth</p>
                 </div>
                 <div className="text-right">
                   <p className="font-bold text-lg">${basePlan.b2Val.toLocaleString()}</p>
@@ -100,7 +100,7 @@ export const ArchitectureTab = ({ inputs, basePlan, assumptions, projectionData 
               <div className="flex justify-between items-center">
                 <div>
                   <p className="font-bold text-slate-800">Bucket 3: Tactical Balanced</p>
-                  <p className="text-xs text-slate-500">Years 7-14 • Moderate risk</p>
+                  <p className="text-xs text-slate-500">~Years 7-15 • Moderate risk</p>
                 </div>
                 <div className="text-right">
                   <p className="font-bold text-lg">${basePlan.b3Val.toLocaleString()}</p>
@@ -124,7 +124,7 @@ export const ArchitectureTab = ({ inputs, basePlan, assumptions, projectionData 
               <div className="flex justify-between items-center">
                 <div>
                   <p className="font-bold text-slate-800">Bucket 5: Permanent Equity</p>
-                  <p className="text-xs text-slate-500">Years 15+ • Growth engine</p>
+                  <p className="text-xs text-slate-500">~Years 16+ • Growth engine</p>
                 </div>
                 <div className="text-right">
                   <p className="font-bold text-lg">${Math.max(0, basePlan.b5Val).toLocaleString()}</p>

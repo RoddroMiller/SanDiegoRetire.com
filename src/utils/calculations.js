@@ -1314,6 +1314,44 @@ export const calculateBasePlan = (inputs, assumptions, clientInfo, vaEnabled = f
 
   const getAnnualGap = (yearIndex) => getAnnualDetails(yearIndex).gap;
 
+  // Resolve the effective account-type split for a given 1-based year, matching
+  // the logic inside runSimulation's splitWithdrawal(). For priority strategies
+  // we assume the first account in the priority list carries the full draw
+  // (accurate while that account has balance — the common early-year case).
+  const resolveAccountSplit = (yearNum) => {
+    const globalTrad = (inputs.traditionalPercent ?? 60) / 100;
+    const globalRoth = (inputs.rothPercent ?? 25) / 100;
+    const globalNq   = (inputs.nqPercent ?? 15) / 100;
+
+    if (inputs.liquidationMode !== 'priority') {
+      return { traditionalPct: globalTrad, rothPct: globalRoth, nqPct: globalNq };
+    }
+    const strategy = (inputs.liquidationStrategies || []).find(s => yearNum >= s.startYear && yearNum <= s.endYear);
+    if (!strategy) {
+      return { traditionalPct: globalTrad, rothPct: globalRoth, nqPct: globalNq };
+    }
+    if (strategy.split) {
+      const sp = strategy.split;
+      const totalPct = (sp.traditional || 0) + (sp.roth || 0) + (sp.nq || 0);
+      if (totalPct > 0) {
+        return {
+          traditionalPct: (sp.traditional || 0) / totalPct,
+          rothPct:        (sp.roth || 0) / totalPct,
+          nqPct:          (sp.nq || 0) / totalPct,
+        };
+      }
+    }
+    if (Array.isArray(strategy.priority) && strategy.priority.length > 0) {
+      const first = strategy.priority[0];
+      return {
+        traditionalPct: first === 'traditional' ? 1 : 0,
+        rothPct:        first === 'roth'        ? 1 : 0,
+        nqPct:          first === 'nq'          ? 1 : 0,
+      };
+    }
+    return { traditionalPct: globalTrad, rothPct: globalRoth, nqPct: globalNq };
+  };
+
   // Tax-aware gap: estimate the gross withdrawal needed to cover spending + taxes
   // Even when income covers spending (gap=0), taxes on SS/pension/other income may
   // require a portfolio withdrawal, so we always compute the tax liability.
@@ -1324,10 +1362,10 @@ export const calculateBasePlan = (inputs, assumptions, clientInfo, vaEnabled = f
     const rawGap = details.gap;
     const surplus = details.surplus || 0;
 
-    // Estimate tax on the withdrawal using account-type split
-    const traditionalPct = (inputs.traditionalPercent ?? 60) / 100;
-    const rothPct = (inputs.rothPercent ?? 25) / 100;
-    const nqPct = (inputs.nqPercent ?? 15) / 100;
+    // Use the liquidation strategy's split for this year so the tax estimate
+    // matches what the simulation will actually draw from Traditional/Roth/NQ.
+    // yearIndex is 0-based; strategy windows are 1-based, so convert.
+    const { traditionalPct, rothPct, nqPct } = resolveAccountSplit(yearIndex + 1);
     const nqDividendYield = (inputs.nqDividendYield ?? 2.0) / 100;
     const nqQualifiedDividendPct = (inputs.nqQualifiedDividendPercent ?? 80) / 100;
     const nqAnnualCapGainRate = (inputs.nqCapitalGainRate ?? 4) / 100;
@@ -1364,12 +1402,19 @@ export const calculateBasePlan = (inputs, assumptions, clientInfo, vaEnabled = f
     return withdrawal;
   };
 
+  // Bucket need: present value (at year 0) of the nominal tax-aware spending
+  // gaps the bucket must cover, discounted at the bucket's expected return
+  // NET of the advisory fee (which the simulation deducts annually from balances).
+  // With draws taken at end-of-year after growth, the correct discount factor
+  // for year y is (1 + r_net)^y. Under base-case returns this sizes each bucket
+  // to empty exactly at the end of its stated window.
+  const baseAdvisoryFeeRate = (inputs.advisoryFee ?? 1.0) / 100;
   const calculateBucketNeed = (startYear, endYear, rate) => {
+    const netRate = Math.max(0, (rate / 100) - baseAdvisoryFeeRate);
     let totalPV = 0;
     for (let year = startYear; year <= endYear; year++) {
       const futureGap = getTaxAwareGap(year - 1);
-      const pvFactor = Math.pow(1 + (rate / 100), year - 1);
-      totalPV += futureGap / pvFactor;
+      totalPV += futureGap / Math.pow(1 + netRate, year);
     }
     return totalPV;
   };
@@ -1381,14 +1426,14 @@ export const calculateBasePlan = (inputs, assumptions, clientInfo, vaEnabled = f
   const b1Target = Math.round(calculateBucketNeed(b1Start, b1Start + 2, assumptions.b1.return) / 1000) * 1000;
   const b2Start = b1Start + 3;
   const b2Target = Math.round(calculateBucketNeed(b2Start, b2Start + 2, assumptions.b2.return) / 1000) * 1000;
-  // B3 covers years 7-15 with minimum 20% and maximum 25% allocation
+  // B3 covers years 7-15 with minimum 15% and maximum 30% allocation
   const b3Start = b1Start + 6;
   const b3Calculated = Math.round(calculateBucketNeed(b3Start, b3Start + 8, assumptions.b3.return) / 1000) * 1000;
   // Only apply B3 min/max floors when portfolio can cover B1+B2 spending needs
   const spendingDriven = b1Target + b2Target;
   const hasSpendingSurplus = bucketPortfolio > spendingDriven;
-  const b3Min = hasSpendingSurplus ? Math.round((bucketPortfolio * 0.20) / 1000) * 1000 : 0;
-  const b3Max = hasSpendingSurplus ? Math.round((bucketPortfolio * 0.25) / 1000) * 1000 : Infinity;
+  const b3Min = hasSpendingSurplus ? Math.round((bucketPortfolio * 0.15) / 1000) * 1000 : 0;
+  const b3Max = hasSpendingSurplus ? Math.round((bucketPortfolio * 0.30) / 1000) * 1000 : Infinity;
   const b3Target = Math.min(Math.max(b3Calculated, b3Min), b3Max);
   // B4 target is 10% of portfolio, but only when portfolio can cover spending needs
   const b4FullTarget = hasSpendingSurplus ? Math.round((bucketPortfolio * 0.10) / 1000) * 1000 : 0;

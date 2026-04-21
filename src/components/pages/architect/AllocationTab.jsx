@@ -347,21 +347,21 @@ export const AllocationTab = ({
             amount={basePlan.b1Val} percent={((basePlan.b1Val / inputs.totalPortfolio) * 100).toFixed(1)}
             returnRate={assumptions.b1.return} stdDev={assumptions.b1.stdDev}
             historicalReturn={assumptions.b1.historical}
-            description="Immediate liquidity buffer (Years 1-3)."
+            description="Immediate liquidity buffer (~Years 1-3)."
           />
           <AllocationRow
             color={COLORS.midTerm} name="2. Bridge"
             amount={basePlan.b2Val} percent={((basePlan.b2Val / inputs.totalPortfolio) * 100).toFixed(1)}
             returnRate={assumptions.b2.return} stdDev={assumptions.b2.stdDev}
             historicalReturn={assumptions.b2.historical}
-            description="Conservative growth bridge (Years 4-6)."
+            description="Conservative growth bridge (~Years 4-6)."
           />
           <AllocationRow
             color={COLORS.hedged} name="3. Tactical Balanced"
             amount={basePlan.b3Val} percent={((basePlan.b3Val / inputs.totalPortfolio) * 100).toFixed(1)}
             returnRate={assumptions.b3.return} stdDev={assumptions.b3.stdDev}
             historicalReturn={assumptions.b3.historical}
-            description="Moderate risk for intermediate needs (Years 7-14)."
+            description="Moderate risk for intermediate needs (~Years 7-15)."
           />
           <AllocationRow
             color={COLORS.income} name="4. Income & Growth"

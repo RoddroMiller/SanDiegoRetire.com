@@ -18,8 +18,8 @@ export const MonteCarloTab = ({ monteCarloData, rebalanceFreq, onSetRebalanceFre
   const simYears = monteCarloData?.data?.length || 30;
   const startAge = basePlan?.simulationStartAge || 65;
   const finalProjectionAge = startAge + simYears;
-  const projectionYears = finalProjectionAge - (clientInfo?.retirementAge || 65);
-  const legacyLabel = `Year ${projectionYears} (Retirement + ${projectionYears})`;
+  const legacyYear = new Date().getFullYear() + Math.max(0, finalProjectionAge - (clientInfo?.currentAge || clientInfo?.retirementAge || 65));
+  const legacyLabel = `${legacyYear}`;
 
   const vaAllocationAmount = vaInputs && vaEnabled
     ? (vaInputs.allocationType === 'percentage'

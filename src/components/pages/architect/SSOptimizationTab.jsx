@@ -1,5 +1,5 @@
-import React, { useState } from 'react';
-import { Shield, Loader, Calculator, CheckCircle } from 'lucide-react';
+import React, { useState, useMemo } from 'react';
+import { Shield, Loader, Calculator, CheckCircle, AlertTriangle } from 'lucide-react';
 import { getAdjustedSS, getImpliedPIA, applyDeemedFiling, calculateBasePlan, runSimulation } from '../../../utils';
 import { Card } from '../../ui';
 
@@ -8,6 +8,27 @@ export const SSOptimizationTab = ({ clientInfo, inputs, assumptions, basePlan, r
 
   const clientLocked = inputs.ssCurrentlyReceiving;
   const partnerLocked = inputs.partnerSSCurrentlyReceiving;
+
+  // Signature of every input that feeds the matrix. When this changes after the
+  // matrix has been computed, the stored results are stale and the user needs
+  // to click Re-Run. Exclude ssStartAge / partnerSSStartAge because those are
+  // what the matrix iterates over — changing them only moves the "Selected"
+  // highlight, not the underlying cell balances.
+  const matrixSignature = useMemo(() => {
+    const { ssStartAge, partnerSSStartAge, ...inputsForSignature } = inputs;
+    return JSON.stringify({
+      inputs: inputsForSignature,
+      assumptions,
+      clientInfo,
+      rebalanceFreq,
+      rebalanceTargets,
+      targetMaxPortfolioAge,
+      useManualAllocation,
+      manualAllocations,
+    });
+  }, [inputs, assumptions, clientInfo, rebalanceFreq, rebalanceTargets, targetMaxPortfolioAge, useManualAllocation, manualAllocations]);
+
+  const isMatrixStale = !!matrixData && matrixData.signature !== matrixSignature;
 
   const runMatrixOptimization = () => {
     onSetIsRunningMatrix(true);
@@ -37,7 +58,7 @@ export const SSOptimizationTab = ({ clientInfo, inputs, assumptions, basePlan, r
         }
       }
 
-      onSetMatrixData({ matrix, winner, ages });
+      onSetMatrixData({ matrix, winner, ages, signature: matrixSignature });
       onSetIsRunningMatrix(false);
     }, 50);
   };
@@ -313,6 +334,24 @@ export const SSOptimizationTab = ({ clientInfo, inputs, assumptions, basePlan, r
 
           {matrixData ? (
             <>
+              {/* Stale results banner */}
+              {isMatrixStale && (
+                <div className="mb-3 p-3 bg-amber-50 border border-amber-300 rounded-lg flex items-start gap-2">
+                  <AlertTriangle className="w-5 h-5 text-amber-600 flex-shrink-0 mt-0.5" />
+                  <div className="flex-1">
+                    <p className="text-sm font-bold text-amber-800">Stale results</p>
+                    <p className="text-xs text-amber-700">Inputs have changed since this matrix was computed. Click Re-Run Optimization to refresh the grid with the current assumptions.</p>
+                  </div>
+                  <button
+                    onClick={runMatrixOptimization}
+                    disabled={isRunningMatrix}
+                    className="px-3 py-1.5 bg-amber-600 hover:bg-amber-700 disabled:bg-amber-300 text-white text-xs font-bold rounded-lg flex items-center gap-1.5"
+                  >
+                    <Calculator className="w-3.5 h-3.5" /> Re-Run
+                  </button>
+                </div>
+              )}
+
               {/* Winner callout */}
               <div className="bg-black text-white p-4 rounded-xl mb-4 flex items-center justify-between">
                 <div className="flex items-center gap-3">

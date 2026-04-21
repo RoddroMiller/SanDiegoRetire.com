@@ -248,11 +248,11 @@ BUCKET ALLOCATION:
 --------------------------------------------------------------------------------
 Bucket    | Name             | Allocation | Amount          | Time Horizon
 --------------------------------------------------------------------------------
-B1        | Liquidity        | ${allocPcts.b1.padStart(6)}%   | ${formatCurrency(allocation.b1Val || 0).padStart(15)} | Years 1-3
-B2        | Bridge           | ${allocPcts.b2.padStart(6)}%   | ${formatCurrency(allocation.b2Val || 0).padStart(15)} | Years 4-6
-B3        | Tactical Balanced| ${allocPcts.b3.padStart(6)}%   | ${formatCurrency(allocation.b3Val || 0).padStart(15)} | Years 7-15
-B4        | Income & Growth  | ${allocPcts.b4.padStart(6)}%   | ${formatCurrency(allocation.b4Val || 0).padStart(15)} | Years 16-20
-B5        | Permanent Equity | ${allocPcts.b5.padStart(6)}%   | ${formatCurrency(allocation.b5Val || 0).padStart(15)} | Years 21+
+B1        | Liquidity        | ${allocPcts.b1.padStart(6)}%   | ${formatCurrency(allocation.b1Val || 0).padStart(15)} | ~Years 1-3
+B2        | Bridge           | ${allocPcts.b2.padStart(6)}%   | ${formatCurrency(allocation.b2Val || 0).padStart(15)} | ~Years 4-6
+B3        | Tactical Balanced| ${allocPcts.b3.padStart(6)}%   | ${formatCurrency(allocation.b3Val || 0).padStart(15)} | ~Years 7-15
+B4        | Income & Growth  | ${allocPcts.b4.padStart(6)}%   | ${formatCurrency(allocation.b4Val || 0).padStart(15)} | ~Years 16-20
+B5        | Permanent Equity | ${allocPcts.b5.padStart(6)}%   | ${formatCurrency(allocation.b5Val || 0).padStart(15)} | ~Years 21+
 --------------------------------------------------------------------------------
 Total                        | 100.0%   | ${formatCurrency(totalPortfolio).padStart(15)}
 --------------------------------------------------------------------------------
