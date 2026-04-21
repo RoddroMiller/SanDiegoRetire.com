@@ -5,7 +5,7 @@ import { formatPhoneNumber, calculateAccumulation, calculateBasePlan, runSimulat
 import { GateScreen, LoginScreen, ClientLoginScreen, AccumulationPage, ArchitectPage, ClientWizard, PlanManagement, InputsPage } from './components';
 import { MfaVerifyModal, MfaEnrollModal } from './components/auth/MfaModals';
 import { PasswordExpiryModal } from './components/auth/PasswordExpiryModal';
-import { AdvisorNavBar } from './components/ui';
+import { AdvisorNavBar, TeamPickerModal } from './components/ui';
 import { useAuth, useScenarios, useAdvisors, useCommandCenter } from './hooks';
 import { useSessionTimeout } from './hooks/useSessionTimeout';
 
@@ -48,8 +48,11 @@ export default function BucketPortfolioBuilder() {
   // Advisor view state (planning vs management)
   const [advisorView, setAdvisorView] = useState('planning');
 
-  // Plan filter state (mine, team, all)
-  const [planFilter, setPlanFilter] = useState('mine');
+  // Plan filter state: '' = default (all my teams for advisor, all for master), or a specific teamId
+  const [planFilter, setPlanFilter] = useState('');
+
+  // Team picker modal state (used when advisor is on 2+ teams)
+  const [teamPicker, setTeamPicker] = useState({ isOpen: false, resolve: null, defaultTeamId: null });
 
   // --- Command Center Hook (The One Process integration) ---
   // Must be before useScenarios since it provides team data
@@ -66,6 +69,8 @@ export default function BucketPortfolioBuilder() {
     isLoadingTeamClients
   } = useCommandCenter({ currentUser });
 
+  const myTeamIds = useMemo(() => userTeams.map(t => t.id), [userTeams]);
+
   // --- Scenarios Hook ---
   const {
     savedScenarios,
@@ -78,11 +83,12 @@ export default function BucketPortfolioBuilder() {
     deleteScenario,
     clearScenarios,
     reassignScenario,
+    setScenarioTeam,
     refreshScenarios,
     assignPlanToClient,
     removeClientAssignment,
     updateClientStatus
-  } = useScenarios({ currentUser, userRole, planFilter, teamMemberEmails });
+  } = useScenarios({ currentUser, userRole, planFilter, teamMemberEmails, myTeamIds });
 
   // --- Advisors Hook ---
   const {
@@ -248,19 +254,72 @@ export default function BucketPortfolioBuilder() {
   });
 
   // --- Scenario Action Wrappers ---
-  const handleSaveScenario = () => {
-    const legacyEntry = projectionData.find(p => p.age >= 95) || projectionData[projectionData.length - 1];
-    const legacyBalance = legacyEntry?.total || 0;
-    saveScenario({ clientInfo, inputs, assumptions, targetMaxPortfolioAge, rebalanceFreq, vaEnabled, vaInputs, legacyBalance });
+
+  // Resolve which team a save should belong to.
+  // 0 teams -> null; 1 team -> auto; existing valid team -> preserved; else open picker.
+  const resolveTeamForSave = useCallback(() => {
+    // Match by name+email rather than docId — more robust to duplicate-suffix IDs
+    // and to minor edits of email/name after a plan was originally saved.
+    const existingScenario = savedScenarios.find(s =>
+      (s.clientInfo?.email || '') === (clientInfo.email || '') &&
+      (s.clientInfo?.name || '') === (clientInfo.name || '')
+    );
+    const existingTeam = userTeams.find(t => t.id === existingScenario?.teamId);
+
+    if (existingTeam) {
+      return Promise.resolve({ teamId: existingTeam.id, teamName: existingTeam.name });
+    }
+    if (!userTeams || userTeams.length === 0) {
+      return Promise.resolve({ teamId: null, teamName: null });
+    }
+    if (userTeams.length === 1) {
+      return Promise.resolve({ teamId: userTeams[0].id, teamName: userTeams[0].name });
+    }
+    return new Promise((resolve) => {
+      setTeamPicker({ isOpen: true, resolve, defaultTeamId: existingScenario?.teamId || null });
+    });
+  }, [clientInfo, savedScenarios, userTeams]);
+
+  const handleTeamPickerSelect = (team) => {
+    teamPicker.resolve?.({ teamId: team.id, teamName: team.name });
+    setTeamPicker({ isOpen: false, resolve: null, defaultTeamId: null });
   };
 
-  const handleSaveToCommandCenter = async (selectedClientId, ownerAdvisorId = null) => {
+  const handleTeamPickerClose = () => {
+    teamPicker.resolve?.({ cancelled: true });
+    setTeamPicker({ isOpen: false, resolve: null, defaultTeamId: null });
+  };
+
+  const handleSaveScenario = async () => {
+    const legacyEntry = projectionData.find(p => p.age >= 95) || projectionData[projectionData.length - 1];
+    const legacyBalance = legacyEntry?.total || 0;
+    const team = await resolveTeamForSave();
+    if (team.cancelled) return;
+    saveScenario({ clientInfo, inputs, assumptions, targetMaxPortfolioAge, rebalanceFreq, vaEnabled, vaInputs, legacyBalance, teamId: team.teamId, teamName: team.teamName });
+  };
+
+  const handleSaveToCommandCenter = async (selectedClientId, ownerAdvisorId = null, clientTeam = null) => {
+    // Force plan.teamId = client.teamId when the client has a team assigned.
+    // Otherwise resolve via normal rules (existing plan team, single team, or picker).
+    let teamId, teamName;
+    if (clientTeam?.teamId) {
+      teamId = clientTeam.teamId;
+      teamName = clientTeam.teamName || null;
+    } else {
+      const team = await resolveTeamForSave();
+      if (team.cancelled) return { success: false, message: 'Cancelled.' };
+      teamId = team.teamId;
+      teamName = team.teamName;
+    }
+
     const result = await saveToCommandCenter({
       clientInfo,
       inputs,
       assumptions,
       targetMaxPortfolioAge,
       rebalanceFreq,
+      teamId,
+      teamName,
       // Include computed data for Command Center display
       monteCarloData,
       basePlan
@@ -1343,7 +1402,7 @@ export default function BucketPortfolioBuilder() {
           setAdvisorView('planning');
         }}
         onDeleteScenario={handleDeleteScenario}
-        onReassignScenario={reassignScenario}
+        onSetScenarioTeam={setScenarioTeam}
         onRefreshScenarios={refreshScenarios}
         advisors={advisors}
         isLoadingAdvisors={isLoadingAdvisors}
@@ -1356,6 +1415,7 @@ export default function BucketPortfolioBuilder() {
         planFilter={planFilter}
         onPlanFilterChange={setPlanFilter}
         hasTeams={hasTeams}
+        userTeams={userTeams}
       />
       </>
     );
@@ -1366,6 +1426,16 @@ export default function BucketPortfolioBuilder() {
     return (
       <>
       {showSessionWarning && <SessionWarningModal />}
+      {teamPicker.isOpen && (
+        <TeamPickerModal
+          teams={userTeams}
+          title="Assign plan to a team"
+          message="You're on multiple teams — pick which one owns this plan."
+          defaultTeamId={teamPicker.defaultTeamId}
+          onSelect={handleTeamPickerSelect}
+          onClose={handleTeamPickerClose}
+        />
+      )}
       <AdvisorNavBar activeView={activeView} onNavigate={handleNavigation} userRole={userRole} onLogout={onLogout} />
       <InputsPage
         clientInfo={clientInfo}
@@ -1433,6 +1503,16 @@ export default function BucketPortfolioBuilder() {
     <>
     {showSessionWarning && <SessionWarningModal />}
     {showPrintOptions && <PrintOptionsModal />}
+    {teamPicker.isOpen && (
+      <TeamPickerModal
+        teams={userTeams}
+        title="Assign plan to a team"
+        message="You're on multiple teams — pick which one owns this plan."
+        defaultTeamId={teamPicker.defaultTeamId}
+        onSelect={handleTeamPickerSelect}
+        onClose={handleTeamPickerClose}
+      />
+    )}
     <AdvisorNavBar activeView={activeView} onNavigate={handleNavigation} userRole={userRole} onLogout={onLogout} />
     <ArchitectPage
       userRole={userRole}

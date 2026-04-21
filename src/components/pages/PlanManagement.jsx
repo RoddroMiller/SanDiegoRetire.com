@@ -20,7 +20,7 @@ export const PlanManagement = ({
   onNewPlan,
   onLoadScenario,
   onDeleteScenario,
-  onReassignScenario,
+  onSetScenarioTeam,
   onRefreshScenarios,
   // Advisors management
   advisors = [],
@@ -34,18 +34,17 @@ export const PlanManagement = ({
   // Client status
   onUpdateClientStatus,
   // Plan filter
-  planFilter = 'mine',
+  planFilter = '',
   onPlanFilterChange,
-  hasTeams = false
+  hasTeams = false,
+  userTeams = []
 }) => {
   const [searchTerm, setSearchTerm] = useState('');
   const [sortField, setSortField] = useState('updatedAt');
   const [sortDirection, setSortDirection] = useState('desc');
   const [filterType, setFilterType] = useState('all'); // all, client, prospect, in_progress
   const [selectedPlans, setSelectedPlans] = useState([]);
-  const [reassignAdvisor, setReassignAdvisor] = useState('');
-  const [assigningPlanId, setAssigningPlanId] = useState(null);
-  const [newAdvisorEmail, setNewAdvisorEmail] = useState(''); // For reassignment
+  const [reassignTeamId, setReassignTeamId] = useState('');
   const [showAddAdvisor, setShowAddAdvisor] = useState(false);
   const [newAdvisorName, setNewAdvisorName] = useState('');
   const [addAdvisorEmail, setAddAdvisorEmail] = useState(''); // For Add Advisor form
@@ -105,9 +104,9 @@ export const PlanManagement = ({
           aVal = a.clientInfo?.email || '';
           bVal = b.clientInfo?.email || '';
           break;
-        case 'advisor':
-          aVal = a.advisorEmail || '';
-          bVal = b.advisorEmail || '';
+        case 'team':
+          aVal = a.teamName || '';
+          bVal = b.teamName || '';
           break;
         case 'portfolio':
           aVal = a.inputs?.totalPortfolio || 0;
@@ -167,26 +166,28 @@ export const PlanManagement = ({
     setSelectedPlans([]);
   };
 
-  // Handle bulk reassign
+  // Handle bulk reassign to a team
   const handleBulkReassign = async () => {
-    const targetAdvisor = reassignAdvisor || newAdvisorEmail;
-    if (!selectedPlans.length || !targetAdvisor) return;
-    if (!confirm(`Reassign ${selectedPlans.length} plan(s) to ${targetAdvisor}?`)) return;
+    if (!selectedPlans.length || !reassignTeamId) return;
+    const team = userTeams.find(t => t.id === reassignTeamId);
+    const teamLabel = team?.name || 'team';
+    if (!confirm(`Reassign ${selectedPlans.length} plan(s) to ${teamLabel}?`)) return;
 
     for (const id of selectedPlans) {
-      await onReassignScenario(id, targetAdvisor, targetAdvisor);
+      await onSetScenarioTeam(id, reassignTeamId, team?.name || null);
     }
     setSelectedPlans([]);
-    setReassignAdvisor('');
-    setNewAdvisorEmail('');
+    setReassignTeamId('');
   };
 
-  // Handle individual plan assignment
-  const handleAssignPlan = async (planId, advisorEmail) => {
-    if (!advisorEmail) return;
-    await onReassignScenario(planId, advisorEmail, advisorEmail);
-    setAssigningPlanId(null);
-    setNewAdvisorEmail('');
+  // Handle individual plan team assignment
+  const handleAssignPlanTeam = async (planId, teamId) => {
+    if (!teamId) {
+      await onSetScenarioTeam(planId, null, null);
+    } else {
+      const team = userTeams.find(t => t.id === teamId);
+      await onSetScenarioTeam(planId, teamId, team?.name || null);
+    }
   };
 
   // Handle adding new advisor
@@ -520,21 +521,22 @@ Your Financial Advisor`;
           <Card className="p-4 mb-6">
             <div className="flex flex-col lg:flex-row gap-4 items-start lg:items-center justify-between">
               <div className="flex flex-wrap gap-2 items-center">
-                {/* Plan Ownership Filter */}
+                {/* Team Filter */}
                 {(hasTeams || userRole === 'master') && (
                   <select
                     value={planFilter}
                     onChange={(e) => onPlanFilterChange && onPlanFilterChange(e.target.value)}
                     className="px-3 py-1.5 text-sm font-medium rounded-lg border border-slate-200 bg-white focus:ring-mwm-green focus:border-mwm-green mr-2"
                   >
-                    <option value="mine">My Plans</option>
-                    {hasTeams && <option value="team">Team Plans</option>}
-                    {userRole === 'master' && <option value="all">All Plans</option>}
+                    <option value="">{userRole === 'master' ? 'All Plans' : 'All My Teams'}</option>
+                    {userTeams.map(team => (
+                      <option key={team.id} value={team.id}>{team.name}</option>
+                    ))}
                   </select>
                 )}
-                {planFilter === 'team' && (
+                {planFilter && (
                   <span className="flex items-center gap-1 text-xs text-mwm-green bg-mwm-green/10 px-2 py-1 rounded mr-2">
-                    <Users className="w-3 h-3" /> Team View
+                    <Users className="w-3 h-3" /> {userTeams.find(t => t.id === planFilter)?.name || 'Team'}
                   </span>
                 )}
                 <button
@@ -587,24 +589,24 @@ Your Financial Advisor`;
                 >
                   <Trash2 className="w-4 h-4" /> Delete Selected
                 </button>
-                {userRole === 'master' && (
+                {(userRole === 'master' || userTeams.length > 0) && (
                   <div className="flex items-center gap-2">
                     <select
-                      value={reassignAdvisor}
-                      onChange={(e) => setReassignAdvisor(e.target.value)}
+                      value={reassignTeamId}
+                      onChange={(e) => setReassignTeamId(e.target.value)}
                       className="text-sm border rounded-lg px-2 py-1.5"
                     >
-                      <option value="">Select advisor...</option>
-                      {advisors.map(a => (
-                        <option key={a.id} value={a.email}>{a.name}</option>
+                      <option value="">Select team...</option>
+                      {userTeams.map(t => (
+                        <option key={t.id} value={t.id}>{t.name}</option>
                       ))}
                     </select>
                     <button
                       onClick={handleBulkReassign}
-                      disabled={!reassignAdvisor}
+                      disabled={!reassignTeamId}
                       className="flex items-center gap-1 px-3 py-1.5 text-sm bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
                     >
-                      <UserPlus className="w-4 h-4" /> Assign Selected
+                      <Users className="w-4 h-4" /> Assign to Team
                     </button>
                   </div>
                 )}
@@ -714,10 +716,10 @@ Your Financial Advisor`;
                         Legacy {sortField === 'legacy' && (sortDirection === 'asc' ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />)}
                       </button>
                     </th>
-                    {userRole === 'master' && (
+                    {(userRole === 'master' || userTeams.length > 0) && (
                       <th className="p-3 text-left">
-                        <button onClick={() => handleSort('advisor')} className="flex items-center gap-1 font-bold text-slate-600 hover:text-slate-800">
-                          Assigned To {sortField === 'advisor' && (sortDirection === 'asc' ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />)}
+                        <button onClick={() => handleSort('team')} className="flex items-center gap-1 font-bold text-slate-600 hover:text-slate-800">
+                          Team {sortField === 'team' && (sortDirection === 'asc' ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />)}
                         </button>
                       </th>
                     )}
@@ -759,7 +761,14 @@ Your Financial Advisor`;
                         </td>
                       )}
                       <td className="p-3">
-                        <div className="font-medium text-slate-800">{scenario.clientInfo?.name || 'Unnamed'}</div>
+                        <div className="font-medium text-slate-800 flex items-center gap-2 flex-wrap">
+                          <span>{scenario.clientInfo?.name || 'Unnamed'}</span>
+                          {scenario.teamName && (
+                            <span className="inline-flex items-center gap-1 text-[10px] font-semibold text-mwm-green bg-mwm-green/10 px-1.5 py-0.5 rounded">
+                              <Users className="w-2.5 h-2.5" /> {scenario.teamName}
+                            </span>
+                          )}
+                        </div>
                         <div className="text-xs text-slate-500">Age {scenario.clientInfo?.currentAge || '-'}</div>
                       </td>
                       {userRole !== 'registeredClient' && (
@@ -788,21 +797,16 @@ Your Financial Advisor`;
                           <div className="text-xs text-slate-500">age 95</div>
                         )}
                       </td>
-                      {userRole === 'master' && (
+                      {(userRole === 'master' || userTeams.length > 0) && (
                         <td className="p-3" onClick={(e) => e.stopPropagation()}>
                           <select
-                            value={scenario.advisorEmail || ''}
-                            onChange={(e) => {
-                              const value = e.target.value;
-                              if (value) {
-                                handleAssignPlan(scenario.id, value);
-                              }
-                            }}
+                            value={scenario.teamId || ''}
+                            onChange={(e) => handleAssignPlanTeam(scenario.id, e.target.value)}
                             className="text-xs border rounded px-2 py-1.5 bg-white min-w-[160px] focus:ring-blue-500 focus:border-blue-500"
                           >
-                            <option value="">Unassigned</option>
-                            {advisors.map(a => (
-                              <option key={a.id} value={a.email}>{a.name}</option>
+                            <option value="">No team</option>
+                            {userTeams.map(t => (
+                              <option key={t.id} value={t.id}>{t.name}</option>
                             ))}
                           </select>
                         </td>

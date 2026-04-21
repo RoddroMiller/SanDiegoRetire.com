@@ -148,7 +148,7 @@ export const useCommandCenter = ({ currentUser }) => {
    * @returns {Promise<{success: boolean, message: string}>} Result
    */
   const saveToCommandCenter = useCallback(async (scenarioState, clientId = null, ownerAdvisorId = null) => {
-    const { clientInfo, inputs, assumptions, targetMaxPortfolioAge, rebalanceFreq, monteCarloData, basePlan } = scenarioState;
+    const { clientInfo, inputs, assumptions, targetMaxPortfolioAge, rebalanceFreq, monteCarloData, basePlan, teamId, teamName } = scenarioState;
 
     if (!currentUser) {
       return { success: false, message: 'You must be logged in to save to the Client Command Center.' };
@@ -264,6 +264,8 @@ export const useCommandCenter = ({ currentUser }) => {
       source: 'portfolio-architect',
       advisorId: currentUser.uid,
       advisorEmail: currentUser.email || '',
+      teamId: teamId ?? null,
+      teamName: teamName ?? null,
       savedAt: Date.now(),
       updatedAt: Date.now()
     };

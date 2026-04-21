@@ -4,15 +4,57 @@ import { db, appId } from '../constants';
 import { calculateBasePlan, runSimulation } from '../utils';
 
 /**
+ * Apply role/team-based visibility rules to a set of scenarios.
+ * Dual-path: honors legacy advisorEmail∈teamMemberEmails for unmigrated plans.
+ */
+const applyPlanVisibility = (scenarios, { currentUser, userRole, planFilter, myTeamIds, teamMemberEmails }) => {
+  if (!currentUser) return [];
+
+  const myEmail = currentUser.email?.toLowerCase();
+  const myUid = currentUser.uid;
+  const isProspective = (s) => s.advisorId === 'CLIENT_PROGRESS' || s.advisorId === 'CLIENT_SUBMISSION';
+  const isCreator = (s) =>
+    s.advisorId === myUid ||
+    s.advisorEmail?.toLowerCase() === myEmail ||
+    s.advisorId?.toLowerCase?.() === myEmail;
+
+  if (userRole === 'registeredClient') {
+    return scenarios.filter(s => s.assignedClientEmail?.toLowerCase() === myEmail);
+  }
+
+  // Specific team filter (applies to both master and advisor)
+  if (planFilter) {
+    return scenarios.filter(s => s.teamId === planFilter);
+  }
+
+  // Default view
+  if (userRole === 'master') {
+    return scenarios;
+  }
+
+  // Advisor default: plans on any of my teams, my personal (teamId=null) plans,
+  // prospective plans, and (dual-path) legacy advisor-in-team-members plans.
+  return scenarios.filter(s => {
+    if (isProspective(s)) return true;
+    if (s.teamId && myTeamIds.includes(s.teamId)) return true;
+    if (!s.teamId && isCreator(s)) return true;
+    // Dual-path legacy visibility for unmigrated plans
+    if (!s.teamId && s.advisorEmail && teamMemberEmails.includes(s.advisorEmail.toLowerCase())) return true;
+    return false;
+  });
+};
+
+/**
  * Custom hook for managing scenario CRUD operations
  * @param {object} params - Hook parameters
  * @param {object} params.currentUser - Current authenticated user
  * @param {string} params.userRole - Current user role (client/advisor/master)
- * @param {string} params.planFilter - Plan filter mode ('mine', 'team', 'all')
- * @param {string[]} params.teamMemberEmails - Array of team member email addresses
+ * @param {string} params.planFilter - Either '' (default: all my teams for advisor, all for master) or a specific teamId
+ * @param {string[]} params.teamMemberEmails - Legacy: team member emails (used for dual-path visibility of unmigrated plans)
+ * @param {string[]} params.myTeamIds - Team IDs the current user belongs to
  * @returns {object} Scenario state and handlers
  */
-export const useScenarios = ({ currentUser, userRole, planFilter = 'mine', teamMemberEmails = [] }) => {
+export const useScenarios = ({ currentUser, userRole, planFilter = '', teamMemberEmails = [], myTeamIds = [] }) => {
   const [savedScenarios, setSavedScenarios] = useState([]);
   const [isLoadingScenarios, setIsLoadingScenarios] = useState(false);
   const [saveStatus, setSaveStatus] = useState('idle');
@@ -32,52 +74,13 @@ export const useScenarios = ({ currentUser, userRole, planFilter = 'mine', teamM
           scenarios.push({ id: doc.id, ...doc.data() });
         });
 
-        // For registered clients, only show plans assigned to them
-        if (userRole === 'registeredClient') {
-          scenarios = scenarios.filter(s =>
-            s.assignedClientEmail?.toLowerCase() === currentUser.email?.toLowerCase()
-          );
-        }
-        // Master can see all or filter by team
-        else if (userRole === 'master') {
-          const isProspective = (s) =>
-            s.advisorId === 'CLIENT_PROGRESS' || s.advisorId === 'CLIENT_SUBMISSION';
-
-          if (planFilter === 'mine') {
-            scenarios = scenarios.filter(s =>
-              s.advisorId === currentUser.uid ||
-              s.advisorEmail?.toLowerCase() === currentUser.email?.toLowerCase() ||
-              isProspective(s)
-            );
-          } else if (planFilter === 'team' && teamMemberEmails.length > 0) {
-            scenarios = scenarios.filter(s =>
-              teamMemberEmails.includes(s.advisorEmail?.toLowerCase()) ||
-              isProspective(s)
-            );
-          }
-          // planFilter === 'all' shows everything for master
-        }
-        // Regular advisors: filter by mine or team, always include prospective clients
-        else {
-          const isProspective = (s) =>
-            s.advisorId === 'CLIENT_PROGRESS' || s.advisorId === 'CLIENT_SUBMISSION';
-
-          if (planFilter === 'team' && teamMemberEmails.length > 0) {
-            // Show all team members' plans (including own) + prospective clients
-            scenarios = scenarios.filter(s =>
-              teamMemberEmails.includes(s.advisorEmail?.toLowerCase()) ||
-              isProspective(s)
-            );
-          } else {
-            // Default to 'mine' - show own plans + prospective clients
-            scenarios = scenarios.filter(s =>
-              s.advisorId === currentUser.uid ||
-              s.advisorEmail?.toLowerCase() === currentUser.email?.toLowerCase() ||
-              s.advisorId?.toLowerCase() === currentUser.email?.toLowerCase() ||
-              isProspective(s)
-            );
-          }
-        }
+        scenarios = applyPlanVisibility(scenarios, {
+          currentUser,
+          userRole,
+          planFilter,
+          myTeamIds,
+          teamMemberEmails,
+        });
 
         // Backfill computed fields for plans saved before they existed
         scenarios.forEach(s => {
@@ -110,7 +113,7 @@ export const useScenarios = ({ currentUser, userRole, planFilter = 'mine', teamM
     };
 
     fetchScenarios();
-  }, [currentUser, userRole, planFilter, teamMemberEmails]);
+  }, [currentUser, userRole, planFilter, teamMemberEmails, myTeamIds]);
 
   /**
    * Save a scenario (for advisors)
@@ -118,7 +121,7 @@ export const useScenarios = ({ currentUser, userRole, planFilter = 'mine', teamM
    * @returns {Promise<boolean>} Success status
    */
   const saveScenario = useCallback(async (scenarioState) => {
-    const { clientInfo, inputs, assumptions, targetMaxPortfolioAge, rebalanceFreq, vaEnabled, vaInputs, legacyBalance } = scenarioState;
+    const { clientInfo, inputs, assumptions, targetMaxPortfolioAge, rebalanceFreq, vaEnabled, vaInputs, legacyBalance, teamId, teamName } = scenarioState;
 
     if (!currentUser || !db) {
       alert("Database not connected.");
@@ -140,6 +143,8 @@ export const useScenarios = ({ currentUser, userRole, planFilter = 'mine', teamM
     const scenarioData = {
       advisorId: currentUser.uid,
       advisorEmail: currentUser.email || 'anonymous',
+      teamId: teamId ?? existingScenario?.teamId ?? null,
+      teamName: teamName ?? existingScenario?.teamName ?? null,
       clientStatus: existingScenario?.clientStatus || 'client',
       clientInfo,
       inputs,
@@ -186,7 +191,7 @@ export const useScenarios = ({ currentUser, userRole, planFilter = 'mine', teamM
    * @returns {Promise<boolean>} Success status
    */
   const saveProgress = useCallback(async (scenarioState, role) => {
-    const { clientInfo, inputs, assumptions, targetMaxPortfolioAge, rebalanceFreq, vaEnabled, vaInputs, legacyBalance } = scenarioState;
+    const { clientInfo, inputs, assumptions, targetMaxPortfolioAge, rebalanceFreq, vaEnabled, vaInputs, legacyBalance, teamId, teamName } = scenarioState;
 
     if (!currentUser || !db) {
       console.log("Database not connected - progress not saved.");
@@ -202,17 +207,22 @@ export const useScenarios = ({ currentUser, userRole, planFilter = 'mine', teamM
     // For advisor path, check if this docId is already used by a different client
     let safeDocId = safeBaseDocId;
     let isDuplicate = false;
+    let existingScenario = null;
     if (!isClient) {
       const existing = savedScenarios.find(s => s.id === safeBaseDocId);
       isDuplicate = existing && existing.clientInfo?.name !== clientInfo.name;
       if (isDuplicate) {
         safeDocId = `${safeBaseDocId}_${Date.now()}`;
       }
+      existingScenario = savedScenarios.find(s => s.id === safeDocId);
     }
 
     const scenarioData = {
       advisorId: isClient ? 'CLIENT_PROGRESS' : currentUser.uid,
       advisorEmail: isClient ? 'Client Progress' : (currentUser.email || 'anonymous'),
+      // Team only applies to advisor saves; client-progress plans stay team-less until claimed
+      teamId: isClient ? null : (teamId ?? existingScenario?.teamId ?? null),
+      teamName: isClient ? null : (teamName ?? existingScenario?.teamName ?? null),
       isClientSubmission: false,
       clientStatus: 'in_progress',
       clientInfo,
@@ -407,6 +417,37 @@ export const useScenarios = ({ currentUser, userRole, planFilter = 'mine', teamM
   }, [savedScenarios]);
 
   /**
+   * Reassign a scenario to a different team.
+   * @param {string} scenarioId
+   * @param {string|null} teamId - Target team id, or null to clear team assignment
+   * @param {string|null} teamName - Target team name (denormalized for display)
+   */
+  const setScenarioTeam = useCallback(async (scenarioId, teamId, teamName) => {
+    if (!db) return false;
+    try {
+      await updateDoc(
+        doc(db, 'artifacts', appId, 'public', 'data', 'scenarios', scenarioId),
+        {
+          teamId: teamId ?? null,
+          teamName: teamName ?? null,
+          updatedAt: Date.now()
+        }
+      );
+      setSavedScenarios(prev =>
+        prev.map(s =>
+          s.id === scenarioId
+            ? { ...s, teamId: teamId ?? null, teamName: teamName ?? null, updatedAt: Date.now() }
+            : s
+        )
+      );
+      return true;
+    } catch (error) {
+      console.error("Error setting scenario team:", error);
+      return false;
+    }
+  }, []);
+
+  /**
    * Refresh scenarios from the database
    */
   const refreshScenarios = useCallback(async () => {
@@ -422,39 +463,13 @@ export const useScenarios = ({ currentUser, userRole, planFilter = 'mine', teamM
         scenarios.push({ id: doc.id, ...doc.data() });
       });
 
-      // For registered clients, only show plans assigned to them
-      if (userRole === 'registeredClient') {
-        scenarios = scenarios.filter(s =>
-          s.assignedClientEmail?.toLowerCase() === currentUser.email?.toLowerCase()
-        );
-      }
-      // Master can see all or filter by team
-      else if (userRole === 'master') {
-        if (planFilter === 'mine') {
-          scenarios = scenarios.filter(s =>
-            s.advisorId === currentUser.uid ||
-            s.advisorEmail?.toLowerCase() === currentUser.email?.toLowerCase()
-          );
-        } else if (planFilter === 'team' && teamMemberEmails.length > 0) {
-          scenarios = scenarios.filter(s =>
-            teamMemberEmails.includes(s.advisorEmail?.toLowerCase())
-          );
-        }
-      }
-      // Regular advisors: filter by mine or team
-      else {
-        if (planFilter === 'team' && teamMemberEmails.length > 0) {
-          scenarios = scenarios.filter(s =>
-            teamMemberEmails.includes(s.advisorEmail?.toLowerCase())
-          );
-        } else {
-          scenarios = scenarios.filter(s =>
-            s.advisorId === currentUser.uid ||
-            s.advisorEmail?.toLowerCase() === currentUser.email?.toLowerCase() ||
-            s.advisorId?.toLowerCase() === currentUser.email?.toLowerCase()
-          );
-        }
-      }
+      scenarios = applyPlanVisibility(scenarios, {
+        currentUser,
+        userRole,
+        planFilter,
+        myTeamIds,
+        teamMemberEmails,
+      });
 
       scenarios.sort((a, b) => b.updatedAt - a.updatedAt);
       setSavedScenarios(scenarios);
@@ -463,7 +478,7 @@ export const useScenarios = ({ currentUser, userRole, planFilter = 'mine', teamM
     } finally {
       setIsLoadingScenarios(false);
     }
-  }, [currentUser, userRole, planFilter, teamMemberEmails]);
+  }, [currentUser, userRole, planFilter, teamMemberEmails, myTeamIds]);
 
   /**
    * Update the clientStatus of a scenario
@@ -592,6 +607,7 @@ export const useScenarios = ({ currentUser, userRole, planFilter = 'mine', teamM
     deleteScenario,
     clearScenarios,
     reassignScenario,
+    setScenarioTeam,
     refreshScenarios,
     assignPlanToClient,
     removeClientAssignment,
