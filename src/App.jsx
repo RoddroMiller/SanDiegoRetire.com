@@ -62,11 +62,10 @@ export default function BucketPortfolioBuilder() {
     isCommandCenterConnected,
     commandCenterClients,
     isLoadingClients,
+    commandCenterAdvisorId,
     userTeams,
     teamMemberEmails,
-    hasTeams,
-    teamClients,
-    isLoadingTeamClients
+    hasTeams
   } = useCommandCenter({ currentUser });
 
   const myTeamIds = useMemo(() => userTeams.map(t => t.id), [userTeams]);
@@ -1556,8 +1555,7 @@ export default function BucketPortfolioBuilder() {
       isCommandCenterConnected={isCommandCenterConnected}
       commandCenterClients={commandCenterClients}
       isLoadingClients={isLoadingClients}
-      teamClients={teamClients}
-      isLoadingTeamClients={isLoadingTeamClients}
+      commandCenterAdvisorId={commandCenterAdvisorId}
       // Manual Allocation Override
       useManualAllocation={useManualAllocation}
       manualAllocationMode={manualAllocationMode}

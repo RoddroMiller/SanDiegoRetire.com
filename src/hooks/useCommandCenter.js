@@ -23,8 +23,6 @@ export const useCommandCenter = ({ currentUser }) => {
   const [userTeams, setUserTeams] = useState([]);
   const [teamMemberEmails, setTeamMemberEmails] = useState([]);
   const [isLoadingTeams, setIsLoadingTeams] = useState(false);
-  const [teamClients, setTeamClients] = useState([]);
-  const [isLoadingTeamClients, setIsLoadingTeamClients] = useState(false);
 
   // Listen for Command Center auth state changes
   useEffect(() => {
@@ -108,37 +106,6 @@ export const useCommandCenter = ({ currentUser }) => {
     };
 
     fetchTeams();
-  }, [currentUser]);
-
-  // Fetch team clients via Cloud Function
-  useEffect(() => {
-    if (!currentUser || !currentUser.email || !commandCenterFunctions) {
-      setTeamClients([]);
-      return;
-    }
-
-    const fetchTeamClients = async () => {
-      setIsLoadingTeamClients(true);
-      try {
-        const getTeamClients = httpsCallable(commandCenterFunctions, 'getTeamClients');
-        const result = await getTeamClients({ advisorEmail: currentUser.email, apiKey: import.meta.env.VITE_COMMAND_CENTER_API_KEY });
-        const { success, teamClients: clients } = result.data;
-
-        if (success) {
-          setTeamClients(clients || []);
-          console.log('Found team clients for', clients?.length || 0, 'team members via Cloud Function');
-        } else {
-          setTeamClients([]);
-        }
-      } catch (error) {
-        console.error('Error fetching team clients:', error);
-        setTeamClients([]);
-      } finally {
-        setIsLoadingTeamClients(false);
-      }
-    };
-
-    fetchTeamClients();
   }, [currentUser]);
 
   /**
@@ -338,12 +305,11 @@ export const useCommandCenter = ({ currentUser }) => {
     isCommandCenterConnected: !!commandCenterFunctions,
     commandCenterClients,
     isLoadingClients,
+    commandCenterAdvisorId,
     userTeams,
     teamMemberEmails,
     isLoadingTeams,
     hasTeams: userTeams.length > 0,
-    teamClients,
-    isLoadingTeamClients,
 
     // Actions
     saveToCommandCenter,
