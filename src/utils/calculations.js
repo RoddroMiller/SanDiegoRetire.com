@@ -787,12 +787,24 @@ export const calculateImpliedSpending = ({
  * @param {Array} additionalIncomes - Additional income streams including one-time events
  * @returns {Array} Array of yearly balance data points
  */
-export const calculateAccumulation = (clientInfo, inflationRate = 0, additionalIncomes = [], accounts = [], cashFlowAdjustments = [], taxSettings = null) => {
+export const calculateAccumulation = (clientInfo, inflationRate = 0, additionalIncomes = [], accounts = [], cashFlowAdjustments = [], taxSettings = null, dropConfig = null) => {
   const { currentAge, retirementAge, currentPortfolio, annualSavings, expectedReturn } = clientInfo;
   const years = Math.max(0, retirementAge - currentAge);
   const data = [];
   const growthRate = (expectedReturn || 0) / 100;
   const inflRate = (inflationRate || 0) / 100;
+
+  // DROP (Deferred Retirement Option Plan) — pension payments accrue in a fixed-rate
+  // pre-tax account during the DROP window. Track balance per year so the accumulation
+  // chart/table can show DROP as a distinct, growing category alongside the main portfolio.
+  const dropEnabled = !!dropConfig?.dropEnabled;
+  const dropStartAge = dropConfig?.dropStartAge || 0;
+  const dropYears = Math.max(0, dropConfig?.dropYears || 0);
+  const dropEndAge = dropStartAge + dropYears;
+  const dropRate = (dropConfig?.dropInterestRate ?? 0) / 100;
+  const dropMonthlyPension = dropConfig?.monthlyPension || 0;
+  const dropPensionCOLA = !!dropConfig?.pensionCOLA;
+  let dropBalance = 0;
 
   // Estimate marginal tax on one-time taxable income during accumulation
   const estimateOneTimeTax = (taxableAmount, yearInflFactor) => {
@@ -852,6 +864,16 @@ export const calculateAccumulation = (clientInfo, inflationRate = 0, additionalI
       }
     });
     return expense;
+  };
+
+  // Per-year DROP step: grow existing balance at dropRate, then add the year's
+  // (optionally COLA-adjusted) pension contribution. Held constant after dropEndAge.
+  const stepDrop = (currentSimAge) => {
+    if (!dropEnabled || dropMonthlyPension <= 0 || dropYears <= 0) return;
+    if (currentSimAge < dropStartAge || currentSimAge >= dropEndAge) return;
+    const k = currentSimAge - dropStartAge;
+    const inflFactor = dropPensionCOLA ? Math.pow(1 + inflRate, k) : 1;
+    dropBalance = dropBalance * (1 + dropRate) + dropMonthlyPension * 12 * inflFactor;
   };
 
   // --- Advanced mode: per-account accumulation ---
@@ -943,9 +965,13 @@ export const calculateAccumulation = (clientInfo, inflationRate = 0, additionalI
       const partnerStillWorking = currentPartnerAge < partnerRetirementAge;
       const yearPartnerIncome = partnerAnnualIncome > 0 && partnerStillWorking ? partnerAnnualIncome * inflFactor : 0;
 
+      // DROP balance step for this year (separate pre-tax accumulating bucket)
+      stepDrop(currentSimAge);
+
       data.push({
         age: currentSimAge,
         balance: Math.round(totalBalance),
+        dropBalance: Math.round(dropBalance),
         accountProjections,
         income: Math.round(yearClientIncome + yearPartnerIncome),
         savings: Math.round(yearSavings),
@@ -1012,9 +1038,13 @@ export const calculateAccumulation = (clientInfo, inflationRate = 0, additionalI
     const partnerStillWorking = currentPartnerAge < partnerRetirementAge;
     const yearPartnerIncome = partnerAnnualIncome > 0 && partnerStillWorking ? partnerAnnualIncome * inflFactor : 0;
 
+    // DROP balance step for this year (separate pre-tax accumulating bucket)
+    stepDrop(currentSimAge);
+
     data.push({
       age: currentSimAge,
       balance: Math.round(balance),
+      dropBalance: Math.round(dropBalance),
       income: Math.round(yearClientIncome + yearPartnerIncome),
       savings: Math.round(yearSavings),
       growth: Math.round(yearGrowth),
@@ -1060,6 +1090,23 @@ export const calculateBasePlan = (inputs, assumptions, clientInfo, vaEnabled = f
     inflationRate, personalInflationRate, additionalIncomes,
     cashFlowAdjustments
   } = inputs;
+
+  // DROP (Deferred Retirement Option Plan) — police/firefighter benefit.
+  // Pension payments accrue in a fixed-rate pre-tax account during DROP years,
+  // then roll into the portfolio (Traditional) at DROP end.
+  const dropEnabled = !!inputs.dropEnabled;
+  const dropStartAge = inputs.dropStartAge || 0;
+  const dropYears = Math.max(0, inputs.dropYears || 0);
+  const dropEndAge = dropStartAge + dropYears;
+  const dropRate = (inputs.dropInterestRate ?? 0) / 100;
+  const dropInflRate = pensionCOLA ? (inflationRate / 100) : 0;
+  let dropLumpSum = 0;
+  if (dropEnabled && monthlyPension > 0 && dropYears > 0) {
+    const annualPension = monthlyPension * 12;
+    for (let k = 0; k < dropYears; k++) {
+      dropLumpSum += annualPension * Math.pow(1 + dropInflRate, k) * Math.pow(1 + dropRate, dropYears - 1 - k);
+    }
+  }
 
   // Calculate VA allocation and adjust portfolio for bucket calculations
   let vaAllocationAmount = 0;
@@ -1201,10 +1248,13 @@ export const calculateBasePlan = (inputs, assumptions, clientInfo, vaEnabled = f
       }
     }
 
-    // Pension income with survivor benefits
-    if (clientAlive && simAge >= pensionStartAge) {
+    // Pension income with survivor benefits.
+    // While in the DROP period, pension is diverted into the DROP account, so it is
+    // suppressed as current income for those years.
+    const inDropPeriod = dropEnabled && simAge >= dropStartAge && simAge < dropEndAge;
+    if (clientAlive && simAge >= pensionStartAge && !inDropPeriod) {
       pensionIncome += monthlyPension * 12 * (pensionCOLA ? incomeInflationFactor : 1);
-    } else if (!clientAlive && clientInfo.isMarried && partnerAlive && pensionSurvivorBenefitPct > 0 && simAge >= pensionStartAge) {
+    } else if (!clientAlive && clientInfo.isMarried && partnerAlive && pensionSurvivorBenefitPct > 0 && simAge >= pensionStartAge && !inDropPeriod) {
       // Client died but partner gets survivor benefit from client's pension
       pensionIncome += monthlyPension * (pensionSurvivorBenefitPct / 100) * 12 * (pensionCOLA ? incomeInflationFactor : 1);
     }
@@ -1292,6 +1342,19 @@ export const calculateBasePlan = (inputs, assumptions, clientInfo, vaEnabled = f
     // Surplus: when income exceeds expenses, excess flows into the portfolio as savings
     const surplus = Math.max(0, income - adjustedExpenses);
     const cashFlowAdjustmentDetail = adjustedExpenses - expenses;
+
+    // DROP rollover: lump sum hits the portfolio when the DROP period ends mid-simulation.
+    // For the common pre-retirement DROP case (dropEndAge <= simulationStartAge), the
+    // accumulation phase tracks the balance year-by-year and rolls it into totalPortfolio
+    // at retirement — runSimulation allocates that amount directly to Traditional, so no
+    // per-year contribution is emitted here.
+    let dropContribution = 0;
+    if (dropEnabled && dropLumpSum > 0 && clientAlive) {
+      if (dropEndAge > simulationStartAge && simAge === dropEndAge) {
+        dropContribution = dropLumpSum;
+      }
+    }
+
     return {
       expenses: adjustedExpenses,
       baseExpenses: expenses,
@@ -1302,6 +1365,7 @@ export const calculateBasePlan = (inputs, assumptions, clientInfo, vaEnabled = f
       simAge,
       currentPartnerAge,
       oneTimeContributions,
+      dropContribution,
       employmentIncome,
       // Income breakdown for tax calculations
       ssIncome,
@@ -1468,7 +1532,11 @@ export const calculateBasePlan = (inputs, assumptions, clientInfo, vaEnabled = f
     totalSS,
     getAdjustedSS,
     vaAllocationAmount,
-    vaAnnualIncome
+    vaAnnualIncome,
+    // DROP rollover that landed in totalPortfolio pre-retirement.
+    // runSimulation routes this amount directly to Traditional rather than splitting
+    // it across Traditional/Roth/NQ proportionally.
+    dropPreRetirementAmount: (dropEnabled && dropLumpSum > 0 && dropEndAge <= simulationStartAge) ? dropLumpSum : 0
   };
 };
 
@@ -1570,13 +1638,17 @@ export const runSimulation = (basePlan, assumptions, inputs, rebalanceFreq, isMo
       vaHighWaterMark = vaAllocationAmount;
     }
 
-    // Track account-type balances for RMD calculations
+    // Track account-type balances for RMD calculations.
+    // Pre-retirement DROP money is fully pre-tax — split the rest of the portfolio
+    // by the user's percentages and add the DROP amount on top of Traditional.
     const initTradPct = (inputs.traditionalPercent ?? 60) / 100;
     const initRothPct = (inputs.rothPercent ?? 25) / 100;
     const initNqPct = (inputs.nqPercent ?? 15) / 100;
-    let traditionalBalance = inputs.totalPortfolio * initTradPct;
-    let rothBalance = inputs.totalPortfolio * initRothPct;
-    let nqAccountBalance = inputs.totalPortfolio * initNqPct;
+    const dropPreRetAmt = basePlan.dropPreRetirementAmount || 0;
+    const splittablePortfolio = Math.max(0, inputs.totalPortfolio - dropPreRetAmt);
+    let traditionalBalance = splittablePortfolio * initTradPct + dropPreRetAmt;
+    let rothBalance = splittablePortfolio * initRothPct;
+    let nqAccountBalance = splittablePortfolio * initNqPct;
 
     let nqUnrealizedGains = 0; // Tracks deferred capital gains that roll forward
 
@@ -1672,6 +1744,7 @@ export const runSimulation = (basePlan, assumptions, inputs, rebalanceFreq, isMo
 
       const {
         expenses, baseExpenses, cashFlowAdjustmentDetail, income, gap, surplus, simAge, currentPartnerAge, oneTimeContributions,
+        dropContribution,
         ssIncome, pensionIncome, otherIncome, nonTaxableAdditionalIncome, vaIncome, employmentIncome
       } = getAnnualDetails(i - 1);
 
@@ -1696,11 +1769,18 @@ export const runSimulation = (basePlan, assumptions, inputs, rebalanceFreq, isMo
         balances.b5 += oneTimeContributions;
       }
 
+      // DROP rollover: pre-tax lump sum into the long-term bucket. Tracked separately
+      // from oneTimeContributions so it can be routed to Traditional (not NQ) and
+      // bypass the income-tax pipeline (rollover is not a taxable event).
+      if (dropContribution > 0) {
+        balances.b5 += dropContribution;
+      }
+
       // Income surplus handling is deferred until after tax calculation,
       // so we can net surplus against tax liability before adding to portfolio.
 
       const postGrowthTotal = Object.values(balances).reduce((a, b) => a + b, 0);
-      const annualGrowth = postGrowthTotal - startTotal - oneTimeContributions;
+      const annualGrowth = postGrowthTotal - startTotal - oneTimeContributions - dropContribution;
 
       const appliedBench = isMonteCarlo
         ? (benchmarkReturn + benchmarkStdDev * randn_bm())
@@ -1716,6 +1796,9 @@ export const runSimulation = (basePlan, assumptions, inputs, rebalanceFreq, isMo
       // Add one-time contributions to benchmark (surplus added after tax netting below)
       if (oneTimeContributions > 0) {
         benchmarkBalance += oneTimeContributions;
+      }
+      if (dropContribution > 0) {
+        benchmarkBalance += dropContribution;
       }
 
       // VA GIB: Calculate guaranteed income and update VA account
@@ -1750,12 +1833,14 @@ export const runSimulation = (basePlan, assumptions, inputs, rebalanceFreq, isMo
 
       // --- Grow account-type balances at blended portfolio rate ---
       const blendedRate = startTotal > 0
-        ? (postGrowthTotal - startTotal - oneTimeContributions) / startTotal
+        ? (postGrowthTotal - startTotal - oneTimeContributions - dropContribution) / startTotal
         : 0;
       traditionalBalance *= (1 + blendedRate);
       rothBalance *= (1 + blendedRate);
       nqAccountBalance *= (1 + blendedRate);
       if (oneTimeContributions > 0) nqAccountBalance += oneTimeContributions;
+      // DROP rollover is pre-tax money — credit it to the Traditional balance.
+      if (dropContribution > 0) traditionalBalance += dropContribution;
 
       // --- RMD calculation (per-owner) ---
       const clientAlive = simAge < (inputs.expectedDeathAge || 95);
@@ -2254,7 +2339,8 @@ export const runSimulation = (basePlan, assumptions, inputs, rebalanceFreq, isMo
         startBalance: Math.round(startTotal),
         growth: Math.round(annualGrowth),
         ssIncome: Math.round(income + vaGuaranteedIncome), // Include VA income in reported income
-        contribution: Math.round(oneTimeContributions),
+        contribution: Math.round(oneTimeContributions + dropContribution),
+        dropContribution: Math.round(dropContribution),
         surplus: Math.round(netSurplus),
         livingExpenses: Math.round(baseExpenses),
         cashFlowAdjustmentDetail: Math.round(cashFlowAdjustmentDetail),

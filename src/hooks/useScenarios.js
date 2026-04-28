@@ -140,9 +140,11 @@ export const useScenarios = ({ currentUser, userRole, planFilter = '', teamMembe
 
     // Preserve existing clientStatus if set, otherwise default to 'client' for advisor saves
     const existingScenario = savedScenarios.find(s => s.id === safeDocId);
+    const now = Date.now();
+    const userEmail = currentUser.email || 'anonymous';
     const scenarioData = {
       advisorId: currentUser.uid,
-      advisorEmail: currentUser.email || 'anonymous',
+      advisorEmail: userEmail,
       teamId: teamId ?? existingScenario?.teamId ?? null,
       teamName: teamName ?? existingScenario?.teamName ?? null,
       clientStatus: existingScenario?.clientStatus || 'client',
@@ -154,7 +156,15 @@ export const useScenarios = ({ currentUser, userRole, planFilter = '', teamMembe
       vaEnabled: vaEnabled || false,
       vaInputs: vaInputs || null,
       legacyBalance: legacyBalance || 0,
-      updatedAt: Date.now()
+      // Creator stamp: set once, preserved on subsequent saves.
+      // For legacy plans without createdAt, backfill from existing advisor + updatedAt.
+      createdAt: existingScenario?.createdAt ?? existingScenario?.updatedAt ?? now,
+      createdBy: existingScenario?.createdBy ?? existingScenario?.advisorId ?? currentUser.uid,
+      createdByEmail: existingScenario?.createdByEmail ?? existingScenario?.advisorEmail ?? userEmail,
+      // Updater stamp: refreshed on every save.
+      updatedBy: currentUser.uid,
+      updatedByEmail: userEmail,
+      updatedAt: now
     };
 
     // Flag if this is a new client reusing an existing email
@@ -217,9 +227,12 @@ export const useScenarios = ({ currentUser, userRole, planFilter = '', teamMembe
       existingScenario = savedScenarios.find(s => s.id === safeDocId);
     }
 
+    const now = Date.now();
+    const actorId = isClient ? 'CLIENT_PROGRESS' : currentUser.uid;
+    const actorEmail = isClient ? 'Client Progress' : (currentUser.email || 'anonymous');
     const scenarioData = {
-      advisorId: isClient ? 'CLIENT_PROGRESS' : currentUser.uid,
-      advisorEmail: isClient ? 'Client Progress' : (currentUser.email || 'anonymous'),
+      advisorId: actorId,
+      advisorEmail: actorEmail,
       // Team only applies to advisor saves; client-progress plans stay team-less until claimed
       teamId: isClient ? null : (teamId ?? existingScenario?.teamId ?? null),
       teamName: isClient ? null : (teamName ?? existingScenario?.teamName ?? null),
@@ -233,7 +246,14 @@ export const useScenarios = ({ currentUser, userRole, planFilter = '', teamMembe
       vaEnabled: vaEnabled || false,
       vaInputs: vaInputs || null,
       legacyBalance: legacyBalance || 0,
-      updatedAt: Date.now()
+      // Creator stamp: set once, preserved on subsequent saves.
+      createdAt: existingScenario?.createdAt ?? existingScenario?.updatedAt ?? now,
+      createdBy: existingScenario?.createdBy ?? existingScenario?.advisorId ?? actorId,
+      createdByEmail: existingScenario?.createdByEmail ?? existingScenario?.advisorEmail ?? actorEmail,
+      // Updater stamp: refreshed on every save.
+      updatedBy: actorId,
+      updatedByEmail: actorEmail,
+      updatedAt: now
     };
 
     // Flag if this is a new client reusing an existing email
@@ -285,6 +305,7 @@ export const useScenarios = ({ currentUser, userRole, planFilter = '', teamMembe
     const docId = `submission_${clientInfo.name || 'client'}_${Date.now()}`;
     const safeDocId = docId.replace(/[^a-zA-Z0-9_-]/g, '_');
 
+    const now = Date.now();
     const scenarioData = {
       advisorId: 'CLIENT_SUBMISSION',
       advisorEmail: 'Client Submission',
@@ -298,7 +319,12 @@ export const useScenarios = ({ currentUser, userRole, planFilter = '', teamMembe
       vaEnabled: vaEnabled || false,
       vaInputs: vaInputs || null,
       legacyBalance: legacyBalance || 0,
-      updatedAt: Date.now()
+      createdAt: now,
+      createdBy: 'CLIENT_SUBMISSION',
+      createdByEmail: 'Client Submission',
+      updatedBy: 'CLIENT_SUBMISSION',
+      updatedByEmail: 'Client Submission',
+      updatedAt: now
     };
 
     try {

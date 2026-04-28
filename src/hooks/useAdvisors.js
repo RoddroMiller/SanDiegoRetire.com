@@ -20,17 +20,32 @@ export const useAdvisors = () => {
 
     const fetchAdvisors = async () => {
       setIsLoadingAdvisors(true);
+
+      // Step 1: load the directory and populate UI state immediately.
+      // Seed failures below must not block this — otherwise a single permission-denied
+      // write would leave the directory looking empty even when records exist.
+      const existingAdvisors = new Map();
       try {
-        // Fetch existing advisors directory
         const advisorSnapshot = await getDocs(
           collection(db, 'artifacts', appId, 'public', 'data', 'advisors')
         );
-        const existingAdvisors = new Map();
         advisorSnapshot.forEach((doc) => {
           existingAdvisors.set(doc.id, { id: doc.id, ...doc.data() });
         });
 
-        // Scan scenarios for advisors not yet in the directory
+        const initialList = [...existingAdvisors.values()].sort(
+          (a, b) => (a.name || '').localeCompare(b.name || '')
+        );
+        setAdvisors(initialList);
+      } catch (error) {
+        console.error("Error loading advisor directory:", error);
+        setIsLoadingAdvisors(false);
+        return;
+      }
+
+      // Step 2: best-effort auto-seed any advisors discovered in scenarios.
+      // Each write is isolated so one rule rejection does not abort the rest.
+      try {
         const scenarioSnapshot = await getDocs(
           collection(db, 'artifacts', appId, 'public', 'data', 'scenarios')
         );
@@ -50,22 +65,33 @@ export const useAdvisors = () => {
           }
         });
 
-        // Persist any newly discovered advisors
+        const seeded = [];
         for (const advisor of toAdd) {
           const safeId = advisor.email.replace(/[^a-zA-Z0-9_-]/g, '_');
           const advisorData = { name: advisor.name, email: advisor.email, createdAt: Date.now() };
-          await setDoc(
-            doc(db, 'artifacts', appId, 'public', 'data', 'advisors', safeId),
-            advisorData
-          );
-          existingAdvisors.set(safeId, { id: safeId, ...advisorData });
+          try {
+            await setDoc(
+              doc(db, 'artifacts', appId, 'public', 'data', 'advisors', safeId),
+              advisorData
+            );
+            seeded.push({ id: safeId, ...advisorData });
+          } catch (seedErr) {
+            // Permission-denied for non-master users is expected here; skip and move on.
+            console.warn(`Skipped auto-seed for ${advisor.email}:`, seedErr?.code || seedErr?.message);
+          }
         }
 
-        const advisorList = [...existingAdvisors.values()];
-        advisorList.sort((a, b) => (a.name || '').localeCompare(b.name || ''));
-        setAdvisors(advisorList);
+        if (seeded.length > 0) {
+          setAdvisors(prev => {
+            const merged = new Map(prev.map(a => [a.id, a]));
+            seeded.forEach(a => merged.set(a.id, a));
+            return [...merged.values()].sort(
+              (a, b) => (a.name || '').localeCompare(b.name || '')
+            );
+          });
+        }
       } catch (error) {
-        console.error("Error loading advisors:", error);
+        console.error("Error scanning scenarios for advisor seeding:", error);
       } finally {
         setIsLoadingAdvisors(false);
       }

@@ -199,6 +199,13 @@ export default function BucketPortfolioBuilder() {
     pensionStartAge: 65,
     pensionCOLA: false,
     pensionSurvivorBenefitPct: 0,
+    // DROP (Deferred Retirement Option Plan) — police/firefighter benefit:
+    // pension payments accrue in a fixed-rate pre-tax account during the DROP period,
+    // then roll into the portfolio (pre-tax/Traditional) when DROP ends.
+    dropEnabled: false,
+    dropStartAge: 50,
+    dropYears: 5,
+    dropInterestRate: 7.3,
     partnerMonthlyPension: 0,
     partnerPensionStartAge: 65,
     partnerPensionCOLA: false,
@@ -360,6 +367,7 @@ export default function BucketPortfolioBuilder() {
       ssStartAge: 65, ssCurrentlyReceiving: false,
       partnerSSStartAge: 65, partnerSSCurrentlyReceiving: false,
       monthlyPension: 0, pensionStartAge: 65, pensionCOLA: false, pensionSurvivorBenefitPct: 0,
+      dropEnabled: false, dropStartAge: 50, dropYears: 5, dropInterestRate: 7.3,
       partnerMonthlyPension: 0, partnerPensionStartAge: 65, partnerPensionCOLA: false, partnerPensionSurvivorBenefitPct: 0,
       expectedDeathAge: 95, partnerExpectedDeathAge: 95, spendingReductionAtFirstDeath: 25,
       additionalIncomes: [], cashFlowAdjustments: [],
@@ -397,6 +405,11 @@ export default function BucketPortfolioBuilder() {
         partnerExpectedDeathAge: s.inputs.partnerExpectedDeathAge ?? 95,
         pensionSurvivorBenefitPct: s.inputs.pensionSurvivorBenefitPct ?? 0,
         partnerPensionSurvivorBenefitPct: s.inputs.partnerPensionSurvivorBenefitPct ?? 0,
+        // DROP migration defaults (feature added 2026-04)
+        dropEnabled: s.inputs.dropEnabled ?? false,
+        dropStartAge: s.inputs.dropStartAge ?? 50,
+        dropYears: s.inputs.dropYears ?? 5,
+        dropInterestRate: s.inputs.dropInterestRate ?? 7.3,
         spendingReductionAtFirstDeath: s.inputs.spendingReductionAtFirstDeath ?? 25,
         // Migration defaults for advisory fee & benchmark
         advisoryFee: s.inputs.advisoryFee ?? 1.0,
@@ -530,7 +543,22 @@ export default function BucketPortfolioBuilder() {
   const handleToggleVa = (enabled) => setVaEnabled(enabled);
 
   // --- Calculations (using imported utilities) ---
-  const accumulationData = useMemo(() => calculateAccumulation(clientInfo, inputs.inflationRate, inputs.additionalIncomes, inputs.accounts, inputs.cashFlowAdjustments, { filingStatus: inputs.filingStatus, stateRate: inputs.stateRate }), [clientInfo, inputs.inflationRate, inputs.additionalIncomes, inputs.accounts, inputs.cashFlowAdjustments, inputs.filingStatus, inputs.stateRate]);
+  const accumulationData = useMemo(() => calculateAccumulation(
+    clientInfo,
+    inputs.inflationRate,
+    inputs.additionalIncomes,
+    inputs.accounts,
+    inputs.cashFlowAdjustments,
+    { filingStatus: inputs.filingStatus, stateRate: inputs.stateRate },
+    {
+      dropEnabled: inputs.dropEnabled,
+      dropStartAge: inputs.dropStartAge,
+      dropYears: inputs.dropYears,
+      dropInterestRate: inputs.dropInterestRate,
+      monthlyPension: inputs.monthlyPension,
+      pensionCOLA: inputs.pensionCOLA,
+    }
+  ), [clientInfo, inputs.inflationRate, inputs.additionalIncomes, inputs.accounts, inputs.cashFlowAdjustments, inputs.filingStatus, inputs.stateRate, inputs.dropEnabled, inputs.dropStartAge, inputs.dropYears, inputs.dropInterestRate, inputs.monthlyPension, inputs.pensionCOLA]);
 
   // Standard bucket calculations (no VA)
   const formulaBasePlan = useMemo(() => calculateBasePlan(inputs, assumptions, clientInfo), [inputs, assumptions, clientInfo]);
@@ -702,16 +730,20 @@ export default function BucketPortfolioBuilder() {
 
   // Keep totalPortfolio in sync with accumulation data
   const finalAccumulationEntry = accumulationData.length > 0 ? accumulationData[accumulationData.length - 1] : null;
-  const finalAccumulationBalance = finalAccumulationEntry?.balance || 0;
+  // Include DROP balance: at retirement it rolls into the pre-tax portfolio.
+  const finalDropBalance = finalAccumulationEntry?.dropBalance || 0;
+  const finalAccumulationBalance = (finalAccumulationEntry?.balance || 0) + finalDropBalance;
 
   useEffect(() => {
     if (finalAccumulationBalance > 0) {
       setInputs(prev => {
-        // When accounts exist, derive percentages from per-account projected balances
+        // When accounts exist, derive percentages from per-account projected balances.
+        // DROP is added on top as 100% Traditional pre-tax money.
         if (prev.accounts && prev.accounts.length > 0 && finalAccumulationEntry?.accountProjections) {
           const projections = finalAccumulationEntry.accountProjections;
           const totals = { traditional: 0, roth: 0, nq: 0 };
           projections.forEach(p => { totals[p.type] = (totals[p.type] || 0) + p.projected; });
+          totals.traditional += finalDropBalance;
           const total = totals.traditional + totals.roth + totals.nq;
           if (total > 0) {
             const tradPct = Math.round((totals.traditional / total) * 100);
@@ -727,7 +759,7 @@ export default function BucketPortfolioBuilder() {
         return prev;
       });
     }
-  }, [finalAccumulationBalance, finalAccumulationEntry]);
+  }, [finalAccumulationBalance, finalAccumulationEntry, finalDropBalance]);
 
   // Auto-set SS start age to current age for clients over FRA (already collecting)
   useEffect(() => {

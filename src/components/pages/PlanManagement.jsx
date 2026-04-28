@@ -291,6 +291,16 @@ Your Financial Advisor`;
     return advisor?.name || email;
   };
 
+  // Get creator/updater display name from a scenario, with fallbacks for legacy plans.
+  // Treats client-progress / submission flows specially since they're not real advisors.
+  const getActorName = (email) => {
+    if (!email) return 'Unknown';
+    if (email === 'Client Progress' || email === 'Client Submission') return email;
+    return getAdvisorName(email);
+  };
+  const getCreator = (s) => getActorName(s.createdByEmail || s.advisorEmail);
+  const getUpdater = (s) => getActorName(s.updatedByEmail || s.advisorEmail);
+
   // Format date
   const formatDate = (timestamp) => {
     if (!timestamp) return 'N/A';
@@ -735,7 +745,7 @@ Your Financial Advisor`;
                     )}
                     <th className="p-3 text-left">
                       <button onClick={() => handleSort('updatedAt')} className="flex items-center gap-1 font-bold text-slate-600 hover:text-slate-800">
-                        Updated {sortField === 'updatedAt' && (sortDirection === 'asc' ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />)}
+                        History {sortField === 'updatedAt' && (sortDirection === 'asc' ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />)}
                       </button>
                     </th>
                     {userRole !== 'registeredClient' && (
@@ -880,9 +890,26 @@ Your Financial Advisor`;
                         </td>
                       )}
                       <td className="p-3">
-                        <div className="flex items-center gap-1 text-slate-500">
-                          <Calendar className="w-3 h-3" />
-                          {formatDate(scenario.updatedAt)}
+                        <div className="text-xs text-slate-500 leading-snug">
+                          <div>
+                            <span className="font-semibold text-slate-600">Updated:</span> {formatDate(scenario.updatedAt)}
+                          </div>
+                          <div className="text-slate-500">by {getUpdater(scenario)}</div>
+                          {(() => {
+                            const updater = getUpdater(scenario);
+                            const creator = getCreator(scenario);
+                            const createdAt = scenario.createdAt;
+                            // Hide creator block if it's identical info (same name AND same timestamp).
+                            if (creator === updater && (!createdAt || createdAt === scenario.updatedAt)) return null;
+                            return (
+                              <div className="mt-1 pt-1 border-t border-slate-100 text-slate-400">
+                                <div>
+                                  <span className="font-semibold">Created:</span> {createdAt ? formatDate(createdAt) : '—'}
+                                </div>
+                                <div>by {creator}</div>
+                              </div>
+                            );
+                          })()}
                         </div>
                       </td>
                       {userRole !== 'registeredClient' && (

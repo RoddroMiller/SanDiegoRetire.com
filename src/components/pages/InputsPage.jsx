@@ -563,6 +563,84 @@ export const InputsPage = ({
                 </div>
               )}
             </div>
+
+            {/* DROP (Deferred Retirement Option Plan) — police/firefighter benefit */}
+            <div className="mt-4 border border-mwm-gold/30 rounded-lg bg-mwm-gold/5 p-4">
+              <div className="flex items-center justify-between">
+                <div className="relative group">
+                  <p className="text-xs font-bold text-slate-600 uppercase flex items-center gap-1">
+                    DROP — Deferred Retirement Option Plan <Info className="w-3 h-3 text-slate-400" />
+                  </p>
+                  <div className="absolute left-0 top-full mt-1 hidden group-hover:block w-80 bg-slate-800 text-white text-xs p-2 rounded shadow-lg z-10">
+                    Police / firefighter benefit: while still working, pension payments accrue in a fixed-rate pre-tax account for up to 5 years, then roll into the portfolio (pre-tax/Traditional) at DROP end. Funds the last years of work into a substantial lump sum.
+                  </div>
+                  <p className="text-[11px] text-slate-500 mt-0.5">Pension payments accumulate at a fixed rate, then roll into the portfolio.</p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => onInputChange({ target: { name: 'dropEnabled', type: 'checkbox', checked: !inputs.dropEnabled } })}
+                  className={`px-3 py-1 text-xs rounded font-medium transition-all ${
+                    inputs.dropEnabled
+                      ? 'bg-mwm-gold text-white'
+                      : 'bg-white text-slate-600 border border-slate-300 hover:border-mwm-gold/60'
+                  }`}
+                >
+                  {inputs.dropEnabled ? 'Enabled' : 'Disabled'}
+                </button>
+              </div>
+
+              {inputs.dropEnabled && (
+                <>
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mt-4">
+                    <div className="relative group">
+                      <label className="text-xs text-slate-500 uppercase flex items-center gap-1">
+                        DROP Start Age <Info className="w-3 h-3 text-slate-400" />
+                      </label>
+                      <div className="absolute left-0 bottom-full mb-1 hidden group-hover:block w-56 bg-slate-800 text-white text-xs p-2 rounded shadow-lg z-10">
+                        Age the officer enters DROP — pension payments begin accumulating in the DROP account.
+                      </div>
+                      <input type="number" name="dropStartAge" value={inputs.dropStartAge} onChange={onInputChange} min={40} max={75} className="w-full px-3 py-2 border rounded-md text-sm" />
+                    </div>
+                    <div className="relative group">
+                      <label className="text-xs text-slate-500 uppercase flex items-center gap-1">
+                        Years in DROP <Info className="w-3 h-3 text-slate-400" />
+                      </label>
+                      <div className="absolute left-0 bottom-full mb-1 hidden group-hover:block w-56 bg-slate-800 text-white text-xs p-2 rounded shadow-lg z-10">
+                        Length of the DROP period. Most plans cap this at 5 years.
+                      </div>
+                      <input type="number" name="dropYears" value={inputs.dropYears} onChange={onInputChange} min={1} max={10} className="w-full px-3 py-2 border rounded-md text-sm" />
+                    </div>
+                    <div className="relative group">
+                      <label className="text-xs text-slate-500 uppercase flex items-center gap-1">
+                        DROP Interest Rate (%) <Info className="w-3 h-3 text-slate-400" />
+                      </label>
+                      <div className="absolute left-0 bottom-full mb-1 hidden group-hover:block w-56 bg-slate-800 text-white text-xs p-2 rounded shadow-lg z-10">
+                        Fixed annual interest rate credited to the DROP account. Common rate is 7.3%.
+                      </div>
+                      <input type="number" step="0.1" name="dropInterestRate" value={inputs.dropInterestRate} onChange={onInputChange} min={0} max={15} className="w-full px-3 py-2 border rounded-md text-sm" />
+                    </div>
+                  </div>
+                  {(() => {
+                    const annualPension = (inputs.monthlyPension || 0) * 12;
+                    const years = Math.max(0, inputs.dropYears || 0);
+                    const r = (inputs.dropInterestRate || 0) / 100;
+                    const inflRate = inputs.pensionCOLA ? (inputs.inflationRate || 0) / 100 : 0;
+                    let lump = 0;
+                    for (let k = 0; k < years; k++) {
+                      lump += annualPension * Math.pow(1 + inflRate, k) * Math.pow(1 + r, years - 1 - k);
+                    }
+                    const endAge = (inputs.dropStartAge || 0) + years;
+                    return (
+                      <p className="text-[11px] text-slate-600 mt-3">
+                        Projected DROP lump sum at age {endAge}: <span className="font-bold text-mwm-gold">${Math.round(lump).toLocaleString()}</span>
+                        {inputs.pensionCOLA ? ' (pension inflation-adjusted during DROP)' : ''}
+                        . Pension is suppressed during DROP years; lump sum rolls into the pre-tax portfolio at DROP end.
+                      </p>
+                    );
+                  })()}
+                </>
+              )}
+            </div>
           </div>
 
           {/* Partner Pension - only show if married */}

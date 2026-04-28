@@ -51,6 +51,11 @@ export const AccumulationPage = ({
     clientInfo.retirementAge !== clientInfo.partnerRetirementAge;
 
   const hasSpecialItems = accumulationData.some(r => (r.additionalIncome || 0) !== 0 || (r.cashFlowExpense || 0) !== 0);
+  const hasDrop = accumulationData.some(r => (r.dropBalance || 0) > 0);
+  const finalRow = accumulationData[accumulationData.length - 1];
+  const finalDropBalance = finalRow?.dropBalance || 0;
+  const finalMainBalance = finalRow?.balance || 0;
+  const finalTotalBalance = finalMainBalance + finalDropBalance;
 
   return (
     <div className="min-h-screen bg-slate-50 font-sans text-slate-800 p-3 sm:p-6 flex flex-col items-center">
@@ -656,6 +661,10 @@ export const AccumulationPage = ({
                           <stop offset="5%" stopColor={COLORS.hedged} stopOpacity={0.8} />
                           <stop offset="95%" stopColor={COLORS.hedged} stopOpacity={0} />
                         </linearGradient>
+                        <linearGradient id="colorDrop" x1="0" y1="0" x2="0" y2="1">
+                          <stop offset="5%" stopColor={COLORS.income} stopOpacity={0.85} />
+                          <stop offset="95%" stopColor={COLORS.income} stopOpacity={0.15} />
+                        </linearGradient>
                       </defs>
                       <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e2e8f0" />
                       <XAxis dataKey="age" tickLine={false} axisLine={false} tick={{ fill: '#64748b', fontSize: 12 }} />
@@ -666,24 +675,42 @@ export const AccumulationPage = ({
                         tick={{ fill: '#64748b', fontSize: 12 }}
                       />
                       <Tooltip
-                        formatter={(val) => `$${val.toLocaleString()}`}
+                        formatter={(val, name) => [`$${val.toLocaleString()}`, name === 'dropBalance' ? 'DROP' : 'Portfolio']}
                         labelFormatter={(label) => `Age ${label}`}
                       />
                       <Area
                         type="monotone"
                         dataKey="balance"
+                        stackId="1"
                         stroke={COLORS.hedged}
                         fillOpacity={1}
                         fill="url(#colorGrowth)"
+                        name="Portfolio"
                       />
+                      {hasDrop && (
+                        <Area
+                          type="monotone"
+                          dataKey="dropBalance"
+                          stackId="1"
+                          stroke={COLORS.income}
+                          fillOpacity={1}
+                          fill="url(#colorDrop)"
+                          name="DROP"
+                        />
+                      )}
                     </AreaChart>
                   </ResponsiveContainer>
                 </div>
                 <div className="mt-4 text-center">
                   <p className="text-sm text-slate-500">Projected Portfolio at Retirement</p>
                   <p className="text-3xl font-bold text-mwm-green/80">
-                    ${accumulationData[accumulationData.length - 1]?.balance.toLocaleString() || 0}
+                    ${finalTotalBalance.toLocaleString()}
                   </p>
+                  {hasDrop && (
+                    <p className="text-xs text-slate-500 mt-1">
+                      Includes <span className="font-semibold text-mwm-gold">${finalDropBalance.toLocaleString()}</span> from DROP account
+                    </p>
+                  )}
                 </div>
               </>
             ) : (
@@ -697,12 +724,15 @@ export const AccumulationPage = ({
                       <th className="text-right py-2 px-2 text-slate-600 font-semibold">Growth</th>
                       {hasSpecialItems && <th className="text-right py-2 px-2 text-slate-600 font-semibold">Special Items</th>}
                       <th className="text-right py-2 px-2 text-slate-600 font-semibold">Balance</th>
+                      {hasDrop && <th className="text-right py-2 px-2 text-mwm-gold font-semibold">DROP</th>}
+                      {hasDrop && <th className="text-right py-2 px-2 text-slate-700 font-semibold">Total</th>}
                     </tr>
                   </thead>
                   <tbody>
                     {accumulationData.map((row, idx) => {
                       const tax = row.additionalTax || 0;
                       const netSpecial = (row.additionalIncome || 0) - tax - (row.cashFlowExpense || 0);
+                      const drop = row.dropBalance || 0;
                       return (
                         <tr key={row.age} className={`border-b border-slate-100 ${idx % 2 === 0 ? 'bg-white' : 'bg-slate-50/50'}`}>
                           <td className="py-1.5 px-2 font-medium text-slate-700">{row.age}</td>
@@ -720,6 +750,12 @@ export const AccumulationPage = ({
                             </td>
                           )}
                           <td className="py-1.5 px-2 text-right font-bold text-slate-800">${row.balance.toLocaleString()}</td>
+                          {hasDrop && (
+                            <td className="py-1.5 px-2 text-right text-mwm-gold">{drop > 0 ? `$${drop.toLocaleString()}` : '-'}</td>
+                          )}
+                          {hasDrop && (
+                            <td className="py-1.5 px-2 text-right font-bold text-slate-800">${(row.balance + drop).toLocaleString()}</td>
+                          )}
                         </tr>
                       );
                     })}
@@ -728,8 +764,13 @@ export const AccumulationPage = ({
                 <div className="mt-4 text-center">
                   <p className="text-sm text-slate-500">Projected Portfolio at Retirement</p>
                   <p className="text-3xl font-bold text-mwm-green/80">
-                    ${accumulationData[accumulationData.length - 1]?.balance.toLocaleString() || 0}
+                    ${finalTotalBalance.toLocaleString()}
                   </p>
+                  {hasDrop && (
+                    <p className="text-xs text-slate-500 mt-1">
+                      Includes <span className="font-semibold text-mwm-gold">${finalDropBalance.toLocaleString()}</span> from DROP account
+                    </p>
+                  )}
                 </div>
               </div>
             )}
