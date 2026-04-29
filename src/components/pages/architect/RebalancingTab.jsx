@@ -60,13 +60,16 @@ export const RebalancingTab = ({ inputs, basePlan, assumptions, projectionData }
   }, [projectionData]);
 
   // Initial bucket allocation from base plan
-  const initialBuckets = useMemo(() => ({
-    b1: basePlan?.b1Val || inputs.totalPortfolio * 0.10,
-    b2: basePlan?.b2Val || inputs.totalPortfolio * 0.12,
-    b3: basePlan?.b3Val || inputs.totalPortfolio * 0.25,
-    b4: basePlan?.b4Val || inputs.totalPortfolio * 0.10,
-    b5: basePlan?.b5Val || inputs.totalPortfolio * 0.43,
-  }), [basePlan, inputs.totalPortfolio]);
+  const initialBuckets = useMemo(() => {
+    const tp = basePlan?.retirementPortfolio || 0;
+    return {
+      b1: basePlan?.b1Val || tp * 0.10,
+      b2: basePlan?.b2Val || tp * 0.12,
+      b3: basePlan?.b3Val || tp * 0.25,
+      b4: basePlan?.b4Val || tp * 0.10,
+      b5: basePlan?.b5Val || tp * 0.43,
+    };
+  }, [basePlan]);
 
   const totalPortfolio = useMemo(() =>
     Object.values(initialBuckets).reduce((a, b) => a + b, 0),

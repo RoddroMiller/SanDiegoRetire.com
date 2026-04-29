@@ -242,7 +242,21 @@ export default function BucketPortfolioBuilder() {
     ssMarginalTaxRate: 22, // Marginal tax bracket for bridge-year gross-up calculation
     // Advisory Fee & Benchmark
     advisoryFee: 1.0, // Annual advisory fee as % of portfolio value
-    showBenchmark: false // Show passive 60/40 benchmark line on charts (advisor-only)
+    showBenchmark: false, // Show passive 60/40 benchmark line on charts (advisor-only)
+    // Unified timeline: when true, runs a single projection from currentAge through
+    // last death so the cash-flow page reconciles with the accumulation page.
+    // When false, the legacy two-engine flow is used.
+    unifiedTimeline: true,
+    // Boundary between accumulation and retirement illustration. When null, defaults
+    // to max(client, partner) retirement age. Advisor can override (e.g., set to the
+    // earlier retirement age in a near-retirement household where the bucket strategy
+    // and SS optimization need to be live now rather than waiting for the spouse).
+    retirementIllustrationStartAge: null,
+    // During accumulation, how is excess cash flow (income minus expenses, taxes, and
+    // explicit savings) treated? Default false = implicit lifestyle spending (matches
+    // most advisor mental models — wages and SS during the gap years are spent, not
+    // banked). True = surplus flows into the NQ portfolio.
+    surplusToPortfolio: false
   });
 
   // Return Assumptions
@@ -414,6 +428,10 @@ export default function BucketPortfolioBuilder() {
         // Migration defaults for advisory fee & benchmark
         advisoryFee: s.inputs.advisoryFee ?? 1.0,
         showBenchmark: s.inputs.showBenchmark ?? false,
+        // Unified timeline: default-on for plans saved before the field existed.
+        unifiedTimeline: s.inputs.unifiedTimeline ?? true,
+        retirementIllustrationStartAge: s.inputs.retirementIllustrationStartAge ?? null,
+        surplusToPortfolio: s.inputs.surplusToPortfolio ?? false,
       });
       // Migrate assumptions: apply current forward-looking defaults if saved data uses old values
       const CURRENT_DEFAULTS = {
@@ -477,12 +495,12 @@ export default function BucketPortfolioBuilder() {
     if (mode === 'percentage') {
       // Update percentage and calculate dollar amount
       setManualPercentages(prev => ({ ...prev, [bucket]: value }));
-      const dollarValue = (value / 100) * inputs.totalPortfolio;
+      const dollarValue = (value / 100) * basePlan.retirementPortfolio;
       setManualAllocations(prev => ({ ...prev, [bucket]: dollarValue }));
     } else {
       // Update dollar amount and calculate percentage
       setManualAllocations(prev => ({ ...prev, [bucket]: value }));
-      const percentValue = inputs.totalPortfolio > 0 ? (value / inputs.totalPortfolio) * 100 : 0;
+      const percentValue = basePlan.retirementPortfolio > 0 ? (value / basePlan.retirementPortfolio) * 100 : 0;
       setManualPercentages(prev => ({ ...prev, [bucket]: percentValue }));
     }
   };
@@ -502,7 +520,7 @@ export default function BucketPortfolioBuilder() {
     };
     setManualAllocations(dollarAllocations);
     // Calculate percentages
-    const total = inputs.totalPortfolio || 1;
+    const total = basePlan.retirementPortfolio || 1;
     setManualPercentages({
       b1: (dollarAllocations.b1 / total) * 100,
       b2: (dollarAllocations.b2 / total) * 100,
@@ -524,7 +542,7 @@ export default function BucketPortfolioBuilder() {
       };
       setManualAllocations(dollarAllocations);
       // Calculate percentages
-      const total = inputs.totalPortfolio || 1;
+      const total = basePlan.retirementPortfolio || 1;
       setManualPercentages({
         b1: (dollarAllocations.b1 / total) * 100,
         b2: (dollarAllocations.b2 / total) * 100,
@@ -588,16 +606,18 @@ export default function BucketPortfolioBuilder() {
     inputs,
     clientInfo,
     assumptions,
-    targetMaxPortfolioAge
-  }), [inputs, clientInfo, targetMaxPortfolioAge, assumptions]);
+    targetMaxPortfolioAge,
+    retirementPortfolio: basePlan?.retirementPortfolio
+  }), [inputs, clientInfo, targetMaxPortfolioAge, assumptions, basePlan?.retirementPortfolio]);
 
   const ssPartnerAnalysis = useMemo(() => calculateSSPartnerAnalysis({
     inputs,
     clientInfo,
     assumptions,
     targetMaxPortfolioAge,
-    clientSSWinner: ssAnalysis.winner
-  }), [inputs, clientInfo, targetMaxPortfolioAge, assumptions, ssAnalysis.winner]);
+    clientSSWinner: ssAnalysis.winner,
+    retirementPortfolio: basePlan?.retirementPortfolio
+  }), [inputs, clientInfo, targetMaxPortfolioAge, assumptions, ssAnalysis.winner, basePlan?.retirementPortfolio]);
 
   const ssBreakevenResults = useMemo(() => {
     const common = {
@@ -607,7 +627,7 @@ export default function BucketPortfolioBuilder() {
       nqPercent: inputs.ssBridgeNqPercent,
       marginalTaxRate: inputs.ssMarginalTaxRate,
       annualExpense: inputs.monthlySpending * 12 || 60000,
-      startingPortfolio: inputs.totalPortfolio || 1000000,
+      startingPortfolio: basePlan.retirementPortfolio || 1000000,
       spousePIA: clientInfo.isMarried ? inputs.partnerSSPIA : 0,
       spouseClaimAge: inputs.partnerSSStartAge || 67,
     };
@@ -625,7 +645,7 @@ export default function BucketPortfolioBuilder() {
     };
   }, [inputs.ssPIA, inputs.ssReinvestRate, inputs.inflationRate,
       inputs.ssBridgeNqPercent, inputs.ssMarginalTaxRate,
-      inputs.monthlySpending, inputs.totalPortfolio,
+      inputs.monthlySpending, basePlan.retirementPortfolio,
       inputs.partnerSSPIA, inputs.partnerSSStartAge, clientInfo.isMarried]);
 
   // Rebalance targets: use manual percentages when enabled, otherwise null for formula-based
@@ -657,8 +677,41 @@ export default function BucketPortfolioBuilder() {
   const ssSimResults = null;
   const ssPartnerSimResults = null;
 
-  // Projection uses immediate values for snappy chart updates (single run, fast)
-  const projectionData = useMemo(() => runSimulation(basePlan, assumptions, inputs, rebalanceFreq, false, null, rebalanceTargets), [basePlan, assumptions, inputs, rebalanceFreq, rebalanceTargets]);
+  // Full simulation output. In unified mode this is the entire timeline (currentAge → death);
+  // in legacy mode it's retirement-only. Used by the cash-flow table where reconciling both
+  // phases is the whole point.
+  const projectionDataFull = useMemo(() => runSimulation(basePlan, assumptions, inputs, rebalanceFreq, false, null, rebalanceTargets), [basePlan, assumptions, inputs, rebalanceFreq, rebalanceTargets]);
+
+  // Retirement-only view — what the time-series charts (Portfolio Sustainability, Monte Carlo,
+  // Rebalancing, etc.) should plot. Pre-retirement rows from unified mode are filtered out so
+  // those charts continue to render the decumulation phase as advisors expect. Year is re-based
+  // to start at 1 at the first retirement year so chart X-axes match legacy behavior.
+  const projectionData = useMemo(() => {
+    if (!inputs.unifiedTimeline) return projectionDataFull;
+    return projectionDataFull
+      .filter(r => r.phase !== 'accumulation')
+      .map((r, idx) => ({ ...r, year: idx + 1 }));
+  }, [projectionDataFull, inputs.unifiedTimeline]);
+
+  // When unified timeline is on, derive accumulationData from the unified projection so
+  // the AccumulationPage and the architect's cash-flow page read from a single source.
+  // Field shape mirrors the legacy calculateAccumulation output for drop-in compatibility.
+  const displayAccumulationData = useMemo(() => {
+    if (!inputs.unifiedTimeline) return accumulationData;
+    return projectionDataFull
+      .filter(r => r.phase === 'accumulation')
+      .map(r => ({
+        age: r.age,
+        balance: r.b5,
+        dropBalance: r.dropBalance || 0,
+        income: r.employmentIncomeDetail || 0,
+        savings: r.savings || 0,
+        growth: r.growth || 0,
+        additionalIncome: r.additionalIncome || 0,
+        additionalTax: r.additionalTax || 0,
+        cashFlowExpense: r.cashFlowExpense || 0
+      }));
+  }, [inputs.unifiedTimeline, accumulationData, projectionDataFull]);
 
   // Monte Carlo uses debounced values — expensive (1000 iterations)
   const monteCarloData = useMemo(() => runSimulation(di.basePlan, di.assumptions, di.inputs, rebalanceFreq, true, null, di.rebalanceTargets), [di, rebalanceFreq]);
@@ -735,6 +788,8 @@ export default function BucketPortfolioBuilder() {
   const finalAccumulationBalance = (finalAccumulationEntry?.balance || 0) + finalDropBalance;
 
   useEffect(() => {
+    // Unified timeline: basePlan.retirementPortfolio is the source of truth, no mutation needed.
+    if (inputs.unifiedTimeline) return;
     if (finalAccumulationBalance > 0) {
       setInputs(prev => {
         // When accounts exist, derive percentages from per-account projected balances.
@@ -759,7 +814,7 @@ export default function BucketPortfolioBuilder() {
         return prev;
       });
     }
-  }, [finalAccumulationBalance, finalAccumulationEntry, finalDropBalance]);
+  }, [finalAccumulationBalance, finalAccumulationEntry, finalDropBalance, inputs.unifiedTimeline]);
 
   // Auto-set SS start age to current age for clients over FRA (already collecting)
   useEffect(() => {
@@ -1094,12 +1149,12 @@ export default function BucketPortfolioBuilder() {
     const partnerSS = clientInfo.isMarried ? getAdjustedSS(inputs.partnerSSPIA, inputs.partnerSSStartAge) * 12 : 0;
     const totalAnnualSS = clientSS + partnerSS;
     const gapYears = Math.max(0, inputs.ssStartAge - clientInfo.retirementAge);
-    let adjustedPortfolio = inputs.totalPortfolio;
+    let adjustedPortfolio = basePlan.retirementPortfolio;
     if (gapYears > 0) {
       const rate = 0.04;
       const pvFactor = (1 - Math.pow(1 + rate, -gapYears)) / rate * (1 + rate);
       const bridgeCost = totalAnnualSS * pvFactor;
-      adjustedPortfolio = Math.max(0, inputs.totalPortfolio - bridgeCost);
+      adjustedPortfolio = Math.max(0, basePlan.retirementPortfolio - bridgeCost);
     }
     const safeWithdrawal = adjustedPortfolio * 0.04;
     setInputs(prev => ({ ...prev, monthlySpending: Math.round((safeWithdrawal + totalAnnualSS) / 12) }));
@@ -1113,15 +1168,33 @@ export default function BucketPortfolioBuilder() {
     setInputs(prev => ({ ...prev, partnerSSStartAge: age }));
   };
 
-  const proceedToArchitect = () => {
-    const finalAccumulation = accumulationData[accumulationData.length - 1].balance;
+  // Build the inputs payload that gets persisted. In legacy mode, totalPortfolio and
+  // monthlySpending are pre-inflated to retirement-age values for backward compat. In
+  // unified mode, both stay as today-state values — basePlan.retirementPortfolio and
+  // the engine's expense inflation handle the projection at render time.
+  const buildPersistInputs = (initializeIfZero) => {
+    if (inputs.unifiedTimeline) {
+      return {
+        ...inputs,
+        monthlySpending: (initializeIfZero && inputs.monthlySpending === 0)
+          ? clientInfo.currentSpending
+          : inputs.monthlySpending
+      };
+    }
+    const finalAccumulation = accumulationData[accumulationData.length - 1]?.balance || 0;
     const yearsToRetire = Math.max(0, clientInfo.retirementAge - clientInfo.currentAge);
     const futureSpending = clientInfo.currentSpending * Math.pow(1 + (inputs.personalInflationRate / 100), yearsToRetire);
+    return {
+      ...inputs,
+      totalPortfolio: finalAccumulation,
+      monthlySpending: (initializeIfZero && inputs.monthlySpending === 0)
+        ? Math.round(futureSpending)
+        : (inputs.monthlySpending || Math.round(futureSpending))
+    };
+  };
 
-    // Create updated inputs for saving
-    const updatedInputs = { ...inputs, totalPortfolio: finalAccumulation, monthlySpending: Math.round(futureSpending) };
-
-    // Save progress silently
+  const proceedToArchitect = () => {
+    const updatedInputs = buildPersistInputs(false);
     const legacyEntry = projectionData.find(p => p.age >= 95) || projectionData[projectionData.length - 1];
     const legacyBalance = legacyEntry?.total || 0;
     saveProgress({ clientInfo, inputs: updatedInputs, assumptions, targetMaxPortfolioAge, rebalanceFreq, vaEnabled, vaInputs, legacyBalance }, userRole);
@@ -1132,19 +1205,8 @@ export default function BucketPortfolioBuilder() {
   };
 
   // Client wizard save progress (auto-save after each page)
-  // Initialize monthlySpending from currentSpending on first transition, then preserve user modifications
   const handleClientSaveProgress = () => {
-    const finalAccumulation = accumulationData[accumulationData.length - 1]?.balance || 0;
-    const yearsToRetire = Math.max(0, clientInfo.retirementAge - clientInfo.currentAge);
-    const futureSpending = clientInfo.currentSpending * Math.pow(1 + (inputs.personalInflationRate / 100), yearsToRetire);
-
-    const updatedInputs = {
-      ...inputs,
-      totalPortfolio: finalAccumulation,
-      // Initialize monthlySpending from currentSpending if it hasn't been set yet
-      monthlySpending: inputs.monthlySpending === 0 ? Math.round(futureSpending) : inputs.monthlySpending
-    };
-
+    const updatedInputs = buildPersistInputs(true);
     setInputs(updatedInputs);
     const legacyEntry = projectionData.find(p => p.age >= 95) || projectionData[projectionData.length - 1];
     const legacyBalance = legacyEntry?.total || 0;
@@ -1160,14 +1222,7 @@ export default function BucketPortfolioBuilder() {
 
     if (autoSaveTimerRef.current) clearTimeout(autoSaveTimerRef.current);
     autoSaveTimerRef.current = setTimeout(() => {
-      const finalAccumulation = accumulationData[accumulationData.length - 1]?.balance || 0;
-      const yearsToRetire = Math.max(0, clientInfo.retirementAge - clientInfo.currentAge);
-      const futureSpending = clientInfo.currentSpending * Math.pow(1 + (inputs.personalInflationRate / 100), yearsToRetire);
-      const updatedInputs = {
-        ...inputs,
-        totalPortfolio: finalAccumulation,
-        monthlySpending: inputs.monthlySpending === 0 ? Math.round(futureSpending) : inputs.monthlySpending
-      };
+      const updatedInputs = buildPersistInputs(true);
       const legacyEntry = projectionData.find(p => p.age >= 95) || projectionData[projectionData.length - 1];
       const legacyBalance = legacyEntry?.total || 0;
       saveProgress({ clientInfo, inputs: updatedInputs, assumptions, targetMaxPortfolioAge, rebalanceFreq, vaEnabled, vaInputs, legacyBalance }, userRole);
@@ -1354,7 +1409,8 @@ export default function BucketPortfolioBuilder() {
         onClientChange={handleClientChange}
         inputs={inputs}
         onInputChange={handleInputChange}
-        accumulationData={accumulationData}
+        basePlan={basePlan}
+        accumulationData={displayAccumulationData}
         projectionData={clientProjectionData}
         monteCarloData={clientMonteCarloData}
         ssAnalysis={ssAnalysis}
@@ -1391,7 +1447,8 @@ export default function BucketPortfolioBuilder() {
         onClientChange={handleClientChange}
         inputs={inputs}
         onInputChange={handleInputChange}
-        accumulationData={accumulationData}
+        basePlan={basePlan}
+        accumulationData={displayAccumulationData}
         projectionData={clientProjectionData}
         monteCarloData={clientMonteCarloData}
         ssAnalysis={ssAnalysis}
@@ -1473,6 +1530,7 @@ export default function BucketPortfolioBuilder() {
         onClientChange={handleClientChange}
         inputs={inputs}
         onInputChange={handleInputChange}
+        basePlan={basePlan}
         assumptions={assumptions}
         onAssumptionChange={handleAssumptionChange}
         onApplyHistoricalAverages={applyHistoricalAverages}
@@ -1519,7 +1577,7 @@ export default function BucketPortfolioBuilder() {
         onClientChange={handleClientChange}
         inputs={inputs}
         onInputChange={handleInputChange}
-        accumulationData={accumulationData}
+        accumulationData={displayAccumulationData}
         onProceed={proceedToArchitect}
         onAddAccount={handleAddAccount}
         onUpdateAccount={handleUpdateAccount}
@@ -1565,8 +1623,9 @@ export default function BucketPortfolioBuilder() {
       showCashFlowTable={showCashFlowTable}
       onSetShowCashFlowTable={setShowCashFlowTable}
       basePlan={basePlan}
-      accumulationData={accumulationData}
+      accumulationData={displayAccumulationData}
       projectionData={projectionData}
+      projectionDataFull={projectionDataFull}
       monteCarloData={monteCarloData}
       optimizerData={optimizerData}
       optimizerRebalanceFreq={optimizerRebalanceFreq}

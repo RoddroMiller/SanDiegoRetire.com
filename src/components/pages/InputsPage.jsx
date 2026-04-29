@@ -20,6 +20,7 @@ export const InputsPage = ({
   // Inputs & Assumptions
   inputs,
   onInputChange,
+  basePlan,
   assumptions,
   onAssumptionChange,
   onApplyHistoricalAverages,
@@ -94,7 +95,7 @@ export const InputsPage = ({
             </label>
             <div className="text-xs text-slate-400 mb-1">(From Accumulation Phase)</div>
             <div className="w-full px-3 py-2 border rounded-md text-sm font-bold text-mwm-green/80 bg-mwm-green/10 cursor-not-allowed">
-              ${inputs.totalPortfolio.toLocaleString()}
+              ${(basePlan?.retirementPortfolio || 0).toLocaleString()}
             </div>
           </div>
 

@@ -30,6 +30,11 @@ const CashFlowsTab = ({ projectionData, monteCarloData, inputs, clientInfo }) =>
   const hasRothConversions = inputs.taxEnabled && activeData.some(r => r.rothConversion > 0);
   const hasRMD = inputs.taxEnabled && activeData.some(r => r.rmdAmount > 0);
   const hasRMDExcess = hasRMD && activeData.some(r => r.rmdExcess > 0);
+  // Unified-timeline support: pre-retirement rows have phase === 'accumulation' and
+  // carry savings/additionalIncome instead of distribution/withdrawal data.
+  const hasAccumulation = activeData.some(r => r.phase === 'accumulation');
+  const hasSavings = activeData.some(r => (r.savings || 0) > 0);
+  const hasAdditionalIncome = activeData.some(r => (r.additionalIncome || 0) > 0);
 
   // Build row definitions for the transposed table
   const buildRows = () => {
@@ -39,6 +44,14 @@ const CashFlowsTab = ({ projectionData, monteCarloData, inputs, clientInfo }) =>
     ];
     if (clientInfo.isMarried) {
       rows.push({ label: `${clientInfo.partnerName || 'Partner'} Age`, cls: 'text-slate-500 bg-slate-50', getValue: (r) => Math.floor(r.partnerAge) });
+    }
+    if (hasAccumulation) {
+      rows.push({
+        label: 'Phase',
+        cls: 'text-slate-500 bg-slate-50 italic',
+        getValue: (r) => r.phase === 'accumulation' ? 'Accumulation' : 'Retirement',
+        dynamicCls: (r) => r.phase === 'accumulation' ? 'text-mwm-emerald bg-mwm-green/10 italic' : 'text-slate-500 bg-slate-50 italic'
+      });
     }
 
     // --- STARTING BALANCE & GROWTH ---
@@ -57,6 +70,7 @@ const CashFlowsTab = ({ projectionData, monteCarloData, inputs, clientInfo }) =>
     if (hasEmployment) rows.push({ label: 'Employment Income', cls: 'text-teal-700', getValue: (r) => r.employmentIncomeDetail > 0 ? fmt(r.employmentIncomeDetail) : '-' });
     if (hasOther) rows.push({ label: 'Other Income', cls: 'text-cyan-700', getValue: (r) => r.otherIncomeDetail > 0 ? fmt(r.otherIncomeDetail) : '-' });
     if (hasContributions) rows.push({ label: 'One-Time Contributions', cls: 'text-purple-700', getValue: (r) => r.contribution > 0 ? `+${fmt(r.contribution)}` : '-' });
+    if (hasAdditionalIncome) rows.push({ label: 'Additional Income (One-Time)', cls: 'text-purple-700', getValue: (r) => (r.additionalIncome || 0) > 0 ? `+${fmt(r.additionalIncome)}` : '-' });
     rows.push(
       { label: 'Total Income', cls: 'font-bold text-blue-800 bg-blue-50', getValue: (r) => fmt(r.ssIncome) },
     );
@@ -113,16 +127,19 @@ const CashFlowsTab = ({ projectionData, monteCarloData, inputs, clientInfo }) =>
       isToggle: 'portfolioFlow',
       cls: 'font-bold cursor-pointer',
       getValue: (r) => {
+        const sav = r.savings || 0;
         const surp = r.surplus || 0;
         const dist = r.distribution || 0;
+        if (sav > 0) return `+${fmt(sav)}`;
         if (surp > 0 && dist === 0) return `+${fmt(surp)}`;
         if (dist > 0) return `-${fmt(dist)}`;
         return '-';
       },
       dynamicCls: (r) => {
+        const sav = r.savings || 0;
         const surp = r.surplus || 0;
         const dist = r.distribution || 0;
-        if (surp > 0 && dist === 0) return 'text-mwm-green font-bold';
+        if (sav > 0 || (surp > 0 && dist === 0)) return 'text-mwm-green font-bold';
         if (dist > 0) return 'text-orange-700 font-bold';
         return 'text-slate-400';
       }

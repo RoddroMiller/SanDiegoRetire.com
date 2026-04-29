@@ -39,7 +39,7 @@ export const OptimizerTab = ({ optimizerData, inputs, basePlan, monteCarloData, 
 
   // Helper to format allocation as percentages
   const getAllocationPercentages = (allocationData) => {
-    const total = inputs.totalPortfolio;
+    const total = basePlan?.retirementPortfolio || 0;
     if (total === 0 || !allocationData) return { b1: '0', b2: '0', b3: '0', b4: '0', b5: '0' };
     return {
       b1: (((allocationData.b1Val || 0) / total) * 100).toFixed(0),

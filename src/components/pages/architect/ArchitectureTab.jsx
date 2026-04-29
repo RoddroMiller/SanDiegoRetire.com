@@ -61,7 +61,7 @@ export const ArchitectureTab = ({ inputs, basePlan, assumptions, projectionData 
             </ResponsiveContainer>
           </div>
           <div className="mt-4 text-center">
-            <p className="text-2xl font-bold text-slate-800">${inputs.totalPortfolio.toLocaleString()}</p>
+            <p className="text-2xl font-bold text-slate-800">${basePlan.retirementPortfolio.toLocaleString()}</p>
             <p className="text-sm text-slate-500">Total Portfolio at Retirement</p>
           </div>
         </Card>
@@ -80,7 +80,7 @@ export const ArchitectureTab = ({ inputs, basePlan, assumptions, projectionData 
                 </div>
                 <div className="text-right">
                   <p className="font-bold text-lg">${basePlan.b1Val.toLocaleString()}</p>
-                  <p className="text-xs text-slate-500">{((basePlan.b1Val / inputs.totalPortfolio) * 100).toFixed(1)}% • {assumptions.b1.return}% return</p>
+                  <p className="text-xs text-slate-500">{((basePlan.b1Val / basePlan.retirementPortfolio) * 100).toFixed(1)}% • {assumptions.b1.return}% return</p>
                 </div>
               </div>
             </div>
@@ -92,7 +92,7 @@ export const ArchitectureTab = ({ inputs, basePlan, assumptions, projectionData 
                 </div>
                 <div className="text-right">
                   <p className="font-bold text-lg">${basePlan.b2Val.toLocaleString()}</p>
-                  <p className="text-xs text-slate-500">{((basePlan.b2Val / inputs.totalPortfolio) * 100).toFixed(1)}% • {assumptions.b2.return}% return</p>
+                  <p className="text-xs text-slate-500">{((basePlan.b2Val / basePlan.retirementPortfolio) * 100).toFixed(1)}% • {assumptions.b2.return}% return</p>
                 </div>
               </div>
             </div>
@@ -104,7 +104,7 @@ export const ArchitectureTab = ({ inputs, basePlan, assumptions, projectionData 
                 </div>
                 <div className="text-right">
                   <p className="font-bold text-lg">${basePlan.b3Val.toLocaleString()}</p>
-                  <p className="text-xs text-slate-500">{((basePlan.b3Val / inputs.totalPortfolio) * 100).toFixed(1)}% • {assumptions.b3.return}% return</p>
+                  <p className="text-xs text-slate-500">{((basePlan.b3Val / basePlan.retirementPortfolio) * 100).toFixed(1)}% • {assumptions.b3.return}% return</p>
                 </div>
               </div>
             </div>
@@ -116,7 +116,7 @@ export const ArchitectureTab = ({ inputs, basePlan, assumptions, projectionData 
                 </div>
                 <div className="text-right">
                   <p className="font-bold text-lg">${basePlan.b4Val.toLocaleString()}</p>
-                  <p className="text-xs text-slate-500">{((basePlan.b4Val / (inputs.totalPortfolio || 1)) * 100).toFixed(1)}% • {assumptions.b4.return}% return</p>
+                  <p className="text-xs text-slate-500">{((basePlan.b4Val / (basePlan.retirementPortfolio || 1)) * 100).toFixed(1)}% • {assumptions.b4.return}% return</p>
                 </div>
               </div>
             </div>
@@ -128,7 +128,7 @@ export const ArchitectureTab = ({ inputs, basePlan, assumptions, projectionData 
                 </div>
                 <div className="text-right">
                   <p className="font-bold text-lg">${Math.max(0, basePlan.b5Val).toLocaleString()}</p>
-                  <p className="text-xs text-slate-500">{((Math.max(0, basePlan.b5Val) / inputs.totalPortfolio) * 100).toFixed(1)}% • {assumptions.b5.return}% return</p>
+                  <p className="text-xs text-slate-500">{((Math.max(0, basePlan.b5Val) / basePlan.retirementPortfolio) * 100).toFixed(1)}% • {assumptions.b5.return}% return</p>
                 </div>
               </div>
             </div>

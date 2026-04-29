@@ -174,7 +174,7 @@ export const AllocationTab = ({
               <span className="text-sm font-medium text-slate-600 mr-2">Preset:</span>
               <select
                 onChange={(e) => {
-                  const tp = inputs.totalPortfolio || 1;
+                  const tp = basePlan.retirementPortfolio || 1;
                   const presets = {
                     '': null,
                     'formula': { b1: formulaAllocations.b1Val, b2: formulaAllocations.b2Val, b3: formulaAllocations.b3Val, b4: formulaAllocations.b4Val, b5: formulaAllocations.b5Val },
@@ -280,7 +280,7 @@ export const AllocationTab = ({
                 <div className="text-xs text-slate-400 mt-0.5">
                   {manualAllocationMode === 'percentage'
                     ? `$${Math.round(manualAllocations[key]).toLocaleString()}`
-                    : `${((manualAllocations[key] / (inputs.totalPortfolio || 1)) * 100).toFixed(1)}%`
+                    : `${((manualAllocations[key] / (basePlan.retirementPortfolio || 1)) * 100).toFixed(1)}%`
                   }
                 </div>
               </div>
@@ -294,13 +294,13 @@ export const AllocationTab = ({
           <span className="text-slate-600">
             Total: <span className="font-bold">${(manualAllocations.b1 + manualAllocations.b2 + manualAllocations.b3 + manualAllocations.b4 + manualAllocations.b5).toLocaleString()}</span>
             <span className="text-slate-400 ml-2">
-              ({(((manualAllocations.b1 + manualAllocations.b2 + manualAllocations.b3 + manualAllocations.b4 + manualAllocations.b5) / (inputs.totalPortfolio || 1)) * 100).toFixed(1)}%)
+              ({(((manualAllocations.b1 + manualAllocations.b2 + manualAllocations.b3 + manualAllocations.b4 + manualAllocations.b5) / (basePlan.retirementPortfolio || 1)) * 100).toFixed(1)}%)
             </span>
           </span>
-          <span className={`font-medium ${Math.abs((manualAllocations.b1 + manualAllocations.b2 + manualAllocations.b3 + manualAllocations.b4 + manualAllocations.b5) - inputs.totalPortfolio) < 1 ? 'text-green-600' : 'text-mwm-gold'}`}>
-            {Math.abs((manualAllocations.b1 + manualAllocations.b2 + manualAllocations.b3 + manualAllocations.b4 + manualAllocations.b5) - inputs.totalPortfolio) < 1
+          <span className={`font-medium ${Math.abs((manualAllocations.b1 + manualAllocations.b2 + manualAllocations.b3 + manualAllocations.b4 + manualAllocations.b5) - basePlan.retirementPortfolio) < 1 ? 'text-green-600' : 'text-mwm-gold'}`}>
+            {Math.abs((manualAllocations.b1 + manualAllocations.b2 + manualAllocations.b3 + manualAllocations.b4 + manualAllocations.b5) - basePlan.retirementPortfolio) < 1
               ? '✓ Matches portfolio'
-              : `Difference: $${((manualAllocations.b1 + manualAllocations.b2 + manualAllocations.b3 + manualAllocations.b4 + manualAllocations.b5) - inputs.totalPortfolio).toLocaleString()}`}
+              : `Difference: $${((manualAllocations.b1 + manualAllocations.b2 + manualAllocations.b3 + manualAllocations.b4 + manualAllocations.b5) - basePlan.retirementPortfolio).toLocaleString()}`}
           </span>
         </div>
       )}
@@ -344,35 +344,35 @@ export const AllocationTab = ({
         <div className="divide-y divide-slate-100">
           <AllocationRow
             color={COLORS.shortTerm} name="1. Liquidity"
-            amount={basePlan.b1Val} percent={((basePlan.b1Val / inputs.totalPortfolio) * 100).toFixed(1)}
+            amount={basePlan.b1Val} percent={((basePlan.b1Val / basePlan.retirementPortfolio) * 100).toFixed(1)}
             returnRate={assumptions.b1.return} stdDev={assumptions.b1.stdDev}
             historicalReturn={assumptions.b1.historical}
             description="Immediate liquidity buffer (~Years 1-3)."
           />
           <AllocationRow
             color={COLORS.midTerm} name="2. Bridge"
-            amount={basePlan.b2Val} percent={((basePlan.b2Val / inputs.totalPortfolio) * 100).toFixed(1)}
+            amount={basePlan.b2Val} percent={((basePlan.b2Val / basePlan.retirementPortfolio) * 100).toFixed(1)}
             returnRate={assumptions.b2.return} stdDev={assumptions.b2.stdDev}
             historicalReturn={assumptions.b2.historical}
             description="Conservative growth bridge (~Years 4-6)."
           />
           <AllocationRow
             color={COLORS.hedged} name="3. Tactical Balanced"
-            amount={basePlan.b3Val} percent={((basePlan.b3Val / inputs.totalPortfolio) * 100).toFixed(1)}
+            amount={basePlan.b3Val} percent={((basePlan.b3Val / basePlan.retirementPortfolio) * 100).toFixed(1)}
             returnRate={assumptions.b3.return} stdDev={assumptions.b3.stdDev}
             historicalReturn={assumptions.b3.historical}
             description="Moderate risk for intermediate needs (~Years 7-15)."
           />
           <AllocationRow
             color={COLORS.income} name="4. Income & Growth"
-            amount={basePlan.b4Val} percent={((basePlan.b4Val / (inputs.totalPortfolio || 1)) * 100).toFixed(1)}
+            amount={basePlan.b4Val} percent={((basePlan.b4Val / (basePlan.retirementPortfolio || 1)) * 100).toFixed(1)}
             returnRate={assumptions.b4.return} stdDev={assumptions.b4.stdDev}
             historicalReturn={assumptions.b4.historical}
             description={basePlan.b4Val > 0 ? "Income & dividends/yield allocation." : "No allocation — portfolio prioritized for spending needs."}
           />
           <AllocationRow
             color={COLORS.longTerm} name="5. Permanent Equity"
-            amount={basePlan.b5Val} percent={((basePlan.b5Val / inputs.totalPortfolio) * 100).toFixed(1)}
+            amount={basePlan.b5Val} percent={((basePlan.b5Val / basePlan.retirementPortfolio) * 100).toFixed(1)}
             returnRate={assumptions.b5.return} stdDev={assumptions.b5.stdDev}
             historicalReturn={assumptions.b5.historical}
             description="Growth engine for longevity protection."

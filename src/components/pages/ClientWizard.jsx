@@ -21,6 +21,7 @@ export const ClientWizard = ({
   inputs,
   onInputChange,
   // Calculations
+  basePlan,
   accumulationData,
   projectionData,
   monteCarloData,
@@ -140,7 +141,7 @@ export const ClientWizard = ({
     const successGap = targetSuccessRate - currentSuccessRate;
     const yearsToRetirement = Math.max(1, clientInfo.retirementAge - clientInfo.currentAge);
     const annualSpending = inputs.monthlySpending * 12;
-    const portfolio = inputs.totalPortfolio || (accumulationData[accumulationData.length - 1]?.balance || 0);
+    const portfolio = basePlan.retirementPortfolio || (accumulationData[accumulationData.length - 1]?.balance || 0);
 
     // Calculate existing additional income at retirement (annual)
     let additionalIncomeAtRetirement = 0;
@@ -216,14 +217,14 @@ export const ClientWizard = ({
     if (!hasAnySelection) {
       return {
         hasChanges: false,
-        portfolio: inputs.totalPortfolio,
+        portfolio: basePlan.retirementPortfolio,
         monthlyNeed: inputs.monthlySpending,
         successRate: monteCarloData?.successRate || 0,
         legacyBalance: monteCarloData?.medianLegacy || cappedProjectionData[cappedProjectionData.length - 1]?.total || 0
       };
     }
 
-    let adjustedPortfolio = inputs.totalPortfolio || (accumulationData[accumulationData.length - 1]?.balance || 0);
+    let adjustedPortfolio = basePlan.retirementPortfolio || (accumulationData[accumulationData.length - 1]?.balance || 0);
     let adjustedMonthlyNeed = inputs.monthlySpending;
 
     if (selectedImprovements.delay && customImprovements.delayYears > 0) {
@@ -273,7 +274,7 @@ export const ClientWizard = ({
     }
 
     const baseLegacy = monteCarloData?.medianLegacy || cappedProjectionData[cappedProjectionData.length - 1]?.total || 0;
-    const portfolioRatio = adjustedPortfolio / (inputs.totalPortfolio || 1);
+    const portfolioRatio = adjustedPortfolio / (basePlan.retirementPortfolio || 1);
     const spendingRatio = adjustedMonthlyNeed / (inputs.monthlySpending || 1);
     const legacyMultiplier = portfolioRatio * (2 - spendingRatio);
     const adjustedLegacy = Math.max(0, baseLegacy * legacyMultiplier);
@@ -1424,9 +1425,9 @@ export const ClientWizard = ({
           label="Starting Balance"
           value={adjustedProjections.hasChanges && (selectedImprovements.delay || selectedImprovements.savings)
             ? `$${(adjustedProjections.portfolio / 1000000).toFixed(2)}M`
-            : `$${(inputs.totalPortfolio / 1000000).toFixed(2)}M`}
+            : `$${(basePlan.retirementPortfolio / 1000000).toFixed(2)}M`}
           subtext={adjustedProjections.hasChanges && (selectedImprovements.delay || selectedImprovements.savings)
-            ? <><span className="line-through opacity-60">${(inputs.totalPortfolio / 1000000).toFixed(2)}M</span> → +${((adjustedProjections.portfolio - inputs.totalPortfolio) / 1000).toFixed(0)}k</>
+            ? <><span className="line-through opacity-60">${(basePlan.retirementPortfolio / 1000000).toFixed(2)}M</span> → +${((adjustedProjections.portfolio - basePlan.retirementPortfolio) / 1000).toFixed(0)}k</>
             : "At Retirement"}
           icon={Briefcase}
           colorClass={`bg-gray-800 text-white ${adjustedProjections.hasChanges && (selectedImprovements.delay || selectedImprovements.savings) ? 'ring-2 ring-mwm-green/60' : ''}`}

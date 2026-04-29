@@ -55,6 +55,7 @@ export const ArchitectPage = ({
   basePlan,
   accumulationData,
   projectionData,
+  projectionDataFull,
   monteCarloData,
   optimizerData,
   optimizerRebalanceFreq,
@@ -201,7 +202,7 @@ export const ArchitectPage = ({
     const successGap = targetSuccessRate - currentSuccessRate;
     const yearsToRetirement = Math.max(1, clientInfo.retirementAge - clientInfo.currentAge);
     const annualSpending = inputs.monthlySpending * 12;
-    const portfolio = inputs.totalPortfolio || (accumulationData[accumulationData.length - 1]?.balance || 0);
+    const portfolio = basePlan.retirementPortfolio || (accumulationData[accumulationData.length - 1]?.balance || 0);
 
     // Calculate existing additional income at retirement (annual)
     let additionalIncomeAtRetirement = 0;
@@ -270,14 +271,14 @@ export const ArchitectPage = ({
     if (!hasAnySelection) {
       return {
         hasChanges: false,
-        portfolio: inputs.totalPortfolio,
+        portfolio: basePlan.retirementPortfolio,
         monthlyNeed: inputs.monthlySpending,
         successRate: monteCarloData?.successRate || 0,
         legacyBalance: legacyAt95
       };
     }
 
-    let adjustedPortfolio = inputs.totalPortfolio || (accumulationData[accumulationData.length - 1]?.balance || 0);
+    let adjustedPortfolio = basePlan.retirementPortfolio || (accumulationData[accumulationData.length - 1]?.balance || 0);
     let adjustedMonthlyNeed = inputs.monthlySpending;
 
     if (selectedImprovements.delay && customImprovements.delayYears > 0) {
@@ -327,7 +328,7 @@ export const ArchitectPage = ({
     }
 
     const baseLegacy = legacyAt95;
-    const portfolioRatio = adjustedPortfolio / (inputs.totalPortfolio || 1);
+    const portfolioRatio = adjustedPortfolio / (basePlan.retirementPortfolio || 1);
     const spendingRatio = adjustedMonthlyNeed / (inputs.monthlySpending || 1);
     const legacyMultiplier = portfolioRatio * (2 - spendingRatio);
     const adjustedLegacy = Math.max(0, baseLegacy * legacyMultiplier);
@@ -522,7 +523,7 @@ export const ArchitectPage = ({
     }
 
     // Bucket allocation matrix
-    const total = inputs.totalPortfolio || 0;
+    const total = basePlan.retirementPortfolio || 0;
     const accountBalances = {
       traditional: total * ((inputs.traditionalPercent ?? 60) / 100),
       roth: total * ((inputs.rothPercent ?? 25) / 100),
@@ -932,7 +933,7 @@ export const ArchitectPage = ({
                 <p className="text-mwm-emerald font-bold text-[13px]">Projected Portfolio at Retirement (Age {clientInfo.retirementAge})</p>
                 <p className="text-xs text-mwm-green">Based on {clientInfo.expectedReturn}% expected return, {inputs.inflationRate}% inflation adjustment on savings</p>
               </div>
-              <p className="text-2xl font-bold text-mwm-green/80">${inputs.totalPortfolio.toLocaleString()}</p>
+              <p className="text-2xl font-bold text-mwm-green/80">${basePlan.retirementPortfolio.toLocaleString()}</p>
             </div>
           </div>
           </>
@@ -1134,17 +1135,17 @@ export const ArchitectPage = ({
                   <div className="bg-blue-50 rounded-lg p-2">
                     <p className="text-slate-500 text-[11px]">Tax-Deferred</p>
                     <p className="font-bold text-lg text-blue-700">{inputs.traditionalPercent}%</p>
-                    <p className="text-slate-500 text-[10px]">${Math.round(inputs.totalPortfolio * (inputs.traditionalPercent / 100)).toLocaleString()}</p>
+                    <p className="text-slate-500 text-[10px]">${Math.round(basePlan.retirementPortfolio * (inputs.traditionalPercent / 100)).toLocaleString()}</p>
                   </div>
                   <div className="bg-green-50 rounded-lg p-2">
                     <p className="text-slate-500 text-[11px]">Roth</p>
                     <p className="font-bold text-lg text-green-700">{inputs.rothPercent}%</p>
-                    <p className="text-slate-500 text-[10px]">${Math.round(inputs.totalPortfolio * (inputs.rothPercent / 100)).toLocaleString()}</p>
+                    <p className="text-slate-500 text-[10px]">${Math.round(basePlan.retirementPortfolio * (inputs.rothPercent / 100)).toLocaleString()}</p>
                   </div>
                   <div className="bg-amber-50 rounded-lg p-2">
                     <p className="text-slate-500 text-[11px]">Non-Qualified</p>
                     <p className="font-bold text-lg text-amber-700">{inputs.nqPercent}%</p>
-                    <p className="text-slate-500 text-[10px]">${Math.round(inputs.totalPortfolio * (inputs.nqPercent / 100)).toLocaleString()}</p>
+                    <p className="text-slate-500 text-[10px]">${Math.round(basePlan.retirementPortfolio * (inputs.nqPercent / 100)).toLocaleString()}</p>
                   </div>
                 </div>
               </div>
@@ -1199,9 +1200,9 @@ export const ArchitectPage = ({
               label="Starting Balance"
               value={adjustedProjections.hasChanges && (selectedImprovements.delay || selectedImprovements.savings)
                 ? `$${(adjustedProjections.portfolio / 1000000).toFixed(2)}M`
-                : `$${(inputs.totalPortfolio / 1000000).toFixed(2)}M`}
+                : `$${(basePlan.retirementPortfolio / 1000000).toFixed(2)}M`}
               subtext={adjustedProjections.hasChanges && (selectedImprovements.delay || selectedImprovements.savings)
-                ? <><span className="line-through opacity-60">${(inputs.totalPortfolio / 1000000).toFixed(2)}M</span> → +${((adjustedProjections.portfolio - inputs.totalPortfolio) / 1000).toFixed(0)}k</>
+                ? <><span className="line-through opacity-60">${(basePlan.retirementPortfolio / 1000000).toFixed(2)}M</span> → +${((adjustedProjections.portfolio - basePlan.retirementPortfolio) / 1000).toFixed(0)}k</>
                 : "Accumulation + Contributions"}
               icon={Briefcase}
               colorClass={`bg-gray-800 text-white ${adjustedProjections.hasChanges && (selectedImprovements.delay || selectedImprovements.savings) ? 'ring-2 ring-mwm-green/60' : ''}`}
@@ -1443,6 +1444,7 @@ export const ArchitectPage = ({
             <ImproveOutcomeTab
               clientInfo={clientInfo}
               inputs={inputs}
+              basePlan={basePlan}
               monteCarloData={monteCarloData}
               projectionData={projectionData}
               onInputChange={onInputChange}
@@ -1495,7 +1497,7 @@ export const ArchitectPage = ({
 
           {activeTab === 'cashflows' && (
             <CashFlowsTab
-              projectionData={projectionData}
+              projectionData={projectionDataFull || projectionData}
               monteCarloData={monteCarloData}
               inputs={inputs}
               clientInfo={clientInfo}
@@ -1538,31 +1540,31 @@ export const ArchitectPage = ({
           <div className="p-4 rounded-lg text-center" style={{ backgroundColor: `${COLORS.shortTerm}20`, borderTop: `4px solid ${COLORS.shortTerm}` }}>
             <p className="text-xs font-bold text-slate-600">B1 - Liquidity</p>
             <p className="text-xl font-bold text-slate-800">{basePlan.b1Val >= 1000000 ? `$${(basePlan.b1Val / 1000000).toFixed(2)}M` : `$${(basePlan.b1Val / 1000).toFixed(0)}k`}</p>
-            <p className="text-xs text-slate-500">{((basePlan.b1Val / inputs.totalPortfolio) * 100).toFixed(1)}%</p>
+            <p className="text-xs text-slate-500">{((basePlan.b1Val / basePlan.retirementPortfolio) * 100).toFixed(1)}%</p>
             <p className="text-xs text-slate-400 mt-1">~Years 1-3</p>
           </div>
           <div className="p-4 rounded-lg text-center" style={{ backgroundColor: `${COLORS.midTerm}20`, borderTop: `4px solid ${COLORS.midTerm}` }}>
             <p className="text-xs font-bold text-slate-600">B2 - Bridge</p>
             <p className="text-xl font-bold text-slate-800">{basePlan.b2Val >= 1000000 ? `$${(basePlan.b2Val / 1000000).toFixed(2)}M` : `$${(basePlan.b2Val / 1000).toFixed(0)}k`}</p>
-            <p className="text-xs text-slate-500">{((basePlan.b2Val / inputs.totalPortfolio) * 100).toFixed(1)}%</p>
+            <p className="text-xs text-slate-500">{((basePlan.b2Val / basePlan.retirementPortfolio) * 100).toFixed(1)}%</p>
             <p className="text-xs text-slate-400 mt-1">~Years 4-6</p>
           </div>
           <div className="p-4 rounded-lg text-center" style={{ backgroundColor: `${COLORS.hedged}20`, borderTop: `4px solid ${COLORS.hedged}` }}>
             <p className="text-xs font-bold text-slate-600">B3 - Tactical Balanced</p>
             <p className="text-xl font-bold text-slate-800">{basePlan.b3Val >= 1000000 ? `$${(basePlan.b3Val / 1000000).toFixed(2)}M` : `$${(basePlan.b3Val / 1000).toFixed(0)}k`}</p>
-            <p className="text-xs text-slate-500">{((basePlan.b3Val / inputs.totalPortfolio) * 100).toFixed(1)}%</p>
+            <p className="text-xs text-slate-500">{((basePlan.b3Val / basePlan.retirementPortfolio) * 100).toFixed(1)}%</p>
             <p className="text-xs text-slate-400 mt-1">~Years 7-15</p>
           </div>
           <div className="p-4 rounded-lg text-center" style={{ backgroundColor: `${COLORS.income}20`, borderTop: `4px solid ${COLORS.income}` }}>
             <p className="text-xs font-bold text-slate-600">B4 - Income & Growth</p>
             <p className="text-xl font-bold text-slate-800">{basePlan.b4Val >= 1000000 ? `$${(basePlan.b4Val / 1000000).toFixed(2)}M` : `$${(basePlan.b4Val / 1000).toFixed(0)}k`}</p>
-            <p className="text-xs text-slate-500">{((basePlan.b4Val / inputs.totalPortfolio) * 100).toFixed(1)}%</p>
+            <p className="text-xs text-slate-500">{((basePlan.b4Val / basePlan.retirementPortfolio) * 100).toFixed(1)}%</p>
             <p className="text-xs text-slate-400 mt-1">10% Fixed</p>
           </div>
           <div className="p-4 rounded-lg text-center" style={{ backgroundColor: `${COLORS.longTerm}20`, borderTop: `4px solid ${COLORS.longTerm}` }}>
             <p className="text-xs font-bold text-slate-600">B5 - Permanent Equity</p>
             <p className="text-xl font-bold text-slate-800">{Math.max(0, basePlan.b5Val) >= 1000000 ? `$${(Math.max(0, basePlan.b5Val) / 1000000).toFixed(2)}M` : `$${(Math.max(0, basePlan.b5Val) / 1000).toFixed(0)}k`}</p>
-            <p className="text-xs text-slate-500">{((Math.max(0, basePlan.b5Val) / inputs.totalPortfolio) * 100).toFixed(1)}%</p>
+            <p className="text-xs text-slate-500">{((Math.max(0, basePlan.b5Val) / basePlan.retirementPortfolio) * 100).toFixed(1)}%</p>
             <p className="text-xs text-slate-400 mt-1">Remainder</p>
           </div>
         </div>
@@ -2060,11 +2062,11 @@ export const ArchitectPage = ({
                   <>
               <tr className="border-b bg-mwm-green/10">
                 <td className="p-1.5 font-bold">Current Model</td>
-                <td className="p-1.5 text-center">{((basePlan.b1Val / inputs.totalPortfolio) * 100).toFixed(1)}%</td>
-                <td className="p-1.5 text-center">{((basePlan.b2Val / inputs.totalPortfolio) * 100).toFixed(1)}%</td>
-                <td className="p-1.5 text-center">{((basePlan.b3Val / inputs.totalPortfolio) * 100).toFixed(1)}%</td>
-                <td className="p-1.5 text-center">{((basePlan.b4Val / inputs.totalPortfolio) * 100).toFixed(1)}%</td>
-                <td className="p-1.5 text-center">{((Math.max(0, basePlan.b5Val) / inputs.totalPortfolio) * 100).toFixed(1)}%</td>
+                <td className="p-1.5 text-center">{((basePlan.b1Val / basePlan.retirementPortfolio) * 100).toFixed(1)}%</td>
+                <td className="p-1.5 text-center">{((basePlan.b2Val / basePlan.retirementPortfolio) * 100).toFixed(1)}%</td>
+                <td className="p-1.5 text-center">{((basePlan.b3Val / basePlan.retirementPortfolio) * 100).toFixed(1)}%</td>
+                <td className="p-1.5 text-center">{((basePlan.b4Val / basePlan.retirementPortfolio) * 100).toFixed(1)}%</td>
+                <td className="p-1.5 text-center">{((Math.max(0, basePlan.b5Val) / basePlan.retirementPortfolio) * 100).toFixed(1)}%</td>
                 <td className="p-1.5 text-center font-bold text-mwm-green/80">{(monteCarloData?.successRate || 0).toFixed(1)}%</td>
                 <td className="p-1.5 text-center">{fmtLegacy(legacyAt95)}</td>
               </tr>
@@ -2394,7 +2396,7 @@ export const ArchitectPage = ({
                       const colTotal = ['traditional', 'roth', 'nq'].reduce((s, acct) => s + (execSummaryPrint.matrix[acct][bk] || 0), 0);
                       return <td key={bk} className="p-1.5 text-center">{execSummaryPrint.fmtShort(colTotal)}</td>;
                     })}
-                    <td className="p-1.5 text-right">{execSummaryPrint.fmtShort(inputs.totalPortfolio || 0)}</td>
+                    <td className="p-1.5 text-right">{execSummaryPrint.fmtShort(basePlan.retirementPortfolio || 0)}</td>
                   </tr>
                 </tfoot>
               </table>

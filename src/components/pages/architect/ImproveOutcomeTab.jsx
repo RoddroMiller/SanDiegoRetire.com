@@ -5,7 +5,7 @@ import { getAdjustedSS } from '../../../utils';
 import { Card } from '../../ui';
 
 // Improve Outcome Tab - Advisory Only
-export const ImproveOutcomeTab = ({ clientInfo, inputs, monteCarloData, projectionData, onInputChange }) => {
+export const ImproveOutcomeTab = ({ clientInfo, inputs, basePlan, monteCarloData, projectionData, onInputChange }) => {
   const successRate = monteCarloData?.successRate || 0;
   const legacyEntry = projectionData.find(p => p.age >= 95) || projectionData[projectionData.length - 1];
   const legacyBalance = legacyEntry?.total || 0;
@@ -57,7 +57,7 @@ export const ImproveOutcomeTab = ({ clientInfo, inputs, monteCarloData, projecti
               </p>
               <button
                 onClick={() => {
-                  const portfolioWithdrawal = (inputs.totalPortfolio * 0.04) / 12;
+                  const portfolioWithdrawal = ((basePlan?.retirementPortfolio || 0) * 0.04) / 12;
                   const clientSS = getAdjustedSS(inputs.ssPIA, inputs.ssStartAge);
                   const partnerSS = clientInfo.isMarried ? getAdjustedSS(inputs.partnerSSPIA, inputs.partnerSSStartAge) : 0;
                   const fourPercentMonthly = Math.round(portfolioWithdrawal + clientSS + partnerSS);
@@ -66,7 +66,7 @@ export const ImproveOutcomeTab = ({ clientInfo, inputs, monteCarloData, projecti
                 className="mt-3 px-4 py-2 bg-orange-600 text-white text-sm font-medium rounded-lg hover:bg-orange-700 transition-colors"
               >
                 Try the 4% Rule (${(() => {
-                  const portfolioWithdrawal = (inputs.totalPortfolio * 0.04) / 12;
+                  const portfolioWithdrawal = ((basePlan?.retirementPortfolio || 0) * 0.04) / 12;
                   const clientSS = getAdjustedSS(inputs.ssPIA, inputs.ssStartAge);
                   const partnerSS = clientInfo.isMarried ? getAdjustedSS(inputs.partnerSSPIA, inputs.partnerSSStartAge) : 0;
                   return Math.round(portfolioWithdrawal + clientSS + partnerSS).toLocaleString();

@@ -148,13 +148,13 @@ export const ExecutiveSummaryTab = ({
 
   // Account type balances from the distribution starting portfolio
   const accountBalances = useMemo(() => {
-    const total = inputs.totalPortfolio || 0;
+    const total = basePlan?.retirementPortfolio || 0;
     return {
       traditional: total * ((inputs.traditionalPercent ?? 60) / 100),
       roth: total * ((inputs.rothPercent ?? 25) / 100),
       nq: total * ((inputs.nqPercent ?? 15) / 100),
     };
-  }, [inputs.totalPortfolio, inputs.traditionalPercent, inputs.rothPercent, inputs.nqPercent]);
+  }, [basePlan?.retirementPortfolio, inputs.traditionalPercent, inputs.rothPercent, inputs.nqPercent]);
 
   // Bucket targets from the base plan (distribution starting allocation)
   const bucketTargets = useMemo(() => ({
@@ -165,7 +165,7 @@ export const ExecutiveSummaryTab = ({
     b5: basePlan?.b5Val || 0,
   }), [basePlan]);
 
-  const totalPortfolio = inputs.totalPortfolio || 0;
+  const totalPortfolio = basePlan?.retirementPortfolio || 0;
 
   // Auto-optimized matrix
   const autoMatrix = useMemo(() => {

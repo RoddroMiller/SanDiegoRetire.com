@@ -21,10 +21,11 @@ export const MonteCarloTab = ({ monteCarloData, rebalanceFreq, onSetRebalanceFre
   const legacyYear = new Date().getFullYear() + Math.max(0, finalProjectionAge - (clientInfo?.currentAge || clientInfo?.retirementAge || 65));
   const legacyLabel = `${legacyYear}`;
 
+  const vaPortfolioBase = basePlan?.retirementPortfolio || 0;
   const vaAllocationAmount = vaInputs && vaEnabled
     ? (vaInputs.allocationType === 'percentage'
-        ? inputs.totalPortfolio * (vaInputs.allocationPercent / 100)
-        : Math.min(vaInputs.allocationFixed, inputs.totalPortfolio))
+        ? vaPortfolioBase * (vaInputs.allocationPercent / 100)
+        : Math.min(vaInputs.allocationFixed, vaPortfolioBase))
     : 0;
 
   const annualGuaranteedIncome = vaEnabled && vaInputs
@@ -126,7 +127,7 @@ export const MonteCarloTab = ({ monteCarloData, rebalanceFreq, onSetRebalanceFre
                     value={Number(vaInputs.allocationType === 'percentage' ? vaInputs.allocationPercent : vaInputs.allocationFixed)}
                     onChange={(e) => onVaInputChange(vaInputs.allocationType === 'percentage' ? 'allocationPercent' : 'allocationFixed', parseFloat(e.target.value) || 0)}
                     className={`w-full py-1.5 text-sm border border-slate-200 rounded-lg focus:ring-2 focus:ring-purple-500 ${vaInputs.allocationType === 'percentage' ? 'pl-2 pr-6' : 'pl-6 pr-2'}`}
-                    min="0" max={vaInputs.allocationType === 'percentage' ? 100 : inputs.totalPortfolio}
+                    min="0" max={vaInputs.allocationType === 'percentage' ? 100 : vaPortfolioBase}
                   />
                 </div>
               </div>

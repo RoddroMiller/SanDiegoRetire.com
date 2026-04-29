@@ -1126,19 +1126,74 @@ export const calculateBasePlan = (inputs, assumptions, clientInfo, vaEnabled = f
   // Portfolio available for bucket allocation (excluding VA allocation)
   const bucketPortfolio = totalPortfolio - vaAllocationAmount;
 
+  // Unified timeline: when enabled, the simulation runs from currentAge through to last death,
+  // so accumulation and decumulation share one engine. The bucket-sizing math is offset so
+  // buckets are still right-sized for post-retirement spending only.
+  const unified = !!inputs.unifiedTimeline;
+
   // Start simulation from the earliest relevant age:
-  // - Client's current age or retirement age (whichever is later)
-  // - OR when a retired partner turns 62 (to capture their early SS income)
-  let simulationStartAge = Math.max(clientInfo.currentAge, clientInfo.retirementAge);
-  if (clientInfo.isMarried) {
-    const partnerRetAge = clientInfo.partnerRetirementAge || clientInfo.retirementAge;
-    const partnerIsAlreadyRetired = clientInfo.partnerIsRetired || partnerRetAge <= clientInfo.partnerAge;
-    if (partnerIsAlreadyRetired) {
-      // Partner is retired — start when the earliest person can claim SS (age 62)
-      const partnerTurns62InClientAge = 62 + (clientInfo.currentAge - clientInfo.partnerAge);
-      const earliestSSAge = Math.max(clientInfo.currentAge, Math.min(simulationStartAge, partnerTurns62InClientAge));
-      simulationStartAge = Math.min(simulationStartAge, earliestSSAge);
+  // - Unified timeline: always currentAge
+  // - Legacy: client's current age or retirement age (whichever is later),
+  //   OR earlier when a retired partner turns 62 (to capture their early SS income)
+  let simulationStartAge;
+  if (unified) {
+    simulationStartAge = clientInfo.currentAge;
+  } else {
+    simulationStartAge = Math.max(clientInfo.currentAge, clientInfo.retirementAge);
+    if (clientInfo.isMarried) {
+      const partnerRetAge = clientInfo.partnerRetirementAge || clientInfo.retirementAge;
+      const partnerIsAlreadyRetired = clientInfo.partnerIsRetired || partnerRetAge <= clientInfo.partnerAge;
+      if (partnerIsAlreadyRetired) {
+        // Partner is retired — start when the earliest person can claim SS (age 62)
+        const partnerTurns62InClientAge = 62 + (clientInfo.currentAge - clientInfo.partnerAge);
+        const earliestSSAge = Math.max(clientInfo.currentAge, Math.min(simulationStartAge, partnerTurns62InClientAge));
+        simulationStartAge = Math.min(simulationStartAge, earliestSSAge);
+      }
     }
+  }
+
+  // Boundary between accumulation and retirement illustration:
+  //   1. Advisor override (inputs.retirementIllustrationStartAge), if set.
+  //   2. Otherwise max(client, partner) retirement age — captures the longest accumulation runway.
+  //   3. Floored at currentAge so a fully-retired household has zero accumulation years.
+  const partnerRetAgeForBoundary = clientInfo.isMarried
+    ? (clientInfo.partnerRetirementAge || clientInfo.retirementAge)
+    : clientInfo.retirementAge;
+  const defaultBoundaryAge = Math.max(clientInfo.retirementAge, partnerRetAgeForBoundary);
+  const retirementBoundaryAge = Math.max(
+    clientInfo.currentAge,
+    inputs.retirementIllustrationStartAge ?? defaultBoundaryAge
+  );
+  // Year offset (from currentAge) where the retirement phase begins. Bucket sizing's gap
+  // evaluation uses this so year 1 of bucket spending = first year of retirement.
+  const retirementYearIndex = Math.max(0, retirementBoundaryAge - clientInfo.currentAge);
+
+  // In unified mode, size buckets against the projected retirement-age portfolio
+  // (not today's currentPortfolio). Run the existing accumulation engine inline,
+  // but with retirementAge overridden to the boundary so the projection ends where
+  // the bucket strategy takes over (handles advisor-set early boundaries correctly).
+  // Falls back to inputs.totalPortfolio in legacy mode for backward compat.
+  let retirementPortfolio = inputs.totalPortfolio;
+  if (unified) {
+    const accumClientInfo = { ...clientInfo, retirementAge: retirementBoundaryAge };
+    const accumData = calculateAccumulation(
+      accumClientInfo,
+      inputs.inflationRate || 0,
+      additionalIncomes || [],
+      inputs.accounts || [],
+      cashFlowAdjustments || [],
+      { filingStatus: inputs.filingStatus, stateRate: inputs.stateRate },
+      {
+        dropEnabled: inputs.dropEnabled,
+        dropStartAge: inputs.dropStartAge,
+        dropYears: inputs.dropYears,
+        dropInterestRate: inputs.dropInterestRate,
+        monthlyPension: inputs.monthlyPension,
+        pensionCOLA: inputs.pensionCOLA
+      }
+    );
+    const finalEntry = accumData[accumData.length - 1];
+    retirementPortfolio = (finalEntry?.balance || 0) + (finalEntry?.dropBalance || 0);
   }
 
   // If currently receiving, the input is today's monthly benefit (no adjustment needed).
@@ -1168,13 +1223,17 @@ export const calculateBasePlan = (inputs, assumptions, clientInfo, vaEnabled = f
   const getAnnualDetails = (yearIndex) => {
     const simAge = simulationStartAge + yearIndex;
     const currentPartnerAge = clientInfo.partnerAge + (simAge - clientInfo.currentAge);
-    // Expenses use personal inflation rate
-    const expenseInflationFactor = Math.pow(1 + (personalInflationRate / 100), yearIndex);
+    const preSimYears = simulationStartAge - clientInfo.currentAge;
+    // Expenses use personal inflation rate.
+    // Legacy: monthlySpending is pre-inflated to simulationStartAge, so factor is yearIndex only.
+    // Unified: monthlySpending is today's value, so factor inflates from currentAge → simAge.
+    const expenseInflationFactor = unified
+      ? Math.pow(1 + (personalInflationRate / 100), yearIndex + preSimYears)
+      : Math.pow(1 + (personalInflationRate / 100), yearIndex);
     // Income (SS, pension) uses full inflation rate from simulation start
     const incomeInflationFactor = Math.pow(1 + (inflationRate / 100), yearIndex);
     // Employment income inflates from client's current age (not simulation start)
     // so pre-retirement salary growth is reflected in distribution-phase cash flows
-    const preSimYears = simulationStartAge - clientInfo.currentAge;
     const employmentInflationFactor = Math.pow(1 + (inflationRate / 100), yearIndex + preSimYears);
     // Cash flow adjustments inflate from client's current age (consistent with accumulation phase)
     const cashFlowInflationFactor = Math.pow(1 + (personalInflationRate / 100), yearIndex + preSimYears);
@@ -1348,8 +1407,11 @@ export const calculateBasePlan = (inputs, assumptions, clientInfo, vaEnabled = f
     // accumulation phase tracks the balance year-by-year and rolls it into totalPortfolio
     // at retirement — runSimulation allocates that amount directly to Traditional, so no
     // per-year contribution is emitted here.
+    // Legacy DROP rollover: lump sum hits the portfolio at simAge === dropEndAge.
+    // In unified mode this path is suppressed — runSimulation tracks the DROP balance
+    // year-by-year (pre and post retirement) and rolls it in itself.
     let dropContribution = 0;
-    if (dropEnabled && dropLumpSum > 0 && clientAlive) {
+    if (!unified && dropEnabled && dropLumpSum > 0 && clientAlive) {
       if (dropEndAge > simulationStartAge && simAge === dropEndAge) {
         dropContribution = dropLumpSum;
       }
@@ -1473,15 +1535,24 @@ export const calculateBasePlan = (inputs, assumptions, clientInfo, vaEnabled = f
   // for year y is (1 + r_net)^y. Under base-case returns this sizes each bucket
   // to empty exactly at the end of its stated window.
   const baseAdvisoryFeeRate = (inputs.advisoryFee ?? 1.0) / 100;
+  // In unified mode, "year 1" of bucket sizing means the first retirement year, so we
+  // shift the gap-lookup index forward by retirementYearIndex. Pre-retirement years have
+  // gap=0 (employment income covers expenses), so they would zero out the bucket targets.
+  const gapOffset = unified ? retirementYearIndex : 0;
   const calculateBucketNeed = (startYear, endYear, rate) => {
     const netRate = Math.max(0, (rate / 100) - baseAdvisoryFeeRate);
     let totalPV = 0;
     for (let year = startYear; year <= endYear; year++) {
-      const futureGap = getTaxAwareGap(year - 1);
+      const futureGap = getTaxAwareGap(gapOffset + year - 1);
       totalPV += futureGap / Math.pow(1 + netRate, year);
     }
     return totalPV;
   };
+
+  // Bucket pool: in unified mode use the projected retirement-age portfolio so percentages
+  // and floors compute against the value the buckets will actually hold. VA carve-out still
+  // comes off the top.
+  const bucketPool = unified ? Math.max(0, retirementPortfolio - vaAllocationAmount) : bucketPortfolio;
 
   // Bucket allocation is based on the full illustrated period starting from simulationStartAge.
   // If the client is still working in early years, those years will have $0 or minimal withdrawal
@@ -1495,16 +1566,16 @@ export const calculateBasePlan = (inputs, assumptions, clientInfo, vaEnabled = f
   const b3Calculated = Math.round(calculateBucketNeed(b3Start, b3Start + 8, assumptions.b3.return) / 1000) * 1000;
   // Only apply B3 min/max floors when portfolio can cover B1+B2 spending needs
   const spendingDriven = b1Target + b2Target;
-  const hasSpendingSurplus = bucketPortfolio > spendingDriven;
-  const b3Min = hasSpendingSurplus ? Math.round((bucketPortfolio * 0.15) / 1000) * 1000 : 0;
-  const b3Max = hasSpendingSurplus ? Math.round((bucketPortfolio * 0.30) / 1000) * 1000 : Infinity;
+  const hasSpendingSurplus = bucketPool > spendingDriven;
+  const b3Min = hasSpendingSurplus ? Math.round((bucketPool * 0.15) / 1000) * 1000 : 0;
+  const b3Max = hasSpendingSurplus ? Math.round((bucketPool * 0.30) / 1000) * 1000 : Infinity;
   const b3Target = Math.min(Math.max(b3Calculated, b3Min), b3Max);
   // B4 target is 10% of portfolio, but only when portfolio can cover spending needs
-  const b4FullTarget = hasSpendingSurplus ? Math.round((bucketPortfolio * 0.10) / 1000) * 1000 : 0;
+  const b4FullTarget = hasSpendingSurplus ? Math.round((bucketPool * 0.10) / 1000) * 1000 : 0;
 
   // Sequential fill: B1 first, then B2, B3 — these are spending-driven
   // B4 and B5 split whatever remains, with B5 >= 2x B4 constraint
-  let remaining = bucketPortfolio;
+  let remaining = bucketPool;
   const b1Val = Math.min(b1Target, Math.max(0, remaining));
   remaining -= b1Val;
   const b2Val = Math.min(b2Target, Math.max(0, remaining));
@@ -1523,7 +1594,7 @@ export const calculateBasePlan = (inputs, assumptions, clientInfo, vaEnabled = f
     b3Val,
     b4Val,
     b5Val,
-    isDeficit: b5Val === 0 && bucketPortfolio < (b1Target + b2Target + b3Target + b4FullTarget),
+    isDeficit: b5Val === 0 && bucketPool < (b1Target + b2Target + b3Target + b4FullTarget),
     getAnnualGap,
     getTaxAwareGap,
     getAnnualDetails,
@@ -1533,10 +1604,19 @@ export const calculateBasePlan = (inputs, assumptions, clientInfo, vaEnabled = f
     getAdjustedSS,
     vaAllocationAmount,
     vaAnnualIncome,
+    // Unified-timeline metadata: the projected portfolio at retirement (legacy mode
+    // returns inputs.totalPortfolio, which is already the future-dated value), plus
+    // the year offset where the retirement phase begins.
+    unified,
+    retirementPortfolio,
+    retirementYearIndex,
+    retirementBoundaryAge,
     // DROP rollover that landed in totalPortfolio pre-retirement.
     // runSimulation routes this amount directly to Traditional rather than splitting
-    // it across Traditional/Roth/NQ proportionally.
-    dropPreRetirementAmount: (dropEnabled && dropLumpSum > 0 && dropEndAge <= simulationStartAge) ? dropLumpSum : 0
+    // it across Traditional/Roth/NQ proportionally. In unified mode the pre-retirement
+    // accumulation phase tracks DROP year-by-year, so dropLumpSum is rolled in at
+    // the retirement boundary inside runSimulation rather than baked into the start.
+    dropPreRetirementAmount: (!unified && dropEnabled && dropLumpSum > 0 && dropEndAge <= simulationStartAge) ? dropLumpSum : 0
   };
 };
 
@@ -1553,6 +1633,21 @@ export const calculateBasePlan = (inputs, assumptions, clientInfo, vaEnabled = f
  */
 export const runSimulation = (basePlan, assumptions, inputs, rebalanceFreq, isMonteCarlo = false, vaInputs = null, rebalanceTargets = null) => {
   const { b1Val, b2Val, b3Val, b4Val, b5Val, getAnnualGap, getTaxAwareGap, getAnnualDetails, simulationStartAge, clientInfo } = basePlan;
+
+  // Unified timeline: simulationStartAge is currentAge and the loop covers both
+  // accumulation and retirement phases. Buckets fill at the retirement boundary;
+  // pre-retirement years grow a single pool at clientInfo.expectedReturn with
+  // bilateral savings + DROP, and use getAnnualDetails's gap/surplus to handle
+  // income shortfalls (e.g., large cf events) and disposition of excess cash flow.
+  const unified = !!basePlan.unified;
+  const retirementAgeUnified = clientInfo?.retirementAge ?? 65;
+  const partnerRetirementAgeUnified = clientInfo?.partnerRetirementAge ?? retirementAgeUnified;
+  // Boundary age between accumulation and retirement illustration. Falls back to the
+  // basePlan-derived value (already computed there with the same fallback chain).
+  const boundaryAge = basePlan?.retirementBoundaryAge ?? retirementAgeUnified;
+  const surplusToPortfolio = !!inputs.surplusToPortfolio;
+  const accumulationGrowthRate = (clientInfo?.expectedReturn || 0) / 100;
+  const accumulationInflRate = (inputs.inflationRate || 0) / 100;
 
   // Run until the later-dying spouse's expected death age (inclusive), capped at 40 years
   const startAge = simulationStartAge || 65;
@@ -1583,13 +1678,16 @@ export const runSimulation = (basePlan, assumptions, inputs, rebalanceFreq, isMo
   // (client pays the advisor either way — comparison is purely active vs passive strategy)
   const advisoryFeeRate = (inputs.advisoryFee ?? 1.0) / 100;
 
-  // Calculate VA allocation if enabled
+  // Calculate VA allocation if enabled. In unified mode, the carve-out comes off
+  // today's portfolio (the simulation starting balance); in legacy mode it comes off
+  // inputs.totalPortfolio which is already the projected retirement-day value.
+  const portfolioForVA = unified ? (clientInfo?.currentPortfolio || 0) : inputs.totalPortfolio;
   let vaAllocationAmount = 0;
   if (vaInputs) {
     if (vaInputs.allocationType === 'percentage') {
-      vaAllocationAmount = inputs.totalPortfolio * (vaInputs.allocationPercent / 100);
+      vaAllocationAmount = portfolioForVA * (vaInputs.allocationPercent / 100);
     } else {
-      vaAllocationAmount = Math.min(vaInputs.allocationFixed, inputs.totalPortfolio);
+      vaAllocationAmount = Math.min(vaInputs.allocationFixed, portfolioForVA);
     }
   }
 
@@ -1615,23 +1713,39 @@ export const runSimulation = (basePlan, assumptions, inputs, rebalanceFreq, isMo
   }
 
   for (let iter = 0; iter < iterations; iter++) {
-    // Start with base bucket allocations
-    let balances = { b1: b1Val, b2: b2Val, b3: b3Val, b4: b4Val, b5: b5Val };
+    // Account-type percentages (used for both modes; unified applies them at currentAge,
+    // legacy at retirementAge via inputs.totalPortfolio).
+    const initTradPct = (inputs.traditionalPercent ?? 60) / 100;
+    const initRothPct = (inputs.rothPercent ?? 25) / 100;
+    const initNqPct = (inputs.nqPercent ?? 15) / 100;
 
-    // If VA is enabled, reduce bucket balances proportionally to fund the VA
+    // Start with base bucket allocations. In unified mode, hold the entire starting
+    // pool in B5 and snap into b1..b5 at the retirement boundary using basePlan ratios.
+    let balances;
+    if (unified) {
+      const startingPool = Math.max(0, (clientInfo?.currentPortfolio || 0) - vaAllocationAmount);
+      balances = { b1: 0, b2: 0, b3: 0, b4: 0, b5: startingPool };
+    } else {
+      balances = { b1: b1Val, b2: b2Val, b3: b3Val, b4: b4Val, b5: b5Val };
+    }
+
+    // If VA is enabled, reduce bucket balances proportionally to fund the VA.
+    // In unified mode the carve-out already came off the starting pool above.
     let vaAccountValue = 0;
     let vaBenefitBase = 0;
     let vaHighWaterMark = 0;
 
     if (vaInputs && vaAllocationAmount > 0) {
-      const totalBuckets = b1Val + b2Val + b3Val + b4Val + b5Val;
-      if (totalBuckets > 0) {
-        const reductionRatio = vaAllocationAmount / totalBuckets;
-        balances.b1 = b1Val * (1 - reductionRatio);
-        balances.b2 = b2Val * (1 - reductionRatio);
-        balances.b3 = b3Val * (1 - reductionRatio);
-        balances.b4 = b4Val * (1 - reductionRatio);
-        balances.b5 = b5Val * (1 - reductionRatio);
+      if (!unified) {
+        const totalBuckets = b1Val + b2Val + b3Val + b4Val + b5Val;
+        if (totalBuckets > 0) {
+          const reductionRatio = vaAllocationAmount / totalBuckets;
+          balances.b1 = b1Val * (1 - reductionRatio);
+          balances.b2 = b2Val * (1 - reductionRatio);
+          balances.b3 = b3Val * (1 - reductionRatio);
+          balances.b4 = b4Val * (1 - reductionRatio);
+          balances.b5 = b5Val * (1 - reductionRatio);
+        }
       }
       vaAccountValue = vaAllocationAmount;
       vaBenefitBase = vaAllocationAmount;
@@ -1639,20 +1753,25 @@ export const runSimulation = (basePlan, assumptions, inputs, rebalanceFreq, isMo
     }
 
     // Track account-type balances for RMD calculations.
-    // Pre-retirement DROP money is fully pre-tax — split the rest of the portfolio
+    // Legacy: pre-retirement DROP money is fully pre-tax — split the rest of the portfolio
     // by the user's percentages and add the DROP amount on top of Traditional.
-    const initTradPct = (inputs.traditionalPercent ?? 60) / 100;
-    const initRothPct = (inputs.rothPercent ?? 25) / 100;
-    const initNqPct = (inputs.nqPercent ?? 15) / 100;
-    const dropPreRetAmt = basePlan.dropPreRetirementAmount || 0;
-    const splittablePortfolio = Math.max(0, inputs.totalPortfolio - dropPreRetAmt);
-    let traditionalBalance = splittablePortfolio * initTradPct + dropPreRetAmt;
-    let rothBalance = splittablePortfolio * initRothPct;
-    let nqAccountBalance = splittablePortfolio * initNqPct;
+    // Unified: start from currentPortfolio; DROP accumulates year-by-year and rolls into
+    // Traditional at the retirement boundary.
+    const dropPreRetAmt = unified ? 0 : (basePlan.dropPreRetirementAmount || 0);
+    const initialPortfolioForSplit = unified
+      ? Math.max(0, (clientInfo?.currentPortfolio || 0) - vaAllocationAmount)
+      : Math.max(0, inputs.totalPortfolio - dropPreRetAmt);
+    let traditionalBalance = initialPortfolioForSplit * initTradPct + (unified ? 0 : dropPreRetAmt);
+    let rothBalance = initialPortfolioForSplit * initRothPct;
+    let nqAccountBalance = initialPortfolioForSplit * initNqPct;
+
+    // Unified-mode pre-retirement state (accumulating DROP balance, "buckets-snapped" flag).
+    let unifiedDropBalance = 0;
+    let unifiedBucketsSnapped = false;
 
     let nqUnrealizedGains = 0; // Tracks deferred capital gains that roll forward
 
-    let benchmarkBalance = inputs.totalPortfolio;
+    let benchmarkBalance = unified ? (clientInfo?.currentPortfolio || 0) : inputs.totalPortfolio;
     let history = [];
     let failed = false;
 
@@ -1747,6 +1866,244 @@ export const runSimulation = (basePlan, assumptions, inputs, rebalanceFreq, isMo
         dropContribution,
         ssIncome, pensionIncome, otherIncome, nonTaxableAdditionalIncome, vaIncome, employmentIncome
       } = getAnnualDetails(i - 1);
+
+      // ========================================================================
+      // UNIFIED TIMELINE — pre-retirement accumulation branch (robust gap-based)
+      // ========================================================================
+      // For years where simAge < boundaryAge:
+      //   - savings flows when EITHER spouse is working (bilateral; income-share-weighted)
+      //   - cfExpense and living expenses are netted against income via getAnnualDetails's
+      //     `gap` and `surplus` — only the gap deducts from the portfolio (handles large
+      //     events like college/wedding spilling onto savings when income falls short)
+      //   - surplus disposition per inputs.surplusToPortfolio toggle:
+      //       false (default): implicit lifestyle spending
+      //       true: routes household excess cash flow to NQ portfolio
+      //   - one-time additional income contributions still flow net of marginal tax
+      //   - DROP accrues year-by-year as before
+      //   - no full tax pipeline yet — accumulation-year withdrawals are pro-rata gross
+      if (unified && simAge < boundaryAge) {
+        const yearIdx = simAge - clientInfo.currentAge;
+        const inflFactor = Math.pow(1 + accumulationInflRate, yearIdx);
+
+        // --- Bilateral savings: each working spouse contributes their income share ---
+        const annualIncome = clientInfo.annualIncome || 0;
+        const partnerAnnualIncome = clientInfo.partnerAnnualIncome || 0;
+        const totalHouseholdIncome = annualIncome + partnerAnnualIncome;
+        const clientWorking = simAge < (clientInfo.retirementAge ?? 0);
+        const partnerWorking = clientInfo.isMarried
+          ? currentPartnerAge < (clientInfo.partnerRetirementAge ?? clientInfo.retirementAge ?? 0)
+          : false;
+        // Income share by spouse. When household income > 0, weighted by wages; otherwise
+        // fall back to working flag so a single-earner household still saves correctly.
+        const clientShare = totalHouseholdIncome > 0 ? annualIncome / totalHouseholdIncome : (clientWorking ? 1 : 0);
+        const partnerShare = totalHouseholdIncome > 0 ? partnerAnnualIncome / totalHouseholdIncome : (partnerWorking ? 1 : 0);
+        const savingsActive = (clientWorking ? clientShare : 0) + (partnerWorking ? partnerShare : 0);
+
+        const baseSavings = clientInfo.annualSavings || 0;
+        const additionalContribs = (clientInfo.additionalContributions || []).reduce((sum, c) => {
+          if (c.mode === 'percent' && annualIncome > 0) return sum + (c.amount / 100) * annualIncome;
+          return sum + (c.amount || 0);
+        }, 0);
+        const yearSavings = (baseSavings + additionalContribs) * savingsActive * inflFactor;
+
+        // --- One-time additional income events (taxable portion taxed at marginal rate) ---
+        let yearAdditionalIncome = 0;
+        let yearAdditionalTax = 0;
+        (inputs.additionalIncomes || []).forEach(stream => {
+          if (stream.isOneTime && stream.startAge === simAge && simAge < boundaryAge) {
+            let amount = stream.amount;
+            if (stream.inflationAdjusted) amount *= inflFactor;
+            const taxablePct = (stream.taxablePercent ?? 100) / 100;
+            const taxableAmount = amount * taxablePct;
+            const baseIncome = (annualIncome + partnerAnnualIncome) * inflFactor;
+            const stdDed = (inputs.filingStatus === 'single') ? 14600 : 29200;
+            const baseTaxable = Math.max(0, baseIncome - baseSavings * inflFactor - stdDed);
+            const fed1 = calculateFederalTax(baseTaxable, inputs.filingStatus || 'married');
+            const fed2 = calculateFederalTax(baseTaxable + taxableAmount, inputs.filingStatus || 'married');
+            const stateTax = taxableAmount * ((inputs.stateRate || 0) / 100);
+            const tax = (fed2 - fed1) + stateTax;
+            yearAdditionalIncome += amount;
+            yearAdditionalTax += tax;
+          }
+        });
+
+        // --- Tax on accumulation-year income ---
+        // Apply the same tax pipeline used post-retirement so wage/SS/pension years are
+        // consistent across the boundary. Approximation: tax computed on income only;
+        // tax on any portfolio withdrawal needed to cover a cf-driven gap is not iterated
+        // (v1 limitation — flagged for follow-up).
+        const taxAccumulation = inputs.taxEnabled
+          ? calculateAnnualTax(
+              {
+                ssIncome,
+                pensionIncome,
+                traditionalWithdrawal: 0,
+                rothWithdrawal: 0,
+                nqTaxableGain: 0,
+                nqQualifiedDividends: 0,
+                nqOrdinaryDividends: 0,
+                otherIncome,
+                employmentIncome: employmentIncome || 0
+              },
+              {
+                filingStatus: inputs.filingStatus || 'married',
+                stateRate: inputs.stateRate || 0,
+                stateCode: inputs.stateCode || ''
+              },
+              simAge >= 65
+            )
+          : { federalTax: 0, stateTax: 0, totalTax: 0, effectiveRate: '0.0', taxableSS: 0 };
+
+        // Recompute gap/surplus to include tax. `expenses` from getAnnualDetails is
+        // already cf-adjusted (= baseExpenses + cashFlowAdjustmentDetail), so don't
+        // subtract cf again — that would double-count and produce a phantom shortfall.
+        const householdNet = income - expenses - taxAccumulation.totalTax;
+        const accumGap = Math.max(0, -householdNet);
+        const accumSurplus = Math.max(0, householdNet);
+
+        // --- Portfolio-flow accounting ---
+        // accumGap > 0 means income (after tax) falls short of expenses + cf — portfolio
+        // absorbs the deficit. accumSurplus > 0 means excess cash flow after tax.
+        let pool = startTotal;
+        pool += (yearAdditionalIncome - yearAdditionalTax);
+        pool += yearSavings;
+        if (accumGap > 0) pool -= accumGap;
+        if (surplusToPortfolio && accumSurplus > 0) pool += accumSurplus;
+        // (else: surplus implicitly spent — default behavior)
+
+        const yearGrowth = pool * accumulationGrowthRate;
+        pool *= (1 + accumulationGrowthRate);
+
+        // Sync bucket pool and account-type balances by configured percentages
+        balances.b5 = pool;
+        balances.b1 = 0; balances.b2 = 0; balances.b3 = 0; balances.b4 = 0;
+        traditionalBalance = pool * initTradPct;
+        rothBalance = pool * initRothPct;
+        nqAccountBalance = pool * initNqPct;
+
+        // Benchmark mirrors the same flows at benchmark return
+        let benchPool = benchmarkBalance;
+        benchPool += (yearAdditionalIncome - yearAdditionalTax);
+        benchPool += yearSavings;
+        if (accumGap > 0) benchPool -= accumGap;
+        if (surplusToPortfolio && accumSurplus > 0) benchPool += accumSurplus;
+        const benchRate = isMonteCarlo ? (benchmarkReturn + benchmarkStdDev * randn_bm()) : benchmarkReturn;
+        benchPool *= (1 + benchRate);
+        benchmarkBalance = benchPool;
+
+        // DROP step — pension payments accrue in a fixed-rate pre-tax bucket during DROP years
+        const dropEnabledU = !!inputs.dropEnabled;
+        const dropStartAgeU = inputs.dropStartAge || 0;
+        const dropYearsU = Math.max(0, inputs.dropYears || 0);
+        const dropEndAgeU = dropStartAgeU + dropYearsU;
+        const dropRateU = (inputs.dropInterestRate ?? 0) / 100;
+        const dropMonthlyPensionU = inputs.monthlyPension || 0;
+        const dropPensionCOLAU = !!inputs.pensionCOLA;
+        if (dropEnabledU && dropMonthlyPensionU > 0 && dropYearsU > 0 &&
+            simAge >= dropStartAgeU && simAge < dropEndAgeU) {
+          const k = simAge - dropStartAgeU;
+          const dropInflFactor = dropPensionCOLAU ? Math.pow(1 + accumulationInflRate, k) : 1;
+          unifiedDropBalance = unifiedDropBalance * (1 + dropRateU) + dropMonthlyPensionU * 12 * dropInflFactor;
+        }
+
+        history.push({
+          year: i,
+          age: simAge,
+          partnerAge: currentPartnerAge,
+          phase: 'accumulation',
+          startBalance: Math.round(startTotal),
+          growth: Math.round(yearGrowth),
+          ssIncome: Math.round(income),
+          ssIncomeDetail: Math.round(ssIncome),
+          pensionIncomeDetail: Math.round(pensionIncome),
+          employmentIncomeDetail: Math.round(employmentIncome || 0),
+          otherIncomeDetail: Math.round(otherIncome + nonTaxableAdditionalIncome),
+          livingExpenses: Math.round(baseExpenses),
+          cashFlowAdjustmentDetail: Math.round(cashFlowAdjustmentDetail || 0),
+          // Total Expenses = living + cf + tax (matches post-retirement convention so
+          // the cash-flow table sums consistently across the accumulation/retirement boundary)
+          expenses: Math.round(expenses + (taxAccumulation.totalTax || 0)),
+          savings: Math.round(yearSavings),
+          additionalIncome: Math.round(yearAdditionalIncome),
+          additionalTax: Math.round(yearAdditionalTax),
+          cashFlowExpense: Math.round(cashFlowAdjustmentDetail || 0),
+          dropBalance: Math.round(unifiedDropBalance),
+          contribution: 0,
+          dropContribution: 0,
+          surplus: Math.round(surplusToPortfolio ? accumSurplus : 0),
+          distribution: Math.round(accumGap),
+          total: Math.max(0, pool + unifiedDropBalance),
+          benchmark: Math.max(0, benchmarkBalance),
+          distRate: startTotal > 0 ? (accumGap / startTotal) * 100 : 0,
+          b1: 0, b2: 0, b3: 0, b4: 0, b5: Math.round(pool),
+          w1: 0, w2: 0, w3: 0, w4: 0, w5: 0,
+          vaAccountValue: vaInputs ? Math.round(vaAccountValue) : 0,
+          vaBenefitBase: vaInputs ? Math.round(vaBenefitBase) : 0,
+          vaGuaranteedIncome: 0,
+          federalTax: taxAccumulation.federalTax,
+          stateTax: taxAccumulation.stateTax,
+          totalTax: taxAccumulation.totalTax,
+          effectiveRate: taxAccumulation.effectiveRate,
+          taxableSS: Math.round(taxAccumulation.taxableSS || 0),
+          rmdAmount: 0, rmdExcess: 0,
+          traditionalBalanceDetail: Math.round(traditionalBalance),
+          rothBalanceDetail: Math.round(rothBalance),
+          nqBalanceDetail: Math.round(nqAccountBalance),
+          rothConversion: 0, rothConversionTax: 0,
+          nqUnrealizedGains: 0, nqStrategicRealization: 0,
+          magi: 0, irmaaCost: 0, irmaaBracket: 0,
+          r1: 0, r2: 0, r3: 0, r4: 0, r5: accumulationGrowthRate
+        });
+        continue;
+      }
+
+      // ========================================================================
+      // UNIFIED TIMELINE — snap accumulated pool into B1..B5 at retirement boundary
+      // ========================================================================
+      if (unified && !unifiedBucketsSnapped && simAge >= boundaryAge) {
+        const unifiedDropEndAge = (inputs.dropEnabled && inputs.dropYears > 0)
+          ? (inputs.dropStartAge || 0) + (inputs.dropYears || 0)
+          : 0;
+        // Only roll DROP at the boundary if it has already ended; otherwise it keeps
+        // accruing through post-retirement years and rolls in at dropEndAge below.
+        if (unifiedDropBalance > 0 && unifiedDropEndAge <= boundaryAge) {
+          traditionalBalance += unifiedDropBalance;
+          balances.b5 += unifiedDropBalance;
+          unifiedDropBalance = 0;
+        }
+        // Redistribute the single pool into B1..B5 using basePlan ratios
+        const targetTotal = (b1Val + b2Val + b3Val + b4Val + b5Val) || 1;
+        const poolNow = balances.b5;
+        balances.b1 = poolNow * (b1Val / targetTotal);
+        balances.b2 = poolNow * (b2Val / targetTotal);
+        balances.b3 = poolNow * (b3Val / targetTotal);
+        balances.b4 = poolNow * (b4Val / targetTotal);
+        balances.b5 = poolNow * (b5Val / targetTotal);
+        unifiedBucketsSnapped = true;
+      }
+
+      // ========================================================================
+      // UNIFIED TIMELINE — post-retirement DROP accrual (when DROP straddles boundary)
+      // ========================================================================
+      // If DROP ends after the retirement boundary, keep stepping the balance each year
+      // until dropEndAge, then roll the lump sum into Traditional + B5 (matching legacy's
+      // `dropContribution`).
+      if (unified && inputs.dropEnabled && inputs.dropYears > 0 && (inputs.monthlyPension || 0) > 0) {
+        const dropStartAgeU = inputs.dropStartAge || 0;
+        const dropEndAgeU = dropStartAgeU + (inputs.dropYears || 0);
+        if (dropEndAgeU > boundaryAge && simAge >= boundaryAge && simAge < dropEndAgeU) {
+          const k = simAge - dropStartAgeU;
+          const dropPensionCOLAU = !!inputs.pensionCOLA;
+          const dropInflFactor = dropPensionCOLAU ? Math.pow(1 + accumulationInflRate, k) : 1;
+          const dropRateU = (inputs.dropInterestRate ?? 0) / 100;
+          unifiedDropBalance = unifiedDropBalance * (1 + dropRateU) + (inputs.monthlyPension || 0) * 12 * dropInflFactor;
+        }
+        if (dropEndAgeU > boundaryAge && simAge === dropEndAgeU && unifiedDropBalance > 0) {
+          traditionalBalance += unifiedDropBalance;
+          balances.b5 += unifiedDropBalance;
+          unifiedDropBalance = 0;
+        }
+      }
 
       balances.b1 *= (1 + rates.b1);
       balances.b2 *= (1 + rates.b2);
@@ -2336,6 +2693,7 @@ export const runSimulation = (basePlan, assumptions, inputs, rebalanceFreq, isMo
         year: i,
         age: simAge,
         partnerAge: currentPartnerAge,
+        phase: 'retirement',
         startBalance: Math.round(startTotal),
         growth: Math.round(annualGrowth),
         ssIncome: Math.round(income + vaGuaranteedIncome), // Include VA income in reported income
@@ -2772,7 +3130,7 @@ export const optimizeRetirementTaxStrategy = (basePlan, assumptions, inputs, cli
   const generateConversionSchedule = (targetBracketIdx, projData, fillFraction = 1.0) => {
     // targetBracketIdx: 1=12%, 2=22%, 3=24%; fillFraction: 0-1 to scale headroom usage
     const conversions = {};
-    let runningTradBalance = inputs.totalPortfolio * ((inputs.traditionalPercent ?? 60) / 100);
+    let runningTradBalance = (basePlan?.retirementPortfolio ?? inputs.totalPortfolio) * ((inputs.traditionalPercent ?? 60) / 100);
 
     for (let idx = 0; idx < projData.length; idx++) {
       const row = projData[idx];

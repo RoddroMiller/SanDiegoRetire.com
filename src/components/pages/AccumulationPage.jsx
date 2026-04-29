@@ -582,6 +582,46 @@ export const AccumulationPage = ({
                   />
                 </div>
               </div>
+
+              {/* Retirement-illustration boundary + surplus toggle */}
+              {inputs && onInputChange && (
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mt-4 p-3 bg-slate-50 rounded-xl border border-slate-200">
+                  <div className="relative group md:col-span-1">
+                    <label className="block text-xs font-bold text-slate-500 uppercase mb-1 flex items-center gap-1">
+                      Retirement Illustration Starts <Info className="w-3 h-3 text-slate-400" />
+                    </label>
+                    <div className="absolute left-0 bottom-full mb-2 hidden group-hover:block w-72 bg-slate-800 text-white text-xs p-2 rounded shadow-lg z-10">
+                      Age at which the bucket strategy and distribution illustration take over from the accumulation projection. Default = the later of client/partner retirement (long-runway households). Set to the earlier age when the household needs the bucket plan to be live now (near-retirement households).
+                    </div>
+                    <input
+                      type="number"
+                      name="retirementIllustrationStartAge"
+                      placeholder={`Default: ${Math.max(clientInfo.retirementAge || 65, clientInfo.isMarried ? (clientInfo.partnerRetirementAge || clientInfo.retirementAge || 65) : (clientInfo.retirementAge || 65))}`}
+                      value={inputs.retirementIllustrationStartAge ?? ''}
+                      onChange={(e) => {
+                        const val = e.target.value;
+                        onInputChange({ target: { name: 'retirementIllustrationStartAge', value: val === '' ? null : parseInt(val), type: 'number' } });
+                      }}
+                      className="p-2.5 border rounded-lg w-full text-sm"
+                    />
+                  </div>
+                  <div className="md:col-span-2 flex items-end">
+                    <div className="flex items-start gap-2 p-2.5 border rounded-lg w-full bg-white">
+                      <input
+                        type="checkbox"
+                        name="surplusToPortfolio"
+                        checked={!!inputs.surplusToPortfolio}
+                        onChange={(e) => onInputChange({ target: { name: 'surplusToPortfolio', value: e.target.checked, type: 'checkbox', checked: e.target.checked } })}
+                        className="w-4 h-4 mt-0.5 text-mwm-green"
+                      />
+                      <label className="text-xs text-slate-600">
+                        <span className="font-bold text-slate-700 block">Save excess cash flow during accumulation</span>
+                        <span className="text-slate-500">Default off: surplus (income beyond expenses, taxes, and stated savings) is treated as lifestyle spending. Turn on for a disciplined household that banks the extra into the NQ portfolio.</span>
+                      </label>
+                    </div>
+                  </div>
+                </div>
+              )}
             </div>
 
             {/* Tax-Implied Spending Comparison */}

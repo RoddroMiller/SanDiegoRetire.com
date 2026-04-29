@@ -70,7 +70,10 @@ const calculateAdditionalIncome = (additionalIncomes, clientAge, partnerAge, inf
  * @param {number} params.targetMaxPortfolioAge - Target age for portfolio analysis
  * @returns {object} Analysis results with winner, outcomes, and breakeven data
  */
-export const calculateSSAnalysis = ({ inputs, clientInfo, assumptions, targetMaxPortfolioAge }) => {
+export const calculateSSAnalysis = ({ inputs, clientInfo, assumptions, targetMaxPortfolioAge, retirementPortfolio }) => {
+  // Starting balance: prefer the basePlan-derived retirement-day portfolio (correct in unified
+  // mode); fall back to inputs.totalPortfolio for legacy callers.
+  const startingPortfolio = retirementPortfolio ?? inputs.totalPortfolio;
   // Build list of strategies to analyze — all ages 62 through 70
   let strategies = [62, 63, 64, 65, 66, 67, 68, 69, 70];
   strategies = [...new Set(strategies)].sort((a, b) => a - b);
@@ -99,7 +102,7 @@ export const calculateSSAnalysis = ({ inputs, clientInfo, assumptions, targetMax
   const strategyProjections = {};
 
   const outcomes = strategies.map(startAge => {
-    let balance = inputs.totalPortfolio;
+    let balance = startingPortfolio;
     let cumulativeSSAfterTax = 0;
     const annualData = [];
 
@@ -270,8 +273,9 @@ export const calculateSSAnalysis = ({ inputs, clientInfo, assumptions, targetMax
  * @param {object} params.clientSSWinner - Optimal client SS strategy result
  * @returns {object|null} Analysis results with winner and outcomes, or null if not married
  */
-export const calculateSSPartnerAnalysis = ({ inputs, clientInfo, assumptions, targetMaxPortfolioAge, clientSSWinner }) => {
+export const calculateSSPartnerAnalysis = ({ inputs, clientInfo, assumptions, targetMaxPortfolioAge, clientSSWinner, retirementPortfolio }) => {
   if (!clientInfo.isMarried) return null;
+  const startingPortfolio = retirementPortfolio ?? inputs.totalPortfolio;
 
   // Build list of strategies to analyze — all ages 62 through 70
   let strategies = [62, 63, 64, 65, 66, 67, 68, 69, 70];
@@ -296,7 +300,7 @@ export const calculateSSPartnerAnalysis = ({ inputs, clientInfo, assumptions, ta
 
   // Calculate outcome for each partner claiming strategy — with earnings test and taxes
   const outcomes = strategies.map(pStartAge => {
-    let balance = inputs.totalPortfolio;
+    let balance = startingPortfolio;
 
     for (let age = simStart; age <= targetMaxPortfolioAge; age++) {
       balance *= (1 + weightedReturn);
