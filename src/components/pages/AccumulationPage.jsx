@@ -244,15 +244,9 @@ export const AccumulationPage = ({
                 <>
                   <div>
                     <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Filing Status</label>
-                    <select
-                      name="filingStatus"
-                      value={inputs.filingStatus || 'married'}
-                      onChange={onInputChange}
-                      className="p-2.5 border rounded-lg w-full text-sm"
-                    >
-                      <option value="married">Married Filing Jointly</option>
-                      <option value="single">Single</option>
-                    </select>
+                    <div className="p-2.5 border rounded-lg w-full text-sm bg-slate-50 text-slate-600">
+                      {clientInfo.isMarried ? 'Married Filing Jointly' : 'Single'}
+                    </div>
                   </div>
                   <div>
                     <label className="block text-xs font-bold text-slate-500 uppercase mb-1">State</label>

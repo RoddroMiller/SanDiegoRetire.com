@@ -1444,6 +1444,11 @@ export const calculateBasePlan = (inputs, assumptions, clientInfo, vaEnabled = f
   // the logic inside runSimulation's splitWithdrawal(). For priority strategies
   // we assume the first account in the priority list carries the full draw
   // (accurate while that account has balance — the common early-year case).
+  //
+  // Strategy windows are entered in *retirement-relative* years (year 1 = first
+  // retirement year). In unified mode the engine loop counts from currentAge, so
+  // we strip the accumulation prefix before matching.
+  const strategyYearOffset = unified ? retirementYearIndex : 0;
   const resolveAccountSplit = (yearNum) => {
     const globalTrad = (inputs.traditionalPercent ?? 60) / 100;
     const globalRoth = (inputs.rothPercent ?? 25) / 100;
@@ -1452,7 +1457,8 @@ export const calculateBasePlan = (inputs, assumptions, clientInfo, vaEnabled = f
     if (inputs.liquidationMode !== 'priority') {
       return { traditionalPct: globalTrad, rothPct: globalRoth, nqPct: globalNq };
     }
-    const strategy = (inputs.liquidationStrategies || []).find(s => yearNum >= s.startYear && yearNum <= s.endYear);
+    const retirementYear = yearNum - strategyYearOffset;
+    const strategy = (inputs.liquidationStrategies || []).find(s => retirementYear >= s.startYear && retirementYear <= s.endYear);
     if (!strategy) {
       return { traditionalPct: globalTrad, rothPct: globalRoth, nqPct: globalNq };
     }
@@ -1645,6 +1651,10 @@ export const runSimulation = (basePlan, assumptions, inputs, rebalanceFreq, isMo
   // Boundary age between accumulation and retirement illustration. Falls back to the
   // basePlan-derived value (already computed there with the same fallback chain).
   const boundaryAge = basePlan?.retirementBoundaryAge ?? retirementAgeUnified;
+  // Liquidation strategies and NQ cap-gain overrides are expressed in retirement-
+  // relative years (year 1 = first retirement year). In unified mode the engine
+  // counts from currentAge, so subtract the accumulation prefix when matching.
+  const strategyYearOffset = unified ? Math.max(0, boundaryAge - (simulationStartAge || 65)) : 0;
   const surplusToPortfolio = !!inputs.surplusToPortfolio;
   const accumulationGrowthRate = (clientInfo?.expectedReturn || 0) / 100;
   const accumulationInflRate = (inputs.inflationRate || 0) / 100;
@@ -1780,7 +1790,8 @@ export const runSimulation = (basePlan, assumptions, inputs, rebalanceFreq, isMo
       let tradW, rothW, nqW;
 
       if (inputs.liquidationMode === 'priority') {
-        const strategy = (inputs.liquidationStrategies || []).find(s => yearNum >= s.startYear && yearNum <= s.endYear);
+        const retirementYear = yearNum - strategyYearOffset;
+        const strategy = (inputs.liquidationStrategies || []).find(s => retirementYear >= s.startYear && retirementYear <= s.endYear);
         if (strategy && strategy.split) {
           // Percentage-based split: e.g. { traditional: 50, nq: 50, roth: 0 }
           const sp = strategy.split;
@@ -2251,7 +2262,8 @@ export const runSimulation = (basePlan, assumptions, inputs, rebalanceFreq, isMo
 
         // NQ tax computation — per-bucket when taxProfiles are available, global fallback otherwise
         // Only generate NQ dividends/cap gains when there is actual NQ balance remaining
-        const capGainOverride = (inputs.nqCapGainOverrides || []).find(r => i >= r.startYear && i <= r.endYear);
+        const capGainOverrideYear = i - strategyYearOffset;
+        const capGainOverride = (inputs.nqCapGainOverrides || []).find(r => capGainOverrideYear >= r.startYear && capGainOverrideYear <= r.endYear);
         const baseCapGainRate = ((inputs.nqCapitalGainRate) ?? 4) / 100;
         const nqAnnualCapGainRate = ((capGainOverride?.rate ?? inputs.nqCapitalGainRate) ?? 4) / 100;
         const nqBalanceForTax = nqAccountBalance;

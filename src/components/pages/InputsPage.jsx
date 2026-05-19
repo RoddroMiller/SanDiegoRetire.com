@@ -202,18 +202,12 @@ export const InputsPage = ({
                         <label className="text-xs text-slate-500 uppercase flex items-center gap-1">
                           Filing Status <Info className="w-3 h-3 text-slate-400" />
                         </label>
-                        <div className="absolute left-0 bottom-full mb-1 hidden group-hover:block w-48 bg-slate-800 text-white text-xs p-2 rounded shadow-lg z-10">
-                          Your federal tax filing status.
+                        <div className="absolute left-0 bottom-full mb-1 hidden group-hover:block w-56 bg-slate-800 text-white text-xs p-2 rounded shadow-lg z-10">
+                          Derived from the Client setup — toggle "Married" there to change.
                         </div>
-                        <select
-                          name="filingStatus"
-                          value={inputs.filingStatus}
-                          onChange={onInputChange}
-                          className="w-full px-3 py-2 text-sm border rounded-md bg-white"
-                        >
-                          <option value="married">Married Filing Jointly</option>
-                          <option value="single">Single</option>
-                        </select>
+                        <div className="w-full px-3 py-2 text-sm border rounded-md bg-slate-50 text-slate-600">
+                          {clientInfo.isMarried ? 'Married Filing Jointly' : 'Single'}
+                        </div>
                       </div>
                       <div className="relative group">
                         <label className="text-xs text-slate-500 uppercase flex items-center gap-1">

@@ -816,6 +816,36 @@ export default function BucketPortfolioBuilder() {
     }
   }, [finalAccumulationBalance, finalAccumulationEntry, finalDropBalance, inputs.unifiedTimeline]);
 
+  // Unified-mode account-type sync. The engine splits the unified pool by
+  // inputs.traditionalPercent/rothPercent/nqPercent at currentPortfolio, so when
+  // accounts are defined we derive those percentages from current balances. The
+  // legacy effect above uses projected-at-retirement balances and doesn't run here.
+  useEffect(() => {
+    if (!inputs.unifiedTimeline) return;
+    if (!inputs.accounts || inputs.accounts.length === 0) return;
+    const totals = { traditional: 0, roth: 0, nq: 0 };
+    inputs.accounts.forEach(a => { totals[a.type] = (totals[a.type] || 0) + (a.balance || 0); });
+    const total = totals.traditional + totals.roth + totals.nq;
+    if (total <= 0) return;
+    const tradPct = Math.round((totals.traditional / total) * 100);
+    const rothPct = Math.round((totals.roth / total) * 100);
+    const nqPct = 100 - tradPct - rothPct;
+    setInputs(prev => {
+      if (prev.traditionalPercent === tradPct && prev.rothPercent === rothPct && prev.nqPercent === nqPct) {
+        return prev;
+      }
+      return { ...prev, traditionalPercent: tradPct, rothPercent: rothPct, nqPercent: nqPct };
+    });
+  }, [inputs.unifiedTimeline, inputs.accounts]);
+
+  // Filing status is derived from clientInfo.isMarried — the InputsPage no longer
+  // exposes a dropdown, so we keep inputs.filingStatus in lockstep here for the
+  // tax engine and any saved-plan migrations.
+  useEffect(() => {
+    const expected = clientInfo.isMarried ? 'married' : 'single';
+    setInputs(prev => prev.filingStatus === expected ? prev : { ...prev, filingStatus: expected });
+  }, [clientInfo.isMarried]);
+
   // Auto-set SS start age to current age for clients over FRA (already collecting)
   useEffect(() => {
     if (clientInfo.currentAge >= 67) {
