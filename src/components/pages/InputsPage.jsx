@@ -832,6 +832,20 @@ export const InputsPage = ({
                     />
                     Inflation Adj
                   </label>
+                  {income.name === 'Inheritance' && (
+                    <label className="flex items-center gap-1 text-xs text-amber-700">
+                      <input
+                        type="checkbox"
+                        checked={!!income.isInheritedIRA}
+                        onChange={(e) => {
+                          onUpdateAdditionalIncome(income.id, 'isInheritedIRA', e.target.checked);
+                          if (e.target.checked) onUpdateAdditionalIncome(income.id, 'taxablePercent', 100);
+                        }}
+                        className="w-3 h-3"
+                      />
+                      Inherited IRA (10-yr)
+                    </label>
+                  )}
                 </div>
               </div>
             </div>

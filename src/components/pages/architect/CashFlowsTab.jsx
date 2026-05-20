@@ -35,6 +35,7 @@ const CashFlowsTab = ({ projectionData, monteCarloData, inputs, clientInfo }) =>
   const hasAccumulation = activeData.some(r => r.phase === 'accumulation');
   const hasSavings = activeData.some(r => (r.savings || 0) > 0);
   const hasAdditionalIncome = activeData.some(r => (r.additionalIncome || 0) > 0);
+  const hasInheritedIRA = activeData.some(r => (r.inheritedIRADistribution || 0) > 0 || (r.inheritedIRABalance || 0) > 0);
 
   // Build row definitions for the transposed table
   const buildRows = () => {
@@ -71,8 +72,9 @@ const CashFlowsTab = ({ projectionData, monteCarloData, inputs, clientInfo }) =>
     if (hasOther) rows.push({ label: 'Other Income', cls: 'text-cyan-700', getValue: (r) => r.otherIncomeDetail > 0 ? fmt(r.otherIncomeDetail) : '-' });
     if (hasContributions) rows.push({ label: 'One-Time Contributions', cls: 'text-purple-700', getValue: (r) => r.contribution > 0 ? `+${fmt(r.contribution)}` : '-' });
     if (hasAdditionalIncome) rows.push({ label: 'Additional Income (One-Time)', cls: 'text-purple-700', getValue: (r) => (r.additionalIncome || 0) > 0 ? `+${fmt(r.additionalIncome)}` : '-' });
+    if (hasInheritedIRA) rows.push({ label: 'Inherited IRA Distribution', cls: 'text-amber-700', getValue: (r) => (r.inheritedIRADistribution || 0) > 0 ? `+${fmt(r.inheritedIRADistribution)}` : '-' });
     rows.push(
-      { label: 'Total Income', cls: 'font-bold text-blue-800 bg-blue-50', getValue: (r) => fmt(r.ssIncome) },
+      { label: 'Total Income', cls: 'font-bold text-blue-800 bg-blue-50', getValue: (r) => fmt((r.ssIncome || 0) + (r.inheritedIRADistribution || 0)) },
     );
 
     // --- EXPENSES SECTION ---
@@ -118,55 +120,106 @@ const CashFlowsTab = ({ projectionData, monteCarloData, inputs, clientInfo }) =>
       }
     }
 
-    // --- PORTFOLIO FLOW (combined contribution/distribution) ---
+    // --- PORTFOLIO NET FLOW (single net line; hover any cell for per-account breakdown) ---
     rows.push(
       { label: '', cls: 'bg-slate-200', getValue: () => '', isSeparator: true },
     );
+    // Per-account portfolio flow detail. Children (Trad/Roth/NQ net) must sum to the
+    // household Net Flow (= Total Income − Total Expenses). To eliminate sub-dollar
+    // rounding drift between independently-rounded children, NQ is computed as the
+    // residual so the three children always reconcile to Net exactly.
+    const portfolioFlowParts = (r) => {
+      const isAccum = r.phase === 'accumulation';
+      const irmaa = r.irmaaCost || 0;
+      const rothConvTax = r.rothConversionTax || 0;
+      const totalDist = r.distribution || 0;
+
+      const tradIn = r.tradContribution || 0;
+      const rothIn = r.rothContribution || 0;
+      // In retirement, nqContribution and surplus track the SAME surplus-to-NQ flow, so
+      // max() dedupes. In accumulation they are independent (nqContribution = NQ savings,
+      // surplus = excess income routed to NQ when surplusToPortfolio is on). RMD excess
+      // is always a separate reinvestment to NQ.
+      const nqIn = (isAccum ? ((r.nqContribution || 0) + (r.surplus || 0))
+                            : Math.max(r.nqContribution || 0, r.surplus || 0))
+                   + (r.rmdExcess || 0);
+
+      let tradOut, rothOut;
+      if (isAccum) {
+        // Accumulation: no per-type withdrawal split is tracked. Apportion any deficit
+        // (r.distribution = accumGap) by the global Trad/Roth/NQ allocation percentages.
+        const tradPct = (inputs.traditionalPercent ?? 60) / 100;
+        const rothPct = (inputs.rothPercent ?? 25) / 100;
+        tradOut = totalDist * tradPct;
+        rothOut = totalDist * rothPct;
+      } else {
+        // Retirement: per-type pre-IRMAA/Roth-conv withdrawals. IRMAA and conversion tax
+        // are NQ-only (handled via the residual below).
+        const preExtraW = totalDist - irmaa - rothConvTax;
+        tradOut = preExtraW * (r.traditionalPctUsed || 0) / 100;
+        rothOut = preExtraW * (r.rothPctUsed || 0) / 100;
+      }
+
+      // Net Flow target = household cash flow (income − expenses). Working backwards:
+      // tradNet + rothNet + nqNet = net  →  nqOut = totalIn − net − tradOut − rothOut.
+      // This makes NQ absorb IRMAA, rothConvTax, RMD excess routing, and any rounding.
+      const net = (r.ssIncome || 0) + (r.inheritedIRADistribution || 0) - (r.expenses || 0);
+      const nqOut = (tradIn + rothIn + nqIn) - net - tradOut - rothOut;
+
+      const totalIn = tradIn + rothIn + nqIn;
+      const totalOut = tradOut + rothOut + nqOut;
+      return { tradIn, rothIn, nqIn, tradOut, rothOut, nqOut, totalIn, totalOut, net };
+    };
+    // Household cash flow: Total Income minus Total Expenses (matches the rows above).
+    // Note: this is the household's net cash position, NOT the portfolio's net change —
+    // in accumulation years, savings flow into the portfolio separately and the per-account
+    // child rows below show that detail.
+    const householdNet = (r) => (r.ssIncome || 0) + (r.inheritedIRADistribution || 0) - (r.expenses || 0);
     rows.push({
       label: 'portfolioFlow',
       isToggle: 'portfolioFlow',
-      cls: 'font-bold cursor-pointer',
+      toggleLabel: 'Net Flow',
+      cls: 'font-medium cursor-pointer',
       getValue: (r) => {
-        const sav = r.savings || 0;
-        const surp = r.surplus || 0;
-        const dist = r.distribution || 0;
-        if (sav > 0) return `+${fmt(sav)}`;
-        if (surp > 0 && dist === 0) return `+${fmt(surp)}`;
-        if (dist > 0) return `-${fmt(dist)}`;
-        return '-';
+        const net = householdNet(r);
+        if (Math.abs(net) < 1) return '-';
+        return net > 0 ? `+${fmt(net)}` : `-${fmt(Math.abs(net))}`;
       },
       dynamicCls: (r) => {
-        const sav = r.savings || 0;
-        const surp = r.surplus || 0;
-        const dist = r.distribution || 0;
-        if (sav > 0 || (surp > 0 && dist === 0)) return 'text-mwm-green font-bold';
-        if (dist > 0) return 'text-orange-700 font-bold';
-        return 'text-slate-400';
+        const net = householdNet(r);
+        if (Math.abs(net) < 1) return 'text-slate-400';
+        return net > 0 ? 'text-mwm-green font-medium' : 'text-orange-700 font-medium';
       }
     });
+    const netCell = (inflow, outflow) => {
+      const net = inflow - outflow;
+      if (Math.abs(net) < 1) return '-';
+      return net > 0 ? `+${fmt(net)}` : `-${fmt(Math.abs(net))}`;
+    };
+    const netClass = (inflow, outflow) => {
+      const net = inflow - outflow;
+      if (Math.abs(net) < 1) return 'text-slate-400 pl-4';
+      return net > 0 ? 'text-mwm-green pl-4' : 'text-orange-700 pl-4';
+    };
     rows.push({
       label: '  Traditional',
       cls: 'text-blue-600 pl-4',
-      getValue: (r) => r.distribution > 0 ? `-${fmt(r.distribution * (r.traditionalPctUsed || 0) / 100)}` : '-',
+      getValue: (r) => { const p = portfolioFlowParts(r); return netCell(p.tradIn, p.tradOut); },
+      dynamicCls: (r) => { const p = portfolioFlowParts(r); return netClass(p.tradIn, p.tradOut); },
       collapsibleParent: 'portfolioFlow'
     });
     rows.push({
       label: '  Roth',
       cls: 'text-mwm-green pl-4',
-      getValue: (r) => r.distribution > 0 ? `-${fmt(r.distribution * (r.rothPctUsed || 0) / 100)}` : '-',
+      getValue: (r) => { const p = portfolioFlowParts(r); return netCell(p.rothIn, p.rothOut); },
+      dynamicCls: (r) => { const p = portfolioFlowParts(r); return netClass(p.rothIn, p.rothOut); },
       collapsibleParent: 'portfolioFlow'
     });
     rows.push({
       label: '  Non-Qualified',
       cls: 'text-mwm-gold pl-4',
-      getValue: (r) => {
-        const surp = r.surplus || 0;
-        const dist = r.distribution > 0 ? (r.nqWithdrawal || 0) : 0;
-        if (surp > 0 && dist === 0) return `+${fmt(surp)}`;
-        if (surp > 0 && dist > 0) return `+${fmt(surp)} / -${fmt(dist)}`;
-        if (dist > 0) return `-${fmt(dist)}`;
-        return '-';
-      },
+      getValue: (r) => { const p = portfolioFlowParts(r); return netCell(p.nqIn, p.nqOut); },
+      dynamicCls: (r) => { const p = portfolioFlowParts(r); return netClass(p.nqIn, p.nqOut); },
       collapsibleParent: 'portfolioFlow'
     });
 
@@ -193,6 +246,11 @@ const CashFlowsTab = ({ projectionData, monteCarloData, inputs, clientInfo }) =>
         { label: 'Roth Balance', cls: 'text-mwm-green', getValue: (r) => fmt(r.rothBalanceDetail || 0) },
         { label: 'NQ Balance', cls: 'text-mwm-gold', getValue: (r) => fmt(r.nqBalanceDetail || 0) },
       );
+      if (hasInheritedIRA) {
+        rows.push(
+          { label: 'Inherited IRA Balance', cls: 'text-amber-700', getValue: (r) => fmt(r.inheritedIRABalance || 0) },
+        );
+      }
     }
 
     // --- TAX ASSUMPTIONS (bottom, collapsible) ---
@@ -248,13 +306,13 @@ const CashFlowsTab = ({ projectionData, monteCarloData, inputs, clientInfo }) =>
               return null;
             }
 
-            // Toggle row rendering (Portfolio Flow, Tax Assumptions)
+            // Toggle row (Portfolio Net Flow, Tax Assumption Detail). The label cell is
+            // clickable to expand/collapse; each value cell may also carry a cellTooltip.
             if (rowDef.isToggle) {
               const isExpanded = expandedSections[rowDef.isToggle];
               const icon = isExpanded ? <ChevronDown className="w-3 h-3 inline" /> : <ChevronRight className="w-3 h-3 inline" />;
-              const toggleLabel = rowDef.isToggle === 'portfolioFlow'
-                ? 'Portfolio Contribution / Distribution'
-                : 'Tax Assumption Detail';
+              const toggleLabel = rowDef.toggleLabel
+                || (rowDef.isToggle === 'taxAssumptions' ? 'Tax Assumption Detail' : rowDef.isToggle);
               return (
                 <tr key={ri} className="border-b border-slate-100">
                   <td
@@ -263,11 +321,25 @@ const CashFlowsTab = ({ projectionData, monteCarloData, inputs, clientInfo }) =>
                   >
                     {icon} {toggleLabel}
                   </td>
-                  {cols.map((col, ci) => (
-                    <td key={ci} className={`p-1.5 text-right whitespace-nowrap ${rowDef.dynamicCls ? rowDef.dynamicCls(col) : rowDef.cls || ''}`}>
-                      {rowDef.getValue(col)}
-                    </td>
-                  ))}
+                  {cols.map((col, ci) => {
+                    const tooltipNode = rowDef.cellTooltip ? rowDef.cellTooltip(col) : null;
+                    const baseCls = `p-1.5 text-right whitespace-nowrap ${rowDef.dynamicCls ? rowDef.dynamicCls(col) : rowDef.cls || ''}`;
+                    if (tooltipNode) {
+                      return (
+                        <td key={ci} className={`${baseCls} relative group`}>
+                          <span className="cursor-help underline decoration-dotted decoration-slate-300 underline-offset-2">{rowDef.getValue(col)}</span>
+                          <div className="hidden group-hover:block absolute right-0 bottom-full mb-1 z-50 bg-slate-800 text-white p-2.5 rounded-lg shadow-xl border border-slate-600 min-w-[220px] pointer-events-none">
+                            {tooltipNode}
+                          </div>
+                        </td>
+                      );
+                    }
+                    return (
+                      <td key={ci} className={baseCls}>
+                        {rowDef.getValue(col)}
+                      </td>
+                    );
+                  })}
                 </tr>
               );
             }
@@ -277,11 +349,25 @@ const CashFlowsTab = ({ projectionData, monteCarloData, inputs, clientInfo }) =>
                 <td className={`p-1.5 text-left whitespace-nowrap font-medium sticky left-0 bg-white border-r border-slate-200 min-w-[160px] ${rowDef.cls || ''}`}>
                   {rowDef.label}
                 </td>
-                {cols.map((col, ci) => (
-                  <td key={ci} className={`p-1.5 text-right whitespace-nowrap ${rowDef.isSeparator ? '' : rowDef.dynamicCls ? rowDef.dynamicCls(col) : rowDef.cls || ''}`}>
-                    {rowDef.isSeparator ? '' : rowDef.getValue(col)}
-                  </td>
-                ))}
+                {cols.map((col, ci) => {
+                  const tooltipNode = !rowDef.isSeparator && rowDef.cellTooltip ? rowDef.cellTooltip(col) : null;
+                  const baseCls = `p-1.5 text-right whitespace-nowrap ${rowDef.isSeparator ? '' : rowDef.dynamicCls ? rowDef.dynamicCls(col) : rowDef.cls || ''}`;
+                  if (tooltipNode) {
+                    return (
+                      <td key={ci} className={`${baseCls} relative group`}>
+                        <span className="cursor-help underline decoration-dotted decoration-slate-300 underline-offset-2">{rowDef.getValue(col)}</span>
+                        <div className="hidden group-hover:block absolute right-0 bottom-full mb-1 z-50 bg-slate-800 text-white p-2.5 rounded-lg shadow-xl border border-slate-600 min-w-[220px] pointer-events-none">
+                          {tooltipNode}
+                        </div>
+                      </td>
+                    );
+                  }
+                  return (
+                    <td key={ci} className={baseCls}>
+                      {rowDef.isSeparator ? '' : rowDef.getValue(col)}
+                    </td>
+                  );
+                })}
               </tr>
             );
           })}

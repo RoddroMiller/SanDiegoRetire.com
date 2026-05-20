@@ -94,8 +94,12 @@ export const TaxMapTab = ({
       const nqPreferential = (row.nqTaxableGain || 0) + (row.nqQualifiedDividends || 0);
       const otherEmployment = (row.otherIncomeDetail || 0) + (row.employmentIncomeDetail || 0);
       const rmd = row.rmdAmount || 0;
+      // Inherited IRA forced distributions (SECURE Act 10-yr) are taxed as ordinary
+      // income — the engine adds them to traditionalWithdrawal in every tax calc, so they
+      // must also count toward the bracket headroom shown on this chart.
+      const inheritedIRA = row.inheritedIRATaxableIncome || row.inheritedIRADistribution || 0;
 
-      const totalOrdinaryIncome = taxableSS + pension + tradWithdrawal + rothConversion + nqOrdinaryDivs + otherEmployment;
+      const totalOrdinaryIncome = taxableSS + pension + tradWithdrawal + rothConversion + nqOrdinaryDivs + otherEmployment + inheritedIRA;
 
       const bracket12Top = brackets.length > 1 ? brackets[1].max + deduction : 0;
       const bracket22Top = brackets.length > 2 ? brackets[2].max + deduction : 0;
@@ -119,6 +123,7 @@ export const TaxMapTab = ({
         nqOrdinaryDivs: Math.round(nqOrdinaryDivs),
         nqPreferential: Math.round(nqPreferential),
         otherEmployment: Math.round(otherEmployment),
+        inheritedIRA: Math.round(inheritedIRA),
         totalOrdinaryIncome: Math.round(totalOrdinaryIncome),
         rmd: Math.round(rmd),
         bracket12Top, bracket22Top, bracket24Top,
@@ -245,6 +250,7 @@ export const TaxMapTab = ({
   }
 
   const hasRothConversions = projectionData.some(r => r.rothConversion > 0);
+  const hasInheritedIRA = chartData.some(d => d.inheritedIRA > 0);
 
   return (
     <div className="space-y-6">
@@ -277,6 +283,7 @@ export const TaxMapTab = ({
               <Bar dataKey="taxableSS" stackId="income" fill="#60a5fa" name="Taxable SS" />
               <Bar dataKey="pension" stackId="income" fill="#34d399" name="Pension" />
               <Bar dataKey="tradWithdrawal" stackId="income" fill="#f97316" name="Traditional" />
+              {hasInheritedIRA && <Bar dataKey="inheritedIRA" stackId="income" fill="#d97706" name="Inherited IRA (10-yr)" />}
               {hasRothConversions && <Bar dataKey="rothConversion" stackId="income" fill="#14b8a6" name="Roth Conversion" />}
               <Bar dataKey="nqOrdinaryDivs" stackId="income" fill="#c084fc" name="NQ Ordinary Divs" />
               <Bar dataKey="otherEmployment" stackId="income" fill="#94a3b8" name="Other/Employment" />

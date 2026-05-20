@@ -1353,9 +1353,12 @@ export const calculateBasePlan = (inputs, assumptions, clientInfo, vaEnabled = f
 
     // One-time contributions - only if owner is alive
     // Full amount is added to the portfolio; taxable portion is also included in
-    // otherIncome so it flows through the tax calculation
+    // otherIncome so it flows through the tax calculation.
+    // Inherited-IRA inheritance events are routed to a separate 10-yr forced-distribution
+    // tranche in runSimulation — skip them here so they don't double-flow as a lump sum.
     let oneTimeContributions = 0;
     additionalIncomes.forEach(stream => {
+      if (stream.isInheritedIRA && stream.name === 'Inheritance') return;
       const ownerAge = stream.owner === 'partner' ? currentPartnerAge : simAge;
       const ownerAlive = stream.owner === 'partner' ? partnerAlive : clientAlive;
       if (ownerAlive && stream.isOneTime && ownerAge === stream.startAge) {
@@ -1771,9 +1774,37 @@ export const runSimulation = (basePlan, assumptions, inputs, rebalanceFreq, isMo
     const initialPortfolioForSplit = unified
       ? Math.max(0, (clientInfo?.currentPortfolio || 0) - vaAllocationAmount)
       : Math.max(0, inputs.totalPortfolio - dropPreRetAmt);
-    let traditionalBalance = initialPortfolioForSplit * initTradPct + (unified ? 0 : dropPreRetAmt);
-    let rothBalance = initialPortfolioForSplit * initRothPct;
-    let nqAccountBalance = initialPortfolioForSplit * initNqPct;
+    let traditionalBalance, rothBalance, nqAccountBalance;
+    if (inputs.accounts && inputs.accounts.length > 0) {
+      // Advanced Mode: aggregate explicit per-account balances by type (excluding inherited)
+      traditionalBalance = inputs.accounts.filter(a => a.type === 'traditional').reduce((s, a) => s + (a.balance || 0), 0) + (unified ? 0 : dropPreRetAmt);
+      rothBalance        = inputs.accounts.filter(a => a.type === 'roth').reduce((s, a) => s + (a.balance || 0), 0);
+      nqAccountBalance   = inputs.accounts.filter(a => a.type === 'nq').reduce((s, a) => s + (a.balance || 0), 0);
+    } else {
+      traditionalBalance = initialPortfolioForSplit * initTradPct + (unified ? 0 : dropPreRetAmt);
+      rothBalance = initialPortfolioForSplit * initRothPct;
+      nqAccountBalance = initialPortfolioForSplit * initNqPct;
+    }
+
+    // --- Inherited IRA tranches (SECURE Act 10-yr forced distribution) ---
+    // Each tranche tracks a separate inheritance with its own 10-year clock.
+    // Initialized from inputs.accounts entries with type === 'inherited'; additional
+    // tranches are pushed when an Inheritance one-time event with isInheritedIRA fires.
+    let inheritedTranches = [];
+    const _simBootYear = new Date().getFullYear();
+    (inputs.accounts || []).filter(a => a.type === 'inherited' && (a.balance || 0) > 0).forEach(a => {
+      const inhYear = a.inheritedYear || _simBootYear;
+      inheritedTranches.push({ balance: a.balance, deadlineYear: inhYear + 10 });
+    });
+
+    // Per-account state for Advanced Mode accumulation. Excludes inherited (tracked separately).
+    let acctState = (inputs.accounts && inputs.accounts.length > 0)
+      ? inputs.accounts.filter(a => a.type !== 'inherited').map(a => ({ ...a, projected: a.balance || 0 }))
+      : null;
+
+    // Inherited-IRA inheritance events fired during the projection (push tranche on the event's age)
+    const inheritedIRAEvents = (inputs.additionalIncomes || [])
+      .filter(s => s.isOneTime && s.isInheritedIRA && s.name === 'Inheritance');
 
     // Unified-mode pre-retirement state (accumulating DROP balance, "buckets-snapped" flag).
     let unifiedDropBalance = 0;
@@ -1911,17 +1942,47 @@ export const runSimulation = (basePlan, assumptions, inputs, rebalanceFreq, isMo
         const savingsActive = (clientWorking ? clientShare : 0) + (partnerWorking ? partnerShare : 0);
 
         const baseSavings = clientInfo.annualSavings || 0;
-        const additionalContribs = (clientInfo.additionalContributions || []).reduce((sum, c) => {
-          if (c.mode === 'percent' && annualIncome > 0) return sum + (c.amount / 100) * annualIncome;
-          return sum + (c.amount || 0);
-        }, 0);
-        const yearSavings = (baseSavings + additionalContribs) * savingsActive * inflFactor;
+
+        // --- Per-type contributions ---
+        // Advanced Mode: derive each from the actual account's annualContribution and
+        // gate by the owner's working status. Simple Mode: pool then synthesize per-type
+        // values from the global Trad/Roth/NQ % so the Cash Flow tab still has detail.
+        let tradContribution = 0;
+        let rothContribution = 0;
+        let nqContribution = 0;
+        let yearSavings;
+        if (acctState) {
+          acctState.forEach(a => {
+            let contrib = a.annualContribution || 0;
+            if (a.owner === 'partner' && !partnerWorking) contrib = 0;
+            if ((a.owner === 'client' || !a.owner) && !clientWorking) contrib = 0;
+            contrib *= inflFactor;
+            if (a.type === 'traditional') tradContribution += contrib;
+            else if (a.type === 'roth')   rothContribution += contrib;
+            else if (a.type === 'nq')     nqContribution += contrib;
+            a._yearContrib = contrib;
+          });
+          yearSavings = tradContribution + rothContribution + nqContribution;
+        } else {
+          const additionalContribs = (clientInfo.additionalContributions || []).reduce((sum, c) => {
+            if (c.mode === 'percent' && annualIncome > 0) return sum + (c.amount / 100) * annualIncome;
+            return sum + (c.amount || 0);
+          }, 0);
+          yearSavings = (baseSavings + additionalContribs) * savingsActive * inflFactor;
+          // Synthesize per-type values for display (Cash Flow tab); no math effect.
+          tradContribution = yearSavings * initTradPct;
+          rothContribution = yearSavings * initRothPct;
+          nqContribution   = yearSavings * initNqPct;
+        }
 
         // --- One-time additional income events (taxable portion taxed at marginal rate) ---
+        // Inheritance events flagged as Inherited IRA are routed to a separate 10-yr-distribution
+        // tranche instead of as a lump-sum after-tax income (handled below).
         let yearAdditionalIncome = 0;
         let yearAdditionalTax = 0;
         (inputs.additionalIncomes || []).forEach(stream => {
           if (stream.isOneTime && stream.startAge === simAge && simAge < boundaryAge) {
+            if (stream.isInheritedIRA && stream.name === 'Inheritance') return; // routed to tranche
             let amount = stream.amount;
             if (stream.inflationAdjusted) amount *= inflFactor;
             const taxablePct = (stream.taxablePercent ?? 100) / 100;
@@ -1938,6 +1999,26 @@ export const runSimulation = (basePlan, assumptions, inputs, rebalanceFreq, isMo
           }
         });
 
+        // --- Inherited IRA: push new tranches for events firing this year, then grow + force-distribute ---
+        inheritedIRAEvents.forEach(ev => {
+          const ownerAge = ev.owner === 'partner' ? currentPartnerAge : simAge;
+          if (ownerAge === ev.startAge) {
+            let amt = ev.amount;
+            if (ev.inflationAdjusted) amt *= inflFactor;
+            inheritedTranches.push({ balance: amt, deadlineYear: _simBootYear + yearIdx + 10 });
+          }
+        });
+        const _currentCalYearA = _simBootYear + yearIdx;
+        let inheritedDistribThisYear = 0;
+        inheritedTranches.forEach(t => {
+          t.balance *= (1 + accumulationGrowthRate);
+          const yearsRemaining = Math.max(1, t.deadlineYear - _currentCalYearA);
+          const forced = yearsRemaining <= 1 ? t.balance : t.balance / yearsRemaining;
+          inheritedDistribThisYear += forced;
+          t.balance = Math.max(0, t.balance - forced);
+        });
+        inheritedTranches = inheritedTranches.filter(t => t.balance > 1);
+
         // --- Tax on accumulation-year income ---
         // Apply the same tax pipeline used post-retirement so wage/SS/pension years are
         // consistent across the boundary. Approximation: tax computed on income only;
@@ -1948,7 +2029,7 @@ export const runSimulation = (basePlan, assumptions, inputs, rebalanceFreq, isMo
               {
                 ssIncome,
                 pensionIncome,
-                traditionalWithdrawal: 0,
+                traditionalWithdrawal: inheritedDistribThisYear,
                 rothWithdrawal: 0,
                 nqTaxableGain: 0,
                 nqQualifiedDividends: 0,
@@ -1965,32 +2046,68 @@ export const runSimulation = (basePlan, assumptions, inputs, rebalanceFreq, isMo
             )
           : { federalTax: 0, stateTax: 0, totalTax: 0, effectiveRate: '0.0', taxableSS: 0 };
 
-        // Recompute gap/surplus to include tax. `expenses` from getAnnualDetails is
-        // already cf-adjusted (= baseExpenses + cashFlowAdjustmentDetail), so don't
-        // subtract cf again — that would double-count and produce a phantom shortfall.
-        const householdNet = income - expenses - taxAccumulation.totalTax;
+        // Recompute gap/surplus to include tax and inherited-IRA forced distribution.
+        // `expenses` from getAnnualDetails is already cf-adjusted (= baseExpenses +
+        // cashFlowAdjustmentDetail), so don't subtract cf again.
+        const householdNet = income + inheritedDistribThisYear - expenses - taxAccumulation.totalTax;
         const accumGap = Math.max(0, -householdNet);
         const accumSurplus = Math.max(0, householdNet);
 
         // --- Portfolio-flow accounting ---
-        // accumGap > 0 means income (after tax) falls short of expenses + cf — portfolio
-        // absorbs the deficit. accumSurplus > 0 means excess cash flow after tax.
-        let pool = startTotal;
-        pool += (yearAdditionalIncome - yearAdditionalTax);
-        pool += yearSavings;
-        if (accumGap > 0) pool -= accumGap;
-        if (surplusToPortfolio && accumSurplus > 0) pool += accumSurplus;
-        // (else: surplus implicitly spent — default behavior)
-
-        const yearGrowth = pool * accumulationGrowthRate;
-        pool *= (1 + accumulationGrowthRate);
-
-        // Sync bucket pool and account-type balances by configured percentages
-        balances.b5 = pool;
-        balances.b1 = 0; balances.b2 = 0; balances.b3 = 0; balances.b4 = 0;
-        traditionalBalance = pool * initTradPct;
-        rothBalance = pool * initRothPct;
-        nqAccountBalance = pool * initNqPct;
+        let pool;
+        let yearGrowth;
+        if (acctState) {
+          // Advanced Mode: add per-account contributions to their own accounts, grow each,
+          // then route one-time net additional income and surplus proportionally to NQ accounts,
+          // and absorb gap proportionally across all accounts. This keeps Trad/Roth/NQ
+          // contribution-and-growth math separate so the Cash Flow tab can show real per-type flow.
+          acctState.forEach(a => {
+            a.projected += (a._yearContrib || 0);
+            yearGrowth = (yearGrowth || 0) + a.projected * accumulationGrowthRate;
+            a.projected *= (1 + accumulationGrowthRate);
+          });
+          const nqAccts = acctState.filter(a => a.type === 'nq');
+          const nqTotal = nqAccts.reduce((s, a) => s + a.projected, 0);
+          const netAdditional = yearAdditionalIncome - yearAdditionalTax;
+          if (netAdditional !== 0) {
+            if (nqTotal > 0) {
+              nqAccts.forEach(a => { a.projected += netAdditional * (a.projected / nqTotal); });
+            } else if (acctState.length > 0) {
+              acctState[acctState.length - 1].projected += netAdditional;
+            }
+          }
+          if (accumGap > 0) {
+            const total = acctState.reduce((s, a) => s + a.projected, 0);
+            if (total > 0) acctState.forEach(a => { a.projected -= accumGap * (a.projected / total); });
+          }
+          if (surplusToPortfolio && accumSurplus > 0) {
+            if (nqTotal > 0) {
+              nqAccts.forEach(a => { a.projected += accumSurplus * (a.projected / nqTotal); });
+            } else if (acctState.length > 0) {
+              acctState[acctState.length - 1].projected += accumSurplus;
+            }
+          }
+          traditionalBalance = acctState.filter(a => a.type === 'traditional').reduce((s, a) => s + a.projected, 0);
+          rothBalance        = acctState.filter(a => a.type === 'roth').reduce((s, a) => s + a.projected, 0);
+          nqAccountBalance   = acctState.filter(a => a.type === 'nq').reduce((s, a) => s + a.projected, 0);
+          pool = traditionalBalance + rothBalance + nqAccountBalance;
+          balances.b5 = pool;
+          balances.b1 = 0; balances.b2 = 0; balances.b3 = 0; balances.b4 = 0;
+        } else {
+          // Simple Mode (unchanged math): pooled growth, then split post-growth.
+          pool = startTotal;
+          pool += (yearAdditionalIncome - yearAdditionalTax);
+          pool += yearSavings;
+          if (accumGap > 0) pool -= accumGap;
+          if (surplusToPortfolio && accumSurplus > 0) pool += accumSurplus;
+          yearGrowth = pool * accumulationGrowthRate;
+          pool *= (1 + accumulationGrowthRate);
+          balances.b5 = pool;
+          balances.b1 = 0; balances.b2 = 0; balances.b3 = 0; balances.b4 = 0;
+          traditionalBalance = pool * initTradPct;
+          rothBalance = pool * initRothPct;
+          nqAccountBalance = pool * initNqPct;
+        }
 
         // Benchmark mirrors the same flows at benchmark return
         let benchPool = benchmarkBalance;
@@ -2035,15 +2152,21 @@ export const runSimulation = (basePlan, assumptions, inputs, rebalanceFreq, isMo
           // the cash-flow table sums consistently across the accumulation/retirement boundary)
           expenses: Math.round(expenses + (taxAccumulation.totalTax || 0)),
           savings: Math.round(yearSavings),
+          tradContribution: Math.round(tradContribution),
+          rothContribution: Math.round(rothContribution),
+          nqContribution: Math.round(nqContribution),
           additionalIncome: Math.round(yearAdditionalIncome),
           additionalTax: Math.round(yearAdditionalTax),
+          inheritedIRABalance: Math.round(inheritedTranches.reduce((s, t) => s + t.balance, 0)),
+          inheritedIRADistribution: Math.round(inheritedDistribThisYear),
+          inheritedIRATaxableIncome: Math.round(inheritedDistribThisYear),
           cashFlowExpense: Math.round(cashFlowAdjustmentDetail || 0),
           dropBalance: Math.round(unifiedDropBalance),
           contribution: 0,
           dropContribution: 0,
           surplus: Math.round(surplusToPortfolio ? accumSurplus : 0),
           distribution: Math.round(accumGap),
-          total: Math.max(0, pool + unifiedDropBalance),
+          total: Math.max(0, pool + unifiedDropBalance + inheritedTranches.reduce((s, t) => s + t.balance, 0)),
           benchmark: Math.max(0, benchmarkBalance),
           distRate: startTotal > 0 ? (accumGap / startTotal) * 100 : 0,
           b1: 0, b2: 0, b3: 0, b4: 0, b5: Math.round(pool),
@@ -2149,6 +2272,11 @@ export const runSimulation = (basePlan, assumptions, inputs, rebalanceFreq, isMo
 
       const postGrowthTotal = Object.values(balances).reduce((a, b) => a + b, 0);
       const annualGrowth = postGrowthTotal - startTotal - oneTimeContributions - dropContribution;
+      // Blended portfolio growth rate — actual weighted average of bucket returns this year.
+      // Used for trad/roth/nq accounting balances and inherited-IRA tranches.
+      const blendedRate = startTotal > 0
+        ? (postGrowthTotal - startTotal - oneTimeContributions - dropContribution) / startTotal
+        : 0;
 
       const appliedBench = isMonteCarlo
         ? (benchmarkReturn + benchmarkStdDev * randn_bm())
@@ -2196,13 +2324,40 @@ export const runSimulation = (basePlan, assumptions, inputs, rebalanceFreq, isMo
         }
       }
 
-      // Adjust gap by VA guaranteed income - this is what the buckets need to cover
-      const adjustedGap = vaInputs ? Math.max(0, gap - vaGuaranteedIncome) : gap;
+      // --- Inherited IRA: push new tranches for events firing this year, then grow + force-distribute ---
+      inheritedIRAEvents.forEach(ev => {
+        const ownerAge = ev.owner === 'partner' ? currentPartnerAge : simAge;
+        if (ownerAge === ev.startAge) {
+          let amt = ev.amount;
+          // Match the inflation factor used for the rest of retirement projections (incomeInflationFactor in
+          // getAnnualDetails); approximate here using accumulationInflRate from the bootstrap.
+          if (ev.inflationAdjusted) amt *= Math.pow(1 + accumulationInflRate, simAge - (clientInfo?.currentAge || simAge));
+          inheritedTranches.push({ balance: amt, deadlineYear: _simBootYear + (simAge - (clientInfo?.currentAge || 0)) + 10 });
+        }
+      });
+      const _currentCalYearR = _simBootYear + (simAge - (clientInfo?.currentAge || 0));
+      let inheritedDistribThisYear = 0;
+      inheritedTranches.forEach(t => {
+        // Grow at the blended portfolio rate (weighted avg of bucket returns this year)
+        // rather than pure B5 — matches how the inherited assets would be invested in
+        // a diversified manner, and is consistent with trad/roth/nq accounting growth.
+        t.balance *= (1 + blendedRate);
+        const yearsRemaining = Math.max(1, t.deadlineYear - _currentCalYearR);
+        const forced = yearsRemaining <= 1 ? t.balance : t.balance / yearsRemaining;
+        inheritedDistribThisYear += forced;
+        t.balance = Math.max(0, t.balance - forced);
+      });
+      inheritedTranches = inheritedTranches.filter(t => t.balance > 1);
 
-      // --- Grow account-type balances at blended portfolio rate ---
-      const blendedRate = startTotal > 0
-        ? (postGrowthTotal - startTotal - oneTimeContributions - dropContribution) / startTotal
-        : 0;
+      // Adjust gap by VA guaranteed income and inherited-IRA forced distribution — both are income
+      // sources that reduce what the buckets need to cover. Excess inherited distribution (beyond
+      // the gap) flows into NQ as after-tax surplus.
+      const adjustedGap = vaInputs
+        ? Math.max(0, gap - vaGuaranteedIncome - inheritedDistribThisYear)
+        : Math.max(0, gap - inheritedDistribThisYear);
+      const inheritedSurplusContribution = Math.max(0, inheritedDistribThisYear - (vaInputs ? Math.max(0, gap - vaGuaranteedIncome) : gap));
+
+      // --- Grow account-type balances at blended portfolio rate (computed above) ---
       traditionalBalance *= (1 + blendedRate);
       rothBalance *= (1 + blendedRate);
       nqAccountBalance *= (1 + blendedRate);
@@ -2273,19 +2428,22 @@ export const runSimulation = (basePlan, assumptions, inputs, rebalanceFreq, isMo
 
         if (nqBalanceForTax > 0) {
           if (hasBucketTaxProfiles) {
-            // Each bucket's NQ portion generates tax items based on its taxProfile
-            // Scale by actual NQ balance vs theoretical to handle partial depletion
+            // Distribute the actual NQ balance across buckets in proportion to bucket
+            // size, then apply each bucket's taxProfile. Uses the live NQ balance instead
+            // of the target nqPct slice — important when surplus reinvestment has grown
+            // the NQ balance beyond what the user's target allocation implies (e.g.,
+            // starting at $0 NQ with a low nqPercent target).
             const bucketKeys = ['b1', 'b2', 'b3', 'b4', 'b5'];
             const bucketTotal = bucketKeys.reduce((s, k) => s + balances[k], 0);
-            const theoreticalNq = bucketTotal * nqPct;
-            const nqScale = theoreticalNq > 0 ? Math.min(1, nqBalanceForTax / theoreticalNq) : 0;
 
-            for (const bk of bucketKeys) {
-              const tp = assumptions[bk]?.taxProfile;
-              if (!tp || bucketTotal <= 0) continue;
-              const bucketNqBalance = balances[bk] * nqPct * nqScale;
-              nqOrdinaryDividends += bucketNqBalance * ((tp.ordinaryIncomeRate || 0) / 100);
-              nqQualifiedDividends += bucketNqBalance * ((tp.qualDivRate || 0) / 100);
+            if (bucketTotal > 0) {
+              for (const bk of bucketKeys) {
+                const tp = assumptions[bk]?.taxProfile;
+                if (!tp) continue;
+                const bucketNqBalance = nqBalanceForTax * (balances[bk] / bucketTotal);
+                nqOrdinaryDividends += bucketNqBalance * ((tp.ordinaryIncomeRate || 0) / 100);
+                nqQualifiedDividends += bucketNqBalance * ((tp.qualDivRate || 0) / 100);
+              }
             }
           } else {
             // Global fallback: use flat dividend yield
@@ -2314,15 +2472,18 @@ export const runSimulation = (basePlan, assumptions, inputs, rebalanceFreq, isMo
 
         if (nqBalanceForTax > 0) {
           if (hasBucketTaxProfiles) {
+            // Distribute actual NQ balance proportionally across buckets (same approach
+            // as the dividend block above) so realized cap gains reflect the real NQ
+            // position regardless of the user's target nqPct allocation.
             const bucketKeys = ['b1', 'b2', 'b3', 'b4', 'b5'];
             const bucketTotal = bucketKeys.reduce((s, k) => s + balances[k], 0);
-            const theoreticalNq = bucketTotal * nqPct;
-            const nqScale = theoreticalNq > 0 ? Math.min(1, nqBalanceForTax / theoreticalNq) : 0;
-            for (const bk of bucketKeys) {
-              const tp = assumptions[bk]?.taxProfile;
-              if (!tp || bucketTotal <= 0) continue;
-              const bucketNqBalance = balances[bk] * nqPct * nqScale;
-              potentialCapGains += bucketNqBalance * ((tp.realizedCapGainRate || 0) / 100);
+            if (bucketTotal > 0) {
+              for (const bk of bucketKeys) {
+                const tp = assumptions[bk]?.taxProfile;
+                if (!tp) continue;
+                const bucketNqBalance = nqBalanceForTax * (balances[bk] / bucketTotal);
+                potentialCapGains += bucketNqBalance * ((tp.realizedCapGainRate || 0) / 100);
+              }
             }
           } else {
             potentialCapGains = nqBalanceForTax * baseCapGainRate;
@@ -2370,11 +2531,12 @@ export const runSimulation = (basePlan, assumptions, inputs, rebalanceFreq, isMo
         // When there's an income surplus, first compute tax on income alone (no withdrawal).
         // Surplus pays taxes before any portfolio withdrawal is needed.
         if (surplus > 0 && adjustedGap === 0) {
-          // Compute tax on income only — no portfolio withdrawal
+          // Compute tax on income only — no portfolio withdrawal (inherited-IRA forced
+          // distribution still counts as ordinary income).
           taxData = calculateAnnualTax({
             ssIncome,
             pensionIncome: pensionIncome + (vaIncome || 0),
-            traditionalWithdrawal: 0,
+            traditionalWithdrawal: inheritedDistribThisYear,
             rothWithdrawal: 0,
             nqTaxableGain: nqAnnualCapGains,
             nqQualifiedDividends,
@@ -2408,7 +2570,7 @@ export const runSimulation = (basePlan, assumptions, inputs, rebalanceFreq, isMo
 
               taxData = calculateAnnualTax({
                 ssIncome, pensionIncome: pensionIncome + (vaIncome || 0),
-                traditionalWithdrawal: split.tradW, rothWithdrawal: split.rothW,
+                traditionalWithdrawal: split.tradW + inheritedDistribThisYear, rothWithdrawal: split.rothW,
                 nqTaxableGain: nqAnnualCapGains, nqQualifiedDividends, nqOrdinaryDividends,
                 otherIncome, employmentIncome
               }, { filingStatus, stateRate, stateCode: inputs.stateCode || '' }, isSenior);
@@ -2447,11 +2609,12 @@ export const runSimulation = (basePlan, assumptions, inputs, rebalanceFreq, isMo
             finalRothWithdrawal = split.rothW;
             finalNqWithdrawal = split.nqW;
 
-            // Compute tax on the actual constrained split
+            // Compute tax on the actual constrained split (inherited-IRA forced distribution
+            // adds to ordinary income via traditionalWithdrawal)
             taxData = calculateAnnualTax({
               ssIncome,
               pensionIncome: pensionIncome + (vaIncome || 0),
-              traditionalWithdrawal: split.tradW,
+              traditionalWithdrawal: split.tradW + inheritedDistribThisYear,
               rothWithdrawal: split.rothW,
               nqTaxableGain: nqAnnualCapGains,
               nqQualifiedDividends,
@@ -2499,7 +2662,12 @@ export const runSimulation = (basePlan, assumptions, inputs, rebalanceFreq, isMo
           }
         }
         if (rmdExcess > 0) {
+          // RMD excess is reinvested as taxable money — it stays in the portfolio,
+          // just reclassified from Traditional to NQ. Buckets net the same flow
+          // (otherwise b1..b5 over-deplete by rmdExcess each year and drift below
+          // the trad/roth/nq accounting balances).
           nqAccountBalance += rmdExcess;
+          balances.b5 += rmdExcess;
         }
 
         // --- Roth Conversion ---
@@ -2517,7 +2685,7 @@ export const runSimulation = (basePlan, assumptions, inputs, rebalanceFreq, isMo
             taxData = calculateAnnualTax({
               ssIncome,
               pensionIncome: pensionIncome + (vaIncome || 0),
-              traditionalWithdrawal: tradWithdrawalForTax + rothConversionAmount,
+              traditionalWithdrawal: tradWithdrawalForTax + rothConversionAmount + inheritedDistribThisYear,
               rothWithdrawal: rothWithdrawalForTax,
               nqTaxableGain: nqTaxDetail.nqTaxableGain || 0,
               nqQualifiedDividends: nqTaxDetail.nqQualifiedDividends || 0,
@@ -2590,11 +2758,19 @@ export const runSimulation = (basePlan, assumptions, inputs, rebalanceFreq, isMo
       }
 
       // Net surplus (after taxes) flows into portfolio as contribution to NQ account
-      // (surplus is after-tax income, so it enters the non-qualified/taxable account)
+      // (surplus is after-tax income, so it enters the non-qualified/taxable account).
+      // Any inherited-IRA forced distribution that exceeds the spending gap also lands
+      // in NQ as after-tax surplus (the distribution itself was already taxed via the
+      // traditionalWithdrawal channel in the calculateAnnualTax calls above).
       if (netSurplus > 0) {
         balances.b5 += netSurplus;
         nqAccountBalance += netSurplus;
         benchmarkBalance += netSurplus;
+      }
+      if (inheritedSurplusContribution > 0) {
+        balances.b5 += inheritedSurplusContribution;
+        nqAccountBalance += inheritedSurplusContribution;
+        benchmarkBalance += inheritedSurplusContribution;
       }
 
       let withdrawalAmount = totalWithdrawal;
@@ -2711,12 +2887,18 @@ export const runSimulation = (basePlan, assumptions, inputs, rebalanceFreq, isMo
         ssIncome: Math.round(income + vaGuaranteedIncome), // Include VA income in reported income
         contribution: Math.round(oneTimeContributions + dropContribution),
         dropContribution: Math.round(dropContribution),
-        surplus: Math.round(netSurplus),
+        surplus: Math.round(netSurplus + inheritedSurplusContribution),
+        tradContribution: 0,
+        rothContribution: 0,
+        nqContribution: Math.round(netSurplus + inheritedSurplusContribution),
+        inheritedIRABalance: Math.round(inheritedTranches.reduce((s, t) => s + t.balance, 0)),
+        inheritedIRADistribution: Math.round(inheritedDistribThisYear),
+        inheritedIRATaxableIncome: Math.round(inheritedDistribThisYear),
         livingExpenses: Math.round(baseExpenses),
         cashFlowAdjustmentDetail: Math.round(cashFlowAdjustmentDetail),
         expenses: Math.round(expenses + taxData.totalTax + irmaaCost),
         distribution: Math.round(totalWithdrawal + rothConversionTax),
-        total: Math.max(0, total),
+        total: Math.max(0, total + inheritedTranches.reduce((s, t) => s + t.balance, 0)),
         benchmark: Math.max(0, benchmarkBalance),
         distRate,
         // Individual bucket values for architecture chart
@@ -2828,7 +3010,11 @@ export const runSimulation = (basePlan, assumptions, inputs, rebalanceFreq, isMo
  * @returns {object} Six allocation strategies
  */
 export const calculateAlternativeAllocations = (inputs, basePlan) => {
-  const { totalPortfolio, monthlySpending } = inputs;
+  const { monthlySpending } = inputs;
+  // In unified mode inputs.totalPortfolio is 0 — the projected retirement portfolio lives
+  // on basePlan.retirementPortfolio (computed via accumulation). Fall back to
+  // inputs.totalPortfolio for legacy mode.
+  const totalPortfolio = basePlan?.retirementPortfolio || inputs.totalPortfolio || 0;
   const annualDistribution = monthlySpending * 12;
 
   // Strategy 1: Aggressive Growth (0% B1, 0% B2, 20% B3, 10% B4, 70% B5)

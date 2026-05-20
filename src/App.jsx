@@ -236,7 +236,7 @@ export default function BucketPortfolioBuilder() {
     irmaaEnabled: true, // Track Medicare IRMAA surcharges
     liquidationMode: 'proportionate', // 'proportionate' | 'priority'
     liquidationStrategies: [], // [{ id, startYear, endYear, priority: ['nq','traditional','roth'] }]
-    accounts: [], // Array of { id, label, owner: 'client'|'partner', type: 'traditional'|'roth'|'nq', subtype: 'ira'|'401k'|'brokerage', balance }
+    accounts: [], // Array of { id, label, owner: 'client'|'partner', type: 'traditional'|'roth'|'nq'|'inherited', subtype: 'ira'|'401k'|'brokerage', balance, annualContribution, inheritedYear }
     // SS Breakeven Analysis Settings
     ssBridgeNqPercent: 50, // % of bridge-year withdrawals from NQ (non-qualified) accounts
     ssMarginalTaxRate: 22, // Marginal tax bracket for bridge-year gross-up calculation
@@ -713,8 +713,20 @@ export default function BucketPortfolioBuilder() {
       }));
   }, [inputs.unifiedTimeline, accumulationData, projectionDataFull]);
 
-  // Monte Carlo uses debounced values — expensive (1000 iterations)
-  const monteCarloData = useMemo(() => runSimulation(di.basePlan, di.assumptions, di.inputs, rebalanceFreq, true, null, di.rebalanceTargets), [di, rebalanceFreq]);
+  // Monte Carlo uses debounced values — expensive (1000 iterations).
+  // In unified mode, runSimulation emits both accumulation and retirement years in
+  // `data`; the time-series charts plot retirement only (matching projectionData), so
+  // slice off the accumulation prefix and re-index `year` to 1..N.
+  const monteCarloData = useMemo(() => {
+    const raw = runSimulation(di.basePlan, di.assumptions, di.inputs, rebalanceFreq, true, null, di.rebalanceTargets);
+    if (!di.inputs.unifiedTimeline || !raw?.data) return raw;
+    const accumYears = di.basePlan?.retirementYearIndex || 0;
+    if (accumYears === 0) return raw;
+    return {
+      ...raw,
+      data: raw.data.slice(accumYears).map((row, idx) => ({ ...row, year: idx + 1 })),
+    };
+  }, [di, rebalanceFreq]);
 
   // Tax-forced inputs for client view: assume 100% traditional IRA/401k, 5% state tax
   const clientTaxInputs = useMemo(() => ({
@@ -955,8 +967,11 @@ export default function BucketPortfolioBuilder() {
   // Account CRUD helpers — sync currentPortfolio and annualSavings from accounts
   // The accumulation engine projects growth to retirement; this just sets current values
   const syncClientFromAccounts = (accounts) => {
-    const currentTotal = accounts.reduce((s, a) => s + (a.balance || 0), 0);
-    const totalContributions = accounts.reduce((s, a) => s + (a.annualContribution || 0), 0);
+    // Inherited IRAs are tracked separately (SECURE Act 10-yr forced distribution),
+    // not part of the main portfolio and they have no annual contribution.
+    const portfolioAccts = accounts.filter(a => a.type !== 'inherited');
+    const currentTotal = portfolioAccts.reduce((s, a) => s + (a.balance || 0), 0);
+    const totalContributions = portfolioAccts.reduce((s, a) => s + (a.annualContribution || 0), 0);
     setClientInfo(prev => ({ ...prev, currentPortfolio: currentTotal, annualSavings: totalContributions }));
   };
 
@@ -983,6 +998,9 @@ export default function BucketPortfolioBuilder() {
         const updated = { ...a, [field]: value };
         if (field === 'type') {
           updated.subtype = value === 'nq' ? 'brokerage' : 'ira';
+          if (value === 'inherited' && !updated.inheritedYear) {
+            updated.inheritedYear = new Date().getFullYear();
+          }
         }
         return updated;
       });

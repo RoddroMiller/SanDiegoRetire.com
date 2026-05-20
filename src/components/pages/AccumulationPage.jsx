@@ -358,6 +358,7 @@ export const AccumulationPage = ({
                           <option value="roth-ira">Roth IRA</option>
                           <option value="roth-401k">Roth 401k</option>
                           <option value="nq-brokerage">NQ</option>
+                          <option value="inherited-ira">Inherited IRA</option>
                         </select>
                       </div>
                       <div className="col-span-2">
@@ -369,12 +370,27 @@ export const AccumulationPage = ({
                         />
                       </div>
                       <div className="col-span-2">
-                        <label className="text-[10px] text-slate-500 uppercase">Ann. Contrib</label>
-                        <FormattedNumberInput
-                          value={acct.annualContribution}
-                          onChange={(e) => onUpdateAccount(acct.id, 'annualContribution', parseFloat(e.target.value) || 0)}
-                          className="w-full px-2 py-1.5 border rounded text-xs"
-                        />
+                        {acct.type === 'inherited' ? (
+                          <>
+                            <label className="text-[10px] text-amber-700 uppercase">Inherited Year</label>
+                            <input
+                              type="number"
+                              value={acct.inheritedYear || new Date().getFullYear()}
+                              onChange={(e) => onUpdateAccount(acct.id, 'inheritedYear', parseInt(e.target.value) || new Date().getFullYear())}
+                              className="w-full px-2 py-1.5 border rounded text-xs"
+                              placeholder={String(new Date().getFullYear())}
+                            />
+                          </>
+                        ) : (
+                          <>
+                            <label className="text-[10px] text-slate-500 uppercase">Ann. Contrib</label>
+                            <FormattedNumberInput
+                              value={acct.annualContribution}
+                              onChange={(e) => onUpdateAccount(acct.id, 'annualContribution', parseFloat(e.target.value) || 0)}
+                              className="w-full px-2 py-1.5 border rounded text-xs"
+                            />
+                          </>
+                        )}
                       </div>
                       <div className="col-span-1 flex justify-center">
                         <button type="button" onClick={() => onRemoveAccount(acct.id)} className="text-red-400 hover:text-red-600 p-1">
@@ -386,13 +402,19 @@ export const AccumulationPage = ({
                   {/* Summary */}
                   <div className="px-3 py-2 bg-mwm-green/10 rounded border border-mwm-green/30 text-xs font-medium space-y-0.5">
                     <div className="flex justify-between text-mwm-emerald">
-                      <span>Today: ${inputs.accounts.reduce((s, a) => s + (a.balance || 0), 0).toLocaleString()}</span>
-                      <span>Annual Savings: ${inputs.accounts.reduce((s, a) => s + (a.annualContribution || 0), 0).toLocaleString()}</span>
+                      <span>Today: ${inputs.accounts.filter(a => a.type !== 'inherited').reduce((s, a) => s + (a.balance || 0), 0).toLocaleString()}</span>
+                      <span>Annual Savings: ${inputs.accounts.filter(a => a.type !== 'inherited').reduce((s, a) => s + (a.annualContribution || 0), 0).toLocaleString()}</span>
                     </div>
                     {accumulationData.length > 0 && (
                       <div className="flex justify-between text-mwm-green">
                         <span>Projected at retirement: ${accumulationData[accumulationData.length - 1].balance.toLocaleString()}</span>
                         <span>Trad {inputs.traditionalPercent}% | Roth {inputs.rothPercent}% | NQ {inputs.nqPercent}%</span>
+                      </div>
+                    )}
+                    {inputs.accounts.some(a => a.type === 'inherited') && (
+                      <div className="flex justify-between text-amber-700 text-[11px] italic pt-0.5 border-t border-amber-200">
+                        <span>Inherited IRA (separate): ${inputs.accounts.filter(a => a.type === 'inherited').reduce((s, a) => s + (a.balance || 0), 0).toLocaleString()}</span>
+                        <span>10-year forced distribution</span>
                       </div>
                     )}
                   </div>
