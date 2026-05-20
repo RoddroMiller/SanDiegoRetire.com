@@ -141,6 +141,10 @@ export default function BucketPortfolioBuilder() {
   // SS Recommendation State
   const [targetMaxPortfolioAge, setTargetMaxPortfolioAge] = useState(80);
 
+  // Bucket Allocation matrix manual overrides (Executive Summary tab). Lifted here so the
+  // print page can read the same matrix the user sees on screen.
+  const [bucketAllocationOverrides, setBucketAllocationOverrides] = useState(null);
+
   // Manual Allocation Override
   const [useManualAllocation, setUseManualAllocation] = useState(false);
   const [useManualForRebalance, setUseManualForRebalance] = useState(false);
@@ -1684,6 +1688,8 @@ export default function BucketPortfolioBuilder() {
       ssSimResults={ssSimResults}
       ssPartnerSimResults={ssPartnerSimResults}
       rebalanceTargets={rebalanceTargets}
+      bucketAllocationOverrides={bucketAllocationOverrides}
+      onBucketAllocationOverridesChange={setBucketAllocationOverrides}
       targetMaxPortfolioAge={targetMaxPortfolioAge}
       onSetTargetMaxPortfolioAge={setTargetMaxPortfolioAge}
       onUpdateSSStartAge={updateSSStartAge}

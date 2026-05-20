@@ -1176,11 +1176,15 @@ export const calculateBasePlan = (inputs, assumptions, clientInfo, vaEnabled = f
   let retirementPortfolio = inputs.totalPortfolio;
   if (unified) {
     const accumClientInfo = { ...clientInfo, retirementAge: retirementBoundaryAge };
+    // Exclude inherited IRA accounts from the projected retirement portfolio — those are
+    // tracked separately in runSimulation with a 10-yr forced distribution clock and aren't
+    // part of the main bucket-strategy portfolio.
+    const portfolioAccounts = (inputs.accounts || []).filter(a => a.type !== 'inherited');
     const accumData = calculateAccumulation(
       accumClientInfo,
       inputs.inflationRate || 0,
       additionalIncomes || [],
-      inputs.accounts || [],
+      portfolioAccounts,
       cashFlowAdjustments || [],
       { filingStatus: inputs.filingStatus, stateRate: inputs.stateRate },
       {
@@ -1887,6 +1891,14 @@ export const runSimulation = (basePlan, assumptions, inputs, rebalanceFreq, isMo
 
     for (let i = 1; i <= years; i++) {
       const startTotal = Object.values(balances).reduce((a, b) => a + b, 0);
+      // unifiedDropBalance is a carry-over that exists at year start but lives outside
+      // `balances` until rolled into B5 inside this iteration at the retirement boundary.
+      // Include it in startBalance so the first retirement row's start matches the last
+      // accumulation row's end. Inherited IRA tranches are tracked separately throughout
+      // (reported in their own row), so they are NOT included in this "main portfolio"
+      // starting balance — same convention as basePlan.retirementPortfolio and Account
+      // Type bucket totals.
+      const startBalanceForRow = startTotal + (unifiedDropBalance || 0);
       let rates = {};
 
       if (isMonteCarlo) {
@@ -2139,7 +2151,7 @@ export const runSimulation = (basePlan, assumptions, inputs, rebalanceFreq, isMo
           age: simAge,
           partnerAge: currentPartnerAge,
           phase: 'accumulation',
-          startBalance: Math.round(startTotal),
+          startBalance: Math.round(startBalanceForRow),
           growth: Math.round(yearGrowth),
           ssIncome: Math.round(income),
           ssIncomeDetail: Math.round(ssIncome),
@@ -2166,7 +2178,10 @@ export const runSimulation = (basePlan, assumptions, inputs, rebalanceFreq, isMo
           dropContribution: 0,
           surplus: Math.round(surplusToPortfolio ? accumSurplus : 0),
           distribution: Math.round(accumGap),
-          total: Math.max(0, pool + unifiedDropBalance + inheritedTranches.reduce((s, t) => s + t.balance, 0)),
+          // Main portfolio total only — inherited IRA balance is reported separately
+          // via inheritedIRABalance so chart/table totals tie to basePlan.retirementPortfolio
+          // and the bucket allocation sum.
+          total: Math.max(0, pool + unifiedDropBalance),
           benchmark: Math.max(0, benchmarkBalance),
           distRate: startTotal > 0 ? (accumGap / startTotal) * 100 : 0,
           b1: 0, b2: 0, b3: 0, b4: 0, b5: Math.round(pool),
@@ -2882,7 +2897,7 @@ export const runSimulation = (basePlan, assumptions, inputs, rebalanceFreq, isMo
         age: simAge,
         partnerAge: currentPartnerAge,
         phase: 'retirement',
-        startBalance: Math.round(startTotal),
+        startBalance: Math.round(startBalanceForRow),
         growth: Math.round(annualGrowth),
         ssIncome: Math.round(income + vaGuaranteedIncome), // Include VA income in reported income
         contribution: Math.round(oneTimeContributions + dropContribution),
@@ -2898,7 +2913,8 @@ export const runSimulation = (basePlan, assumptions, inputs, rebalanceFreq, isMo
         cashFlowAdjustmentDetail: Math.round(cashFlowAdjustmentDetail),
         expenses: Math.round(expenses + taxData.totalTax + irmaaCost),
         distribution: Math.round(totalWithdrawal + rothConversionTax),
-        total: Math.max(0, total + inheritedTranches.reduce((s, t) => s + t.balance, 0)),
+        // Main portfolio total only — inherited IRA balance reported in its own field.
+        total: Math.max(0, total),
         benchmark: Math.max(0, benchmarkBalance),
         distRate,
         // Individual bucket values for architecture chart

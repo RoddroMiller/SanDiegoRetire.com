@@ -105,7 +105,10 @@ export const ArchitectPage = ({
   onRothConversionChange,
   onLiquidationStrategyChange,
   onCapGainOverrideChange,
-  taxStrategyComparison
+  taxStrategyComparison,
+  // Bucket Allocation matrix overrides (Executive Summary tab) — shared with print
+  bucketAllocationOverrides,
+  onBucketAllocationOverridesChange
 }) => {
   // Print data source: use Monte Carlo median when print mode is montecarlo
   const printData = useMemo(() => {
@@ -360,6 +363,43 @@ export const ArchitectPage = ({
     const hasIRMAA = inputs.irmaaEnabled && printData.some(r => r.irmaaCost > 0);
     const hasRothConversions = inputs.taxEnabled && printData.some(r => r.rothConversion > 0);
     const hasAccountBalances = inputs.taxEnabled && printData.some(r => r.traditionalBalanceDetail > 0);
+    const hasInheritedIRA = printData.some(r => (r.inheritedIRADistribution || 0) > 0 || (r.inheritedIRABalance || 0) > 0);
+
+    // Per-account portfolio flow detail (same formulas as the on-screen CashFlowsTab so
+    // Trad/Roth/NQ children sum to Net Flow = Total Income - Total Expenses).
+    const flowParts = (r) => {
+      const isAccum = r.phase === 'accumulation';
+      const irmaa = r.irmaaCost || 0;
+      const rothConvTax = r.rothConversionTax || 0;
+      const totalDist = r.distribution || 0;
+      const tradIn = r.tradContribution || 0;
+      const rothIn = r.rothContribution || 0;
+      const nqIn = (isAccum ? ((r.nqContribution || 0) + (r.surplus || 0))
+                            : Math.max(r.nqContribution || 0, r.surplus || 0))
+                   + (r.rmdExcess || 0);
+      let tradOut, rothOut;
+      if (isAccum) {
+        const tradPct = (inputs.traditionalPercent ?? 60) / 100;
+        const rothPct = (inputs.rothPercent ?? 25) / 100;
+        tradOut = totalDist * tradPct;
+        rothOut = totalDist * rothPct;
+      } else {
+        const preExtraW = totalDist - irmaa - rothConvTax;
+        tradOut = preExtraW * (r.traditionalPctUsed || 0) / 100;
+        rothOut = preExtraW * (r.rothPctUsed || 0) / 100;
+      }
+      const net = (r.ssIncome || 0) + (r.inheritedIRADistribution || 0) - (r.expenses || 0);
+      const nqOut = (tradIn + rothIn + nqIn) - net - tradOut - rothOut;
+      return { tradIn, rothIn, nqIn, tradOut, rothOut, nqOut, net };
+    };
+    const netSigned = (v) => {
+      if (Math.abs(v) < 1) return '-';
+      return v > 0 ? `+${fmt(v)}` : `-${fmt(Math.abs(v))}`;
+    };
+    const netClass = (v) => {
+      if (Math.abs(v) < 1) return 'text-slate-400';
+      return v > 0 ? 'text-mwm-green' : 'text-orange-700';
+    };
 
     const rows = [
       { label: 'Plan Year', cls: 'font-bold text-slate-800 bg-slate-100', getValue: (r) => r.year },
@@ -383,8 +423,9 @@ export const ArchitectPage = ({
     if (hasEmployment) rows.push({ label: 'Employment Income', cls: 'text-teal-700', getValue: (r) => r.employmentIncomeDetail > 0 ? fmt(r.employmentIncomeDetail) : '-' });
     if (hasOther) rows.push({ label: 'Other Income', cls: 'text-cyan-700', getValue: (r) => r.otherIncomeDetail > 0 ? fmt(r.otherIncomeDetail) : '-' });
     if (hasContributions) rows.push({ label: 'One-Time Contributions', cls: 'text-purple-700', getValue: (r) => r.contribution > 0 ? `+${fmt(r.contribution)}` : '-' });
+    if (hasInheritedIRA) rows.push({ label: 'Inherited IRA Distribution', cls: 'text-amber-700', getValue: (r) => (r.inheritedIRADistribution || 0) > 0 ? `+${fmt(r.inheritedIRADistribution)}` : '-' });
     rows.push(
-      { label: 'Total Income', cls: 'font-bold text-blue-800 bg-blue-50', getValue: (r) => fmt(r.ssIncome) },
+      { label: 'Total Income', cls: 'font-bold text-blue-800 bg-blue-50', getValue: (r) => fmt((r.ssIncome || 0) + (r.inheritedIRADistribution || 0)) },
     );
     // --- EXPENSES ---
     rows.push(
@@ -427,14 +468,32 @@ export const ArchitectPage = ({
         rows.push({ label: 'RMD Excess → NQ', cls: 'text-teal-600', getValue: (r) => r.rmdExcess > 0 ? `+${fmt(r.rmdExcess)}` : '-' });
       }
     }
-    // --- PORTFOLIO CONTRIBUTION / DISTRIBUTION ---
+    // --- PORTFOLIO NET FLOW (with per-account children) ---
     rows.push({ label: '', cls: 'bg-slate-200', getValue: () => '', isSeparator: true });
-    if (hasSurplus) {
-      rows.push({ label: 'Contribution → Perm. Equity', cls: 'font-bold text-mwm-green', getValue: (r) => (r.surplus || 0) > 0 ? `+${fmt(r.surplus)}` : '-' });
-    }
-    rows.push(
-      { label: 'Portfolio Distribution', cls: 'text-orange-700', getValue: (r) => r.distribution > 0 ? fmt(r.distribution) : '-' },
-    );
+    rows.push({
+      label: 'Net Flow',
+      cls: 'font-bold',
+      getValue: (r) => netSigned(flowParts(r).net),
+      dynamicCls: (r) => `font-bold ${netClass(flowParts(r).net)}`
+    });
+    rows.push({
+      label: '  Traditional',
+      cls: 'text-blue-600 pl-4',
+      getValue: (r) => { const p = flowParts(r); return netSigned(p.tradIn - p.tradOut); },
+      dynamicCls: (r) => { const p = flowParts(r); return `${netClass(p.tradIn - p.tradOut)} pl-4`; }
+    });
+    rows.push({
+      label: '  Roth',
+      cls: 'text-mwm-green pl-4',
+      getValue: (r) => { const p = flowParts(r); return netSigned(p.rothIn - p.rothOut); },
+      dynamicCls: (r) => { const p = flowParts(r); return `${netClass(p.rothIn - p.rothOut)} pl-4`; }
+    });
+    rows.push({
+      label: '  Non-Qualified',
+      cls: 'text-mwm-gold pl-4',
+      getValue: (r) => { const p = flowParts(r); return netSigned(p.nqIn - p.nqOut); },
+      dynamicCls: (r) => { const p = flowParts(r); return `${netClass(p.nqIn - p.nqOut)} pl-4`; }
+    });
     // --- ENDING BALANCE ---
     rows.push(
       { label: '', cls: 'bg-slate-200', getValue: () => '', isSeparator: true },
@@ -459,8 +518,13 @@ export const ArchitectPage = ({
         { label: 'Roth Balance', cls: 'text-mwm-green', getValue: (r) => fmt(r.rothBalanceDetail || 0) },
         { label: 'NQ Balance', cls: 'text-mwm-gold', getValue: (r) => fmt(r.nqBalanceDetail || 0) },
       );
+      if (hasInheritedIRA) {
+        rows.push({ label: 'Inherited IRA Balance', cls: 'text-amber-700', getValue: (r) => fmt(r.inheritedIRABalance || 0) });
+      }
     }
 
+    // 5-year chunks — the table itself is sized to fit within a 10in print page (see
+    // renderCashFlowPrintTable: text-[9px], py-0 row padding, narrow label column).
     const chunks = [];
     for (let i = 0; i < printData.length; i += 5) {
       chunks.push(printData.slice(i, i + 5));
@@ -522,9 +586,25 @@ export const ArchitectPage = ({
       }
     }
 
-    // Bucket allocation matrix
+    // Bucket allocation matrix — use actual projected start-of-retirement balances
+    // (= end of last accumulation year) so the matrix reflects Advanced Mode per-account
+    // growth (e.g., an NQ account funded from $0 over accumulation). Falls back to a flat
+    // global % split when projection data isn't yet populated.
     const total = basePlan.retirementPortfolio || 0;
-    const accountBalances = {
+    const accumRows = (projectionDataFull || []).filter(r => r.phase === 'accumulation');
+    const startRow = accumRows.length > 0
+      ? accumRows[accumRows.length - 1]
+      : ((projectionDataFull || projectionData || []).find(r => r.phase !== 'accumulation') || (projectionDataFull || projectionData || [])[0]);
+    const hasProjBal = startRow && (
+      (startRow.traditionalBalanceDetail || 0) > 0 ||
+      (startRow.rothBalanceDetail || 0) > 0 ||
+      (startRow.nqBalanceDetail || 0) > 0
+    );
+    const accountBalances = hasProjBal ? {
+      traditional: startRow.traditionalBalanceDetail || 0,
+      roth: startRow.rothBalanceDetail || 0,
+      nq: startRow.nqBalanceDetail || 0,
+    } : {
       traditional: total * ((inputs.traditionalPercent ?? 60) / 100),
       roth: total * ((inputs.rothPercent ?? 25) / 100),
       nq: total * ((inputs.nqPercent ?? 15) / 100),
@@ -654,6 +734,10 @@ export const ArchitectPage = ({
     const currentRothLegacy = lastRow.rothBalanceDetail || 0;
     const currentNqLegacy = lastRow.nqBalanceDetail || 0;
 
+    // If the user has applied manual edits on the on-screen Executive Summary tab,
+    // use those overrides so the print matches what they see.
+    const finalMatrix = bucketAllocationOverrides || matrix;
+
     return {
       fmt: fmtP, fmtShort: fmtShortP,
       current: {
@@ -662,28 +746,35 @@ export const ArchitectPage = ({
         tradLegacy: currentTradLegacy, rothLegacy: currentRothLegacy, nqLegacy: currentNqLegacy,
       },
       baseline,
-      matrix, accountBalances, bucketTargets,
+      matrix: finalMatrix, accountBalances, bucketTargets,
       ssSummary, rothAges, rothTotal, conversions, liqDesc,
       heirFederalRate, heirStateRate,
     };
-  }, [printData, inputs, basePlan, assumptions, rebalanceFreq, rebalanceTargets, printOptions]);
+  }, [printData, projectionDataFull, projectionData, inputs, basePlan, assumptions, rebalanceFreq, rebalanceTargets, printOptions, bucketAllocationOverrides]);
 
   const renderCashFlowPrintTable = (cols, allRows) => (
     <div className="overflow-x-auto border border-slate-200 rounded-lg">
-      <table className="w-full text-[11px] border-collapse print-cf-table">
+      <table className="w-full text-[10px] border-collapse print-cf-table leading-tight">
         <tbody>
-          {allRows.map((rowDef, ri) => (
-            <tr key={ri} className={rowDef.isSeparator ? 'h-1' : 'border-b border-slate-100'}>
-              <td className={`p-1.5 text-left whitespace-nowrap font-medium bg-white border-r border-slate-200 min-w-[160px] ${rowDef.cls || ''}`}>
-                {rowDef.label}
-              </td>
-              {cols.map((col, ci) => (
-                <td key={ci} className={`p-1.5 text-right whitespace-nowrap ${rowDef.isSeparator ? '' : rowDef.dynamicCls ? rowDef.dynamicCls(col) : rowDef.cls || ''}`}>
-                  {rowDef.isSeparator ? '' : rowDef.getValue(col)}
+          {allRows.map((rowDef, ri) => {
+            // Strip "text-base" / "text-lg" etc. from row classes when rendering print —
+            // we override to a uniform 10px so the per-row size matches the table baseline
+            // and frees vertical space for everything else.
+            const stripSize = (s) => (s || '').replace(/\btext-(base|sm|lg|xl|2xl|3xl|\[\d+px\])\b/g, '').trim();
+            const cls = stripSize(rowDef.cls);
+            return (
+              <tr key={ri} className={rowDef.isSeparator ? 'h-px' : 'border-b border-slate-100'}>
+                <td className={`px-1.5 py-px text-left whitespace-nowrap font-medium bg-white border-r border-slate-200 min-w-[120px] ${cls}`}>
+                  {rowDef.label}
                 </td>
-              ))}
-            </tr>
-          ))}
+                {cols.map((col, ci) => (
+                  <td key={ci} className={`px-1.5 py-px text-right whitespace-nowrap ${rowDef.isSeparator ? '' : rowDef.dynamicCls ? stripSize(rowDef.dynamicCls(col)) : cls}`}>
+                    {rowDef.isSeparator ? '' : rowDef.getValue(col)}
+                  </td>
+                ))}
+              </tr>
+            );
+          })}
         </tbody>
       </table>
     </div>
@@ -926,16 +1017,26 @@ export const ArchitectPage = ({
             </table>
           </div>
 
-          {/* Projected Portfolio at Retirement */}
-          <div className="bg-mwm-green/10 p-3 rounded-lg border border-mwm-green/30">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-mwm-emerald font-bold text-[13px]">Projected Portfolio at Retirement (Age {clientInfo.retirementAge})</p>
-                <p className="text-xs text-mwm-green">Based on {clientInfo.expectedReturn}% expected return, {inputs.inflationRate}% inflation adjustment on savings</p>
+          {/* Projected Portfolio at Retirement — derive from the unified projection's
+              last accumulation row so this value matches what the cash flow table shows
+              for the first retirement year's Starting Balance. basePlan.retirementPortfolio
+              comes from a separate legacy engine and can include an extra year of
+              compounding at the boundary. */}
+          {(() => {
+            const lastAccum = accumulationData[accumulationData.length - 1];
+            const projected = lastAccum ? (lastAccum.balance || 0) + (lastAccum.dropBalance || 0) : (basePlan.retirementPortfolio || 0);
+            return (
+              <div className="bg-mwm-green/10 p-3 rounded-lg border border-mwm-green/30">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-mwm-emerald font-bold text-[13px]">Projected Portfolio at Retirement (Age {clientInfo.retirementAge})</p>
+                    <p className="text-xs text-mwm-green">Based on {clientInfo.expectedReturn}% expected return, {inputs.inflationRate}% inflation adjustment on savings</p>
+                  </div>
+                  <p className="text-2xl font-bold text-mwm-green/80">${projected.toLocaleString()}</p>
+                </div>
               </div>
-              <p className="text-2xl font-bold text-mwm-green/80">${basePlan.retirementPortfolio.toLocaleString()}</p>
-            </div>
-          </div>
+            );
+          })()}
           </>
           );
         })()}
@@ -1082,7 +1183,12 @@ export const ArchitectPage = ({
                     ))}
                     {oneTimeIncomes.map((inc, i) => (
                       <tr key={inc.id} className={(recurringIncomes.length + i) % 2 === 1 ? 'bg-slate-50' : ''}>
-                        <td className="px-2 py-1 font-medium">{inc.name || 'One-Time'}</td>
+                        <td className="px-2 py-1 font-medium">
+                          {inc.name || 'One-Time'}
+                          {inc.isInheritedIRA && inc.name === 'Inheritance' && (
+                            <span className="ml-1 text-[10px] text-amber-700 font-normal">(Inherited IRA, 10-yr)</span>
+                          )}
+                        </td>
                         <td className="px-2 py-1 text-right">${(inc.amount || 0).toLocaleString()}</td>
                         <td className="px-2 py-1 text-center">{fmtAge(inc.startAge)} (one-time)</td>
                         <td className="px-2 py-1 text-center">{inc.taxablePercent ?? 100}%</td>
@@ -1127,30 +1233,6 @@ export const ArchitectPage = ({
               </div>
             )}
 
-            {/* Tax Account Mix */}
-            {inputs.taxEnabled && (
-              <div className="border border-slate-200 rounded-lg p-3">
-                <h3 className="font-bold text-[13px] text-slate-800 mb-2 border-b pb-1">Portfolio Tax Composition</h3>
-                <div className="grid grid-cols-3 gap-4 text-[12px] text-center">
-                  <div className="bg-blue-50 rounded-lg p-2">
-                    <p className="text-slate-500 text-[11px]">Tax-Deferred</p>
-                    <p className="font-bold text-lg text-blue-700">{inputs.traditionalPercent}%</p>
-                    <p className="text-slate-500 text-[10px]">${Math.round(basePlan.retirementPortfolio * (inputs.traditionalPercent / 100)).toLocaleString()}</p>
-                  </div>
-                  <div className="bg-green-50 rounded-lg p-2">
-                    <p className="text-slate-500 text-[11px]">Roth</p>
-                    <p className="font-bold text-lg text-green-700">{inputs.rothPercent}%</p>
-                    <p className="text-slate-500 text-[10px]">${Math.round(basePlan.retirementPortfolio * (inputs.rothPercent / 100)).toLocaleString()}</p>
-                  </div>
-                  <div className="bg-amber-50 rounded-lg p-2">
-                    <p className="text-slate-500 text-[11px]">Non-Qualified</p>
-                    <p className="font-bold text-lg text-amber-700">{inputs.nqPercent}%</p>
-                    <p className="text-slate-500 text-[10px]">${Math.round(basePlan.retirementPortfolio * (inputs.nqPercent / 100)).toLocaleString()}</p>
-                  </div>
-                </div>
-              </div>
-            )}
-
             {/* Account Details (per-account mode) */}
             {hasAccounts && (
               <div className="border border-slate-200 rounded-lg p-3">
@@ -1158,27 +1240,36 @@ export const ArchitectPage = ({
                 <table className="w-full text-[11px]">
                   <thead>
                     <tr className="bg-slate-100">
-                      <th className="px-2 py-1 text-left">Account</th>
-                      <th className="px-2 py-1 text-left">Owner</th>
-                      <th className="px-2 py-1 text-left">Type</th>
-                      <th className="px-2 py-1 text-right">Balance</th>
-                      <th className="px-2 py-1 text-right">Ann. Contribution</th>
+                      <th className="px-2 py-0.5 text-left">Account</th>
+                      <th className="px-2 py-0.5 text-left">Owner</th>
+                      <th className="px-2 py-0.5 text-left">Type</th>
+                      <th className="px-2 py-0.5 text-right">Balance</th>
+                      <th className="px-2 py-0.5 text-right">Ann. Contrib / Inh. Year</th>
                     </tr>
                   </thead>
                   <tbody>
-                    {inputs.accounts.map((acct, i) => (
-                      <tr key={acct.id} className={i % 2 === 0 ? 'bg-white' : 'bg-slate-50'}>
-                        <td className="px-2 py-0.5 font-medium">{acct.label || 'Account'}</td>
-                        <td className="px-2 py-0.5 text-slate-600">{acct.owner === 'partner' ? (clientInfo.partnerName?.split(' ')[0] || 'Partner') : (clientInfo.name?.split(' ')[0] || 'Client')}</td>
-                        <td className="px-2 py-0.5 text-slate-600">{acct.type === 'traditional' ? 'Tax-Deferred' : acct.type === 'roth' ? 'Roth' : 'Non-Qualified'}</td>
-                        <td className="px-2 py-0.5 text-right">${(acct.balance || 0).toLocaleString()}</td>
-                        <td className="px-2 py-0.5 text-right text-mwm-green">{acct.annualContribution > 0 ? `$${acct.annualContribution.toLocaleString()}` : '-'}</td>
-                      </tr>
-                    ))}
+                    {inputs.accounts.map((acct, i) => {
+                      const typeLabel = acct.type === 'traditional' ? 'Tax-Deferred'
+                        : acct.type === 'roth' ? 'Roth'
+                        : acct.type === 'inherited' ? 'Inherited IRA (10-yr)'
+                        : 'Non-Qualified';
+                      const lastCol = acct.type === 'inherited'
+                        ? (acct.inheritedYear ? `Inh. ${acct.inheritedYear}` : '-')
+                        : (acct.annualContribution > 0 ? `$${acct.annualContribution.toLocaleString()}` : '-');
+                      return (
+                        <tr key={acct.id} className={i % 2 === 0 ? 'bg-white' : 'bg-slate-50'}>
+                          <td className="px-2 py-0 font-medium">{acct.label || 'Account'}</td>
+                          <td className="px-2 py-0 text-slate-600">{acct.owner === 'partner' ? (clientInfo.partnerName?.split(' ')[0] || 'Partner') : (clientInfo.name?.split(' ')[0] || 'Client')}</td>
+                          <td className={`px-2 py-0 ${acct.type === 'inherited' ? 'text-amber-700' : 'text-slate-600'}`}>{typeLabel}</td>
+                          <td className="px-2 py-0 text-right">${(acct.balance || 0).toLocaleString()}</td>
+                          <td className={`px-2 py-0 text-right ${acct.type === 'inherited' ? 'text-amber-700' : 'text-mwm-green'}`}>{lastCol}</td>
+                        </tr>
+                      );
+                    })}
                     <tr className="border-t-2 border-slate-300 font-bold">
-                      <td className="px-2 py-1" colSpan={3}>Total</td>
-                      <td className="px-2 py-1 text-right">${inputs.accounts.reduce((s, a) => s + (a.balance || 0), 0).toLocaleString()}</td>
-                      <td className="px-2 py-1 text-right text-mwm-green">${inputs.accounts.reduce((s, a) => s + (a.annualContribution || 0), 0).toLocaleString()}</td>
+                      <td className="px-2 py-0.5" colSpan={3}>Portfolio Total (excl. Inherited)</td>
+                      <td className="px-2 py-0.5 text-right">${inputs.accounts.filter(a => a.type !== 'inherited').reduce((s, a) => s + (a.balance || 0), 0).toLocaleString()}</td>
+                      <td className="px-2 py-0.5 text-right text-mwm-green">${inputs.accounts.filter(a => a.type !== 'inherited').reduce((s, a) => s + (a.annualContribution || 0), 0).toLocaleString()}</td>
                     </tr>
                   </tbody>
                 </table>
@@ -1195,14 +1286,21 @@ export const ArchitectPage = ({
         <div className="space-y-6">
 
           {/* Stats Row */}
+          {/* Anchor "Starting Balance" to the actual first-retirement-year startBalance from
+              the unified projection — same source the AccumulationPage's "Projected Portfolio
+              at Retirement" reads from. basePlan.retirementPortfolio comes from a separate
+              legacy engine (calculateAccumulation) and can diverge by tax-handling differences. */}
+          {(() => {
+            const startingBalanceActual = projectionData[0]?.startBalance ?? basePlan.retirementPortfolio ?? 0;
+            return (
           <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 print:hidden">
             <StatBox
               label="Starting Balance"
               value={adjustedProjections.hasChanges && (selectedImprovements.delay || selectedImprovements.savings)
                 ? `$${(adjustedProjections.portfolio / 1000000).toFixed(2)}M`
-                : `$${(basePlan.retirementPortfolio / 1000000).toFixed(2)}M`}
+                : `$${(startingBalanceActual / 1000000).toFixed(2)}M`}
               subtext={adjustedProjections.hasChanges && (selectedImprovements.delay || selectedImprovements.savings)
-                ? <><span className="line-through opacity-60">${(basePlan.retirementPortfolio / 1000000).toFixed(2)}M</span> → +${((adjustedProjections.portfolio - basePlan.retirementPortfolio) / 1000).toFixed(0)}k</>
+                ? <><span className="line-through opacity-60">${(startingBalanceActual / 1000000).toFixed(2)}M</span> → +${((adjustedProjections.portfolio - startingBalanceActual) / 1000).toFixed(0)}k</>
                 : "Accumulation + Contributions"}
               icon={Briefcase}
               colorClass={`bg-gray-800 text-white ${adjustedProjections.hasChanges && (selectedImprovements.delay || selectedImprovements.savings) ? 'ring-2 ring-mwm-green/60' : ''}`}
@@ -1243,6 +1341,8 @@ export const ArchitectPage = ({
               colorClass={`bg-mwm-emerald text-white ${adjustedProjections.hasChanges ? 'ring-2 ring-mwm-gold/60' : ''}`}
             />
           </div>
+            );
+          })()}
 
           {/* Quick Adjustments - Retirement Age & Savings */}
           <div className={`print:hidden grid grid-cols-1 ${!clientInfo.isRetired ? 'md:grid-cols-3' : 'md:grid-cols-1 max-w-md'} gap-4`}>
@@ -1518,6 +1618,7 @@ export const ArchitectPage = ({
               inputs={inputs}
               basePlan={basePlan}
               projectionData={projectionData}
+              projectionDataFull={projectionDataFull}
               monteCarloData={monteCarloData}
               assumptions={assumptions}
               clientInfo={clientInfo}
@@ -1525,6 +1626,8 @@ export const ArchitectPage = ({
               ssPartnerAnalysis={ssPartnerAnalysis}
               rebalanceFreq={rebalanceFreq}
               rebalanceTargets={rebalanceTargets}
+              bucketAllocationOverrides={bucketAllocationOverrides}
+              onBucketAllocationOverridesChange={onBucketAllocationOverridesChange}
             />
           )}
         </div>
@@ -1614,16 +1717,30 @@ export const ArchitectPage = ({
       {(() => {
         const fmtMoney = (val) => val >= 1000000 ? `$${(val / 1000000).toFixed(2)}M` : `$${Math.round(val / 1000)}k`;
 
-        // Build stacked withdrawal data from the sequential-distribution projection
+        // Build stacked income+withdrawal data from the sequential-distribution projection.
+        // Income sources (SS, pension, employment, other, VA, inherited IRA) stack first so
+        // the chart shows what's covered by income vs. drawn from the portfolio buckets.
         const seq = sequentialProjection;
         const withdrawalData = seq.map(row => ({
           year: row.year,
+          'Social Security':       row.ssIncomeDetail || 0,
+          'Pension':               row.pensionIncomeDetail || 0,
+          'Employment':            row.employmentIncomeDetail || 0,
+          'Other Income':          row.otherIncomeDetail || 0,
+          'VA Income':             row.vaIncomeDetail || 0,
+          'Inherited IRA':         row.inheritedIRADistribution || 0,
           'B1 Liquidity':          row.w1 || 0,
           'B2 Bridge':             row.w2 || 0,
           'B3 Tactical Balanced':  row.w3 || 0,
           'B4 Income & Growth':    row.w4 || 0,
           'B5 Permanent Equity':   row.w5 || 0,
         }));
+        const hasSSChart        = seq.some(r => (r.ssIncomeDetail || 0) > 0);
+        const hasPensionChart   = seq.some(r => (r.pensionIncomeDetail || 0) > 0);
+        const hasEmployChart    = seq.some(r => (r.employmentIncomeDetail || 0) > 0);
+        const hasOtherChart     = seq.some(r => (r.otherIncomeDetail || 0) > 0);
+        const hasVAChart        = seq.some(r => (r.vaIncomeDetail || 0) > 0);
+        const hasInhChart       = seq.some(r => (r.inheritedIRADistribution || 0) > 0);
 
         // Phase indices — first year a given bucket is tapped (wN > 0)
         const firstYearFor = (wKey) => {
@@ -1646,12 +1763,13 @@ export const ArchitectPage = ({
           const employmentMonthly = Math.round((row.employmentIncomeDetail || 0) / 12);
           const otherMonthly      = Math.round((row.otherIncomeDetail || 0) / 12);
           const vaMonthly         = Math.round((row.vaIncomeDetail || 0) / 12);
+          const inheritedMonthly  = Math.round((row.inheritedIRADistribution || 0) / 12);
           const portfolioMonthly  = Math.round((row.distribution || 0) / 12);
-          const grossTotal = ssMonthly + pensionMonthly + employmentMonthly + otherMonthly + vaMonthly + portfolioMonthly;
+          const grossTotal = ssMonthly + pensionMonthly + employmentMonthly + otherMonthly + vaMonthly + inheritedMonthly + portfolioMonthly;
           const spendingTax = (row.totalTax || 0) - (row.rothConversionTax || 0);
           const taxMonthly = Math.round(spendingTax / 12);
           const netTotal = grossTotal - taxMonthly;
-          return { year: row.year, age: row.age, ss: ssMonthly, pension: pensionMonthly, employment: employmentMonthly, other: otherMonthly, va: vaMonthly, portfolio: portfolioMonthly, gross: grossTotal, tax: taxMonthly, net: netTotal };
+          return { year: row.year, age: row.age, ss: ssMonthly, pension: pensionMonthly, employment: employmentMonthly, other: otherMonthly, va: vaMonthly, inherited: inheritedMonthly, portfolio: portfolioMonthly, gross: grossTotal, tax: taxMonthly, net: netTotal };
         };
 
         const phaseLabels = ['B1 - Liquidity', 'B2 - Bridge', 'B3 - Tactical Balanced', 'B4 - Income & Growth', 'B5 - Permanent Equity'];
@@ -1660,17 +1778,24 @@ export const ArchitectPage = ({
         const hasEmployment = phaseIncomes.some(p => p && p.employment > 0);
         const hasOther      = phaseIncomes.some(p => p && p.other > 0);
         const hasVA         = phaseIncomes.some(p => p && p.va > 0);
+        const hasInherited  = phaseIncomes.some(p => p && p.inherited > 0);
 
         return (
           <PrintPageWrapper pageNumber={printOptions?.excludeAccumulation ? 5 : 6} totalPages={totalPrintPages} title="Phase 2 - Distribution Strategy" subtitle="Withdrawals by bucket under sequential distribution">
-            {/* Withdrawals by Bucket chart (sequential) */}
+            {/* Annual Income & Withdrawals chart (sequential) */}
             <div className="border border-slate-200 rounded-lg p-3 mb-3">
-              <h3 className="text-[12px] font-bold text-slate-700 mb-2 uppercase tracking-wide">Withdrawals by Bucket — Sequential Distribution</h3>
-              <BarChart width={680} height={240} data={withdrawalData} margin={{ top: 5, right: 10, left: 0, bottom: 5 }}>
+              <h3 className="text-[12px] font-bold text-slate-700 mb-2 uppercase tracking-wide">Annual Income & Withdrawals — Sequential Distribution</h3>
+              <BarChart width={680} height={290} data={withdrawalData} margin={{ top: 5, right: 10, left: 0, bottom: 55 }}>
                 <CartesianGrid strokeDasharray="3 3" vertical={false} />
-                <XAxis dataKey="year" tick={{ fontSize: 10 }} label={{ value: 'Year', position: 'insideBottom', offset: -2, fontSize: 10 }} />
+                <XAxis dataKey="year" tick={{ fontSize: 10 }} label={{ value: 'Year', position: 'insideBottom', offset: -8, fontSize: 10 }} />
                 <YAxis tickFormatter={(val) => val >= 1000000 ? `$${(val / 1000000).toFixed(1)}M` : `$${(val / 1000).toFixed(0)}k`} tick={{ fontSize: 10 }} />
-                <Legend wrapperStyle={{ fontSize: 10 }} />
+                <Legend wrapperStyle={{ fontSize: 9, paddingTop: 8 }} verticalAlign="bottom" />
+                {hasSSChart      && <Bar dataKey="Social Security" stackId="w" fill="#60a5fa" />}
+                {hasPensionChart && <Bar dataKey="Pension"         stackId="w" fill="#34d399" />}
+                {hasEmployChart  && <Bar dataKey="Employment"      stackId="w" fill="#14b8a6" />}
+                {hasOtherChart   && <Bar dataKey="Other Income"    stackId="w" fill="#06b6d4" />}
+                {hasVAChart      && <Bar dataKey="VA Income"       stackId="w" fill="#0ea5e9" />}
+                {hasInhChart     && <Bar dataKey="Inherited IRA"   stackId="w" fill="#d97706" />}
                 <Bar dataKey="B1 Liquidity"         stackId="w" fill={COLORS.shortTerm} />
                 <Bar dataKey="B2 Bridge"            stackId="w" fill={COLORS.midTerm} />
                 <Bar dataKey="B3 Tactical Balanced" stackId="w" fill={COLORS.hedged} />
@@ -1678,7 +1803,9 @@ export const ArchitectPage = ({
                 <Bar dataKey="B5 Permanent Equity"  stackId="w" fill={COLORS.longTerm} />
               </BarChart>
               <p className="text-[10px] text-slate-500 mt-1 leading-snug">
-                Under <strong>sequential distribution</strong>, each bucket is depleted before the next is tapped (B1 → B2 → B3 → B4 → B5). Earlier buckets absorb near-term withdrawals while later, higher-growth buckets compound undisturbed. B5 remains invested for legacy or future rebalancing into short-term buckets.
+                Income sources (SS, pension, employment, other, VA, inherited IRA forced distribution) stack first;
+                the portfolio fills the remaining gap. Under <strong>sequential distribution</strong>, each bucket is
+                depleted before the next is tapped (B1 → B2 → B3 → B4 → B5). B5 remains invested for legacy or future rebalancing.
               </p>
             </div>
 
@@ -1702,6 +1829,7 @@ export const ArchitectPage = ({
                       {hasEmployment && inc.employment > 0 && <div className="flex justify-between"><span className="text-slate-500">Employment</span><span className="font-medium">${inc.employment.toLocaleString()}</span></div>}
                       {hasOther && inc.other > 0 && <div className="flex justify-between"><span className="text-slate-500">Other</span><span className="font-medium">${inc.other.toLocaleString()}</span></div>}
                       {hasVA && inc.va > 0 && <div className="flex justify-between"><span className="text-slate-500">VA</span><span className="font-medium">${inc.va.toLocaleString()}</span></div>}
+                      {hasInherited && inc.inherited > 0 && <div className="flex justify-between"><span className="text-amber-700">Inherited IRA</span><span className="font-medium text-amber-700">${inc.inherited.toLocaleString()}</span></div>}
                       <div className="flex justify-between"><span className="text-slate-500">Portfolio</span><span className="font-medium">${inc.portfolio.toLocaleString()}</span></div>
                       <div className="flex justify-between font-bold border-t border-slate-300 pt-0.5"><span>Gross</span><span>${inc.gross.toLocaleString()}</span></div>
                       <div className="flex justify-between text-red-600"><span>Est. Tax</span><span>(${inc.tax.toLocaleString()})</span></div>
@@ -1902,7 +2030,6 @@ export const ArchitectPage = ({
               p90: Math.round(mc.p90),
               median: Math.round(mc.median),
               p10: Math.round(mc.p10),
-              deterministic: Math.round(projectionData[idx]?.total ?? mc.median),
             }))}>
               <CartesianGrid strokeDasharray="3 3" vertical={false} />
               <XAxis dataKey="year" tick={{ fontSize: 10 }} label={{ value: 'Year', position: 'insideBottom', offset: -2, fontSize: 10 }} />
@@ -1911,7 +2038,6 @@ export const ArchitectPage = ({
               <Area type="monotone" dataKey="p90" name="90th Percentile" fill="#d1fae5" stroke="#10b981" fillOpacity={0.4} />
               <Area type="monotone" dataKey="median" name="50th Percentile (Median)" fill="#bfdbfe" stroke="#3b82f6" fillOpacity={0.5} />
               <Area type="monotone" dataKey="p10" name="10th Percentile" fill="#fee2e2" stroke="#ef4444" fillOpacity={0.4} />
-              <Line type="monotone" dataKey="deterministic" name="Deterministic" stroke={COLORS.areaFill} strokeWidth={2} dot={false} strokeDasharray="5 5" />
             </ComposedChart>
           ) : (
             /* Deterministic single-line chart */
@@ -2392,11 +2518,22 @@ export const ArchitectPage = ({
                 <tfoot>
                   <tr className="border-t-2 border-slate-300 bg-slate-50 font-bold">
                     <td className="p-1.5 text-left">Total</td>
-                    {['b1', 'b2', 'b3', 'b4', 'b5'].map(bk => {
-                      const colTotal = ['traditional', 'roth', 'nq'].reduce((s, acct) => s + (execSummaryPrint.matrix[acct][bk] || 0), 0);
-                      return <td key={bk} className="p-1.5 text-center">{execSummaryPrint.fmtShort(colTotal)}</td>;
-                    })}
-                    <td className="p-1.5 text-right">{execSummaryPrint.fmtShort(basePlan.retirementPortfolio || 0)}</td>
+                    {(() => {
+                      let grand = 0;
+                      const colTds = ['b1', 'b2', 'b3', 'b4', 'b5'].map(bk => {
+                        const colTotal = ['traditional', 'roth', 'nq'].reduce((s, acct) => s + (execSummaryPrint.matrix[acct][bk] || 0), 0);
+                        grand += colTotal;
+                        return <td key={bk} className="p-1.5 text-center">{execSummaryPrint.fmtShort(colTotal)}</td>;
+                      });
+                      return (
+                        <>
+                          {colTds}
+                          {/* Grand total derived from the matrix so it ties to row/col totals
+                              and to the actual projected start-of-retirement portfolio. */}
+                          <td className="p-1.5 text-right">{execSummaryPrint.fmtShort(grand)}</td>
+                        </>
+                      );
+                    })()}
                   </tr>
                 </tfoot>
               </table>

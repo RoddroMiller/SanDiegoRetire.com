@@ -127,8 +127,9 @@ const optimizeAllocation = (bucketTargets, accountBalances, liquidationStrategie
 };
 
 export const ExecutiveSummaryTab = ({
-  inputs, basePlan, projectionData, assumptions, clientInfo,
-  ssAnalysis, ssPartnerAnalysis, rebalanceFreq, rebalanceTargets, monteCarloData
+  inputs, basePlan, projectionData, projectionDataFull, assumptions, clientInfo,
+  ssAnalysis, ssPartnerAnalysis, rebalanceFreq, rebalanceTargets, monteCarloData,
+  bucketAllocationOverrides, onBucketAllocationOverridesChange
 }) => {
   // SS comparison: user picks their "original plan" claiming age
   const [ssOriginalAge, setSSOriginalAge] = useState(62);
@@ -143,18 +144,48 @@ export const ExecutiveSummaryTab = ({
     return projectionData;
   }, [mcMode, monteCarloData, projectionData]);
 
-  // Use manual overrides stored in state: matrix[acctType][bucketKey] = dollar amount
-  const [manualOverrides, setManualOverrides] = useState(null);
+  // Manual matrix overrides are lifted to App state (via props) so the Executive Summary
+  // print page renders the same matrix the user sees on screen. Falls back to local state
+  // when no parent handler is wired up.
+  const [localOverrides, setLocalOverrides] = useState(null);
+  const manualOverrides = bucketAllocationOverrides !== undefined ? bucketAllocationOverrides : localOverrides;
+  const setManualOverrides = onBucketAllocationOverridesChange || setLocalOverrides;
 
-  // Account type balances from the distribution starting portfolio
+  // Account type balances at the start of retirement (= end of last accumulation year).
+  // We read these from projectionDataFull's last accumulation row so the values match the
+  // beginning of retirement, not the end of the first retirement year (which is what
+  // projectionData[0] would give — that includes a year of growth + withdrawals).
+  // Fall back to a flat split of retirementPortfolio by the global Trad/Roth/NQ percentages
+  // when projection data isn't yet available (e.g., legacy non-unified mode).
   const accountBalances = useMemo(() => {
     const total = basePlan?.retirementPortfolio || 0;
+    const full = projectionDataFull || projectionData || [];
+    // Last accumulation row's end-of-year = beginning of retirement; if there is no
+    // accumulation phase (e.g., already retired), fall back to the first retirement row
+    // (its startBalance corresponds to balances before that year's flows, but per-type
+    // balances are tracked end-of-year only — close enough for the first year).
+    const accumRows = full.filter(r => r.phase === 'accumulation');
+    const startRow = accumRows.length > 0
+      ? accumRows[accumRows.length - 1]
+      : (full.find(r => r.phase !== 'accumulation') || full[0]);
+    const hasProjectedBalances = startRow && (
+      (startRow.traditionalBalanceDetail || 0) > 0 ||
+      (startRow.rothBalanceDetail || 0) > 0 ||
+      (startRow.nqBalanceDetail || 0) > 0
+    );
+    if (hasProjectedBalances) {
+      return {
+        traditional: startRow.traditionalBalanceDetail || 0,
+        roth: startRow.rothBalanceDetail || 0,
+        nq: startRow.nqBalanceDetail || 0,
+      };
+    }
     return {
       traditional: total * ((inputs.traditionalPercent ?? 60) / 100),
       roth: total * ((inputs.rothPercent ?? 25) / 100),
       nq: total * ((inputs.nqPercent ?? 15) / 100),
     };
-  }, [basePlan?.retirementPortfolio, inputs.traditionalPercent, inputs.rothPercent, inputs.nqPercent]);
+  }, [basePlan?.retirementPortfolio, projectionData, projectionDataFull, inputs.traditionalPercent, inputs.rothPercent, inputs.nqPercent]);
 
   // Bucket targets from the base plan (distribution starting allocation)
   const bucketTargets = useMemo(() => ({
