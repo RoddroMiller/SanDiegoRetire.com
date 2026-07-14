@@ -223,7 +223,7 @@ export default function BucketPortfolioBuilder() {
     additionalIncomes: [],
     cashFlowAdjustments: [],
     // Tax Settings
-    taxEnabled: false,
+    taxEnabled: true,
     filingStatus: 'married', // 'single' or 'married'
     stateCode: '', // State abbreviation (e.g. 'FL', 'CA') — drives rate and SS taxability
     stateRate: 4.5, // State tax rate % (legacy fallback when stateCode is empty)
@@ -389,7 +389,7 @@ export default function BucketPortfolioBuilder() {
       partnerMonthlyPension: 0, partnerPensionStartAge: 65, partnerPensionCOLA: false, partnerPensionSurvivorBenefitPct: 0,
       expectedDeathAge: 95, partnerExpectedDeathAge: 95, spendingReductionAtFirstDeath: 25,
       additionalIncomes: [], cashFlowAdjustments: [],
-      taxEnabled: false, withdrawalOverrides: {},
+      taxEnabled: true, withdrawalOverrides: {},
       rothConversions: {}, nqCapGainOverrides: [],
       liquidationStrategies: [], accounts: [],
     }));
