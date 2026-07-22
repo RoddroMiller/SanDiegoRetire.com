@@ -884,7 +884,7 @@ export const ArchitectPage = ({
             <p>Report generated {new Date().toLocaleDateString()}. Regular reviews and updates recommended.</p>
           </div>
           <div className="bg-slate-100 rounded-lg p-2">
-            <p>Securities offered through LPL Financial, Member FINRA/SIPC. Investment Advice offered through Miller Wealth Management, a Registered Investment Advisor. Miller Wealth Management is a separate entity from LPL Financial. The opinions voiced in this material are for general information only and are not intended to provide specific advice or recommendations for any individual.</p>
+            <p>Miller Wealth Management LLC is a Registered Investment Adviser. Advisory services are only offered to clients or prospective clients where Miller Wealth Management LLC and its representatives are properly licensed or exempt. Past performance is no guarantee of future results. The opinions voiced in this material are for general information only and are not intended to provide specific advice or recommendations for any individual.</p>
           </div>
         </div>
       </PrintPageWrapper>

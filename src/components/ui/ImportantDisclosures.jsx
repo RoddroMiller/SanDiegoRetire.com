@@ -24,13 +24,11 @@ export const ImportantDisclosures = ({ className = '' }) => {
       {isExpanded && (
         <div className="mt-4 space-y-4 text-[12px] text-slate-500 leading-relaxed">
           <div>
-            <p className="font-bold text-slate-600 text-[12px] mb-1">Broker-Dealer & Investment Advisor Disclosure</p>
+            <p className="font-bold text-slate-600 text-[12px] mb-1">Investment Adviser Disclosure</p>
             <p>
-              Securities offered through LPL Financial, Member{' '}
-              <a href="https://www.finra.org" target="_blank" rel="noopener noreferrer" className="underline hover:text-mwm-green">FINRA</a>/
-              <a href="https://www.sipc.org" target="_blank" rel="noopener noreferrer" className="underline hover:text-mwm-green">SIPC</a>.
-              Investment advice offered through Miller Wealth Management, a Registered Investment Advisor
-              and separate entity from LPL Financial.
+              Miller Wealth Management LLC is a Registered Investment Adviser. Advisory services are only
+              offered to clients or prospective clients where Miller Wealth Management LLC and its
+              representatives are properly licensed or exempt. Past performance is no guarantee of future results.
             </p>
           </div>
 

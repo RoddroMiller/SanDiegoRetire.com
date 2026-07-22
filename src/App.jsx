@@ -923,7 +923,10 @@ export default function BucketPortfolioBuilder() {
   // --- Handlers ---
   const handleClientChange = (e) => {
     const { name, value, type, checked } = e.target;
-    setClientInfo(prev => ({ ...prev, [name]: type === 'checkbox' ? checked : (type === 'number' ? parseFloat(value) || 0 : value) }));
+    let val = type === 'checkbox' ? checked : (type === 'number' ? parseFloat(value) || 0 : value);
+    // Constrain portfolio growth / expected return to a plausible 0%-12% range
+    if (name === 'expectedReturn') val = Math.max(0, Math.min(12, val));
+    setClientInfo(prev => ({ ...prev, [name]: val }));
   };
 
   const handleInputChange = (e) => {

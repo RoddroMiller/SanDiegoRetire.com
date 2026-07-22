@@ -102,8 +102,9 @@ export const PrivacyTermsModal = ({ isOpen, onAccept, onClose }) => {
           {/* Regulatory Disclosure */}
           <div className="bg-mwm-gold/10 border border-mwm-gold/30 rounded-lg p-4">
             <p className="text-xs text-mwm-black">
-              Securities offered through LPL Financial, Member FINRA/SIPC. Investment advice offered through
-              Miller Wealth Management, a Registered Investment Advisor and separate entity from LPL Financial.
+              Miller Wealth Management LLC is a Registered Investment Adviser. Advisory services are only offered
+              to clients or prospective clients where Miller Wealth Management LLC and its representatives are
+              properly licensed or exempt. Past performance is no guarantee of future results.
             </p>
           </div>
         </div>

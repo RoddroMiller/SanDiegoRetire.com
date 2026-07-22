@@ -124,7 +124,7 @@ export const MfaEnrollModal = ({ onStartEnrollment, onComplete, onCancel, error 
         {/* Compliance Notice */}
         <div className="mb-4 p-3 bg-mwm-gold/10 border border-mwm-gold/30 rounded-lg">
           <p className="text-mwm-gold text-sm">
-            <strong>Required:</strong> Per LPL security policy, all users must enable two-factor authentication.
+            <strong>Required:</strong> Per Miller Wealth Management security policy, all users must enable two-factor authentication.
           </p>
         </div>
 

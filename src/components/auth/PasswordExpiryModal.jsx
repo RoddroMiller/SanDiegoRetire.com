@@ -90,7 +90,7 @@ export const PasswordExpiryModal = ({ onSuccess, onCancel, userEmail }) => {
         {/* BOSP Compliance Notice */}
         <div className="mb-4 p-3 bg-blue-50 border border-blue-200 rounded-lg">
           <p className="text-blue-800 text-sm">
-            <strong>Security Policy:</strong> Per LPL Branch Office Security requirements,
+            <strong>Security Policy:</strong> Per Miller Wealth Management security requirements,
             passwords must be changed every 90 days.
           </p>
         </div>

@@ -1,6 +1,6 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import { ResponsiveContainer, AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ComposedChart, Line, Legend } from 'recharts';
-import { User, DollarSign, ArrowRight, ArrowLeft, Shield, Info, Activity, Briefcase, Send, TrendingUp, Clock, PiggyBank, BarChart2, Table as TableIcon, Plus, Trash2, AlertCircle, LogOut, ExternalLink, X, CheckCircle, ChevronDown, ChevronRight } from 'lucide-react';
+import { User, DollarSign, ArrowRight, ArrowLeft, Shield, Info, Activity, Briefcase, Send, TrendingUp, Clock, PiggyBank, BarChart2, Table as TableIcon, Plus, Trash2, AlertCircle, AlertTriangle, LogOut, ExternalLink, X, CheckCircle, ChevronDown, ChevronRight } from 'lucide-react';
 
 import { COLORS, LOGO_URL } from '../../constants';
 import { formatPhoneNumber, getAdjustedSS, estimatePIAFromIncome } from '../../utils';
@@ -603,11 +603,25 @@ export const ClientWizard = ({
             <input
               type="number"
               step="0.1"
+              min={0}
+              max={12}
               name="expectedReturn"
               value={clientInfo.expectedReturn}
               onChange={onClientChange}
               className="p-3 border rounded-lg w-full"
             />
+            {clientInfo.expectedReturn > 10 && (
+              <p className="mt-1 text-xs text-amber-600 flex items-start gap-1">
+                <AlertTriangle className="w-3 h-3 mt-0.5 flex-shrink-0" />
+                Returns above 10% are optimistic and may overstate your projected balance. Consider a more conservative assumption.
+              </p>
+            )}
+            {clientInfo.expectedReturn < 4 && (
+              <p className="mt-1 text-xs text-amber-600 flex items-start gap-1">
+                <AlertTriangle className="w-3 h-3 mt-0.5 flex-shrink-0" />
+                Returns below 4% are conservative and may understate your projected balance over the long term.
+              </p>
+            )}
           </div>
 
           <div className="mt-6 p-4 bg-mwm-green/10 rounded-lg border border-mwm-green/30">
