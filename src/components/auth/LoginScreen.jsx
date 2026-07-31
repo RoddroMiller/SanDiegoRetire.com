@@ -2,35 +2,21 @@ import React, { useState } from 'react';
 import { ArrowRight, AlertCircle, CheckCircle, Mail } from 'lucide-react';
 import { Disclaimer } from '../ui';
 import { LOGO_URL } from '../../constants';
-import { validatePassword, getPasswordRequirements } from '../../utils/passwordValidation';
+
 
 export const LoginScreen = ({ onBack, onLogin, onPasswordReset, authError, resetStatus }) => {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  const [confirmPassword, setConfirmPassword] = useState('');
-  const [isSignupMode, setIsSignupMode] = useState(false);
   const [isResetMode, setIsResetMode] = useState(false);
   const [passwordError, setPasswordError] = useState('');
 
+  // Advisor accounts are provisioned by the master account, so this screen is
+  // login-only. The signup mode (and its password-confirm flow) was removed because
+  // it let anyone create an advisor account.
   const handleSubmit = (e) => {
     e.preventDefault();
     setPasswordError('');
-
-    if (isSignupMode) {
-      // Validate password meets BOSP requirements
-      const validation = validatePassword(password);
-      if (!validation.valid) {
-        setPasswordError(validation.errors.join('. '));
-        return;
-      }
-      if (password !== confirmPassword) {
-        setPasswordError('Passwords do not match');
-        return;
-      }
-      onLogin(email, password, true); // true = signup
-    } else {
-      onLogin(email, password, false); // false = login
-    }
+    onLogin(email, password, false); // false = login
   };
 
   const handleResetSubmit = (e) => {
@@ -164,20 +150,8 @@ export const LoginScreen = ({ onBack, onLogin, onPasswordReset, authError, reset
           <ArrowRight className="w-3 h-3 rotate-180" /> Back
         </button>
         <h2 className="text-xl sm:text-2xl font-bold text-slate-800 mb-4 sm:mb-6">
-          {isSignupMode ? 'Create Advisor Account' : 'Advisor Login'}
+          Advisor Login
         </h2>
-
-        {isSignupMode && (
-          <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 mb-4">
-            <div className="flex items-start gap-2">
-              <AlertCircle className="w-4 h-4 text-blue-600 flex-shrink-0 mt-0.5" />
-              <div className="text-xs text-blue-800">
-                <strong>Tip:</strong> Use the same email and password as your The One Process
-                account to keep credentials synchronized across Miller Wealth tools.
-              </div>
-            </div>
-          </div>
-        )}
 
         {(authError || passwordError) && (
           <div className="mb-4 p-3 bg-red-50 text-red-600 text-sm rounded border border-red-200">
@@ -202,55 +176,31 @@ export const LoginScreen = ({ onBack, onLogin, onPasswordReset, authError, reset
             className="w-full p-3 border rounded-lg outline-none focus:ring-2 focus:ring-mwm-green"
             required
           />
-          {isSignupMode && (
-            <>
-              <input
-                type="password"
-                placeholder="Confirm Password"
-                value={confirmPassword}
-                onChange={(e) => setConfirmPassword(e.target.value)}
-                className="w-full p-3 border rounded-lg outline-none focus:ring-2 focus:ring-mwm-green"
-                required
-              />
-              <div className="flex items-start gap-2 p-2 bg-mwm-gold/10 rounded-lg text-xs text-mwm-gold">
-                <AlertCircle className="w-4 h-4 flex-shrink-0 mt-0.5" />
-                <span>{getPasswordRequirements()}</span>
-              </div>
-            </>
-          )}
           <button
             type="submit"
             className="w-full bg-mwm-green/80 text-white p-3 rounded-lg font-bold hover:bg-mwm-emerald transition-all"
           >
-            {isSignupMode ? 'Create Account' : 'Log In'}
+            Log In
           </button>
         </form>
 
-        {!isSignupMode && (
-          <div className="mt-3 text-center">
-            <button
-              onClick={() => {
-                setIsResetMode(true);
-                setPasswordError('');
-              }}
-              className="text-sm text-mwm-green hover:text-mwm-green/80 font-medium"
-            >
-              Forgot password?
-            </button>
-          </div>
-        )}
-
-        <div className="mt-4 text-center">
+        <div className="mt-3 text-center">
           <button
             onClick={() => {
-              setIsSignupMode(!isSignupMode);
+              setIsResetMode(true);
               setPasswordError('');
-              setConfirmPassword('');
             }}
-            className="text-sm text-slate-500 hover:text-slate-700"
+            className="text-sm text-mwm-green hover:text-mwm-green/80 font-medium"
           >
-            {isSignupMode ? 'Already have an account? Log in' : "Don't have an account? Sign up"}
+            Forgot password?
           </button>
+        </div>
+
+        {/* Advisor accounts are provisioned by the administrator — no self-service signup */}
+        <div className="mt-4 text-center">
+          <p className="text-xs text-slate-400">
+            Advisor accounts are created by your administrator.
+          </p>
         </div>
 
         <Disclaimer />

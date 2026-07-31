@@ -26,6 +26,8 @@ export const PlanManagement = ({
   advisors = [],
   isLoadingAdvisors,
   onAddAdvisor,
+  onGrantAdvisorRole,
+  roleStatus = {},
   onDeleteAdvisor,
   onRefreshAdvisors,
   // Client assignment
@@ -507,18 +509,35 @@ Your Financial Advisor`;
                     <div>
                       <p className="font-medium text-slate-800">{advisor.name}</p>
                       <p className="text-xs text-slate-500">{advisor.email}</p>
+                      {roleStatus[advisor.email] && (
+                        <p className={`text-[11px] mt-0.5 ${roleStatus[advisor.email].startsWith('Granted') ? 'text-mwm-green' : 'text-red-600'}`}>
+                          {roleStatus[advisor.email]}
+                        </p>
+                      )}
                     </div>
-                    <button
-                      onClick={() => {
-                        if (confirm(`Delete advisor "${advisor.name}"?`)) {
-                          onDeleteAdvisor(advisor.id);
-                        }
-                      }}
-                      className="p-1.5 text-red-500 hover:bg-red-50 rounded transition-all"
-                      title="Delete Advisor"
-                    >
-                      <Trash2 className="w-4 h-4" />
-                    </button>
+                    <div className="flex items-center gap-1">
+                      {/* Grants the advisor role claim that firestore.rules requires.
+                          Team ids/emails come from the Command Center data already loaded. */}
+                      <button
+                        onClick={() => onGrantAdvisorRole(advisor.email)}
+                        disabled={roleStatus[advisor.email] === 'Granting…'}
+                        className="px-2 py-1 text-[11px] font-medium text-mwm-green border border-mwm-green/40 rounded hover:bg-mwm-green/10 disabled:opacity-50 transition-all"
+                        title="Grant this user the advisor role"
+                      >
+                        Grant advisor role
+                      </button>
+                      <button
+                        onClick={() => {
+                          if (confirm(`Delete advisor "${advisor.name}"?`)) {
+                            onDeleteAdvisor(advisor.id);
+                          }
+                        }}
+                        className="p-1.5 text-red-500 hover:bg-red-50 rounded transition-all"
+                        title="Delete Advisor"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </button>
+                    </div>
                   </div>
                 ))}
               </div>

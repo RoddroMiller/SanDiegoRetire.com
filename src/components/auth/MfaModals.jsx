@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Lock, Shield, AlertCircle, X } from 'lucide-react';
+import QRCode from 'qrcode';
 
 /**
  * MFA Verification Modal - shown during sign-in when MFA is required
@@ -75,6 +76,8 @@ export const MfaVerifyModal = ({ onVerify, onCancel, error }) => {
 export const MfaEnrollModal = ({ onStartEnrollment, onComplete, onCancel, error }) => {
   const [step, setStep] = useState(1);
   const [qrData, setQrData] = useState(null);
+  const [qrImage, setQrImage] = useState(null);
+  const [qrError, setQrError] = useState(false);
   const [code, setCode] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -91,6 +94,18 @@ export const MfaEnrollModal = ({ onStartEnrollment, onComplete, onCancel, error 
     };
     initEnrollment();
   }, [onStartEnrollment]);
+
+  // Render the QR locally. The otpauth:// URI embeds the TOTP shared secret, so it must
+  // never be sent to a third-party image service — doing so hands the second factor to
+  // anyone who can read that service's request logs. toDataURL keeps it in this tab.
+  useEffect(() => {
+    if (!qrData?.qrUrl) return;
+    let cancelled = false;
+    QRCode.toDataURL(qrData.qrUrl, { width: 200, margin: 1 })
+      .then(url => { if (!cancelled) { setQrImage(url); setQrError(false); } })
+      .catch(() => { if (!cancelled) setQrError(true); });
+    return () => { cancelled = true; };
+  }, [qrData]);
 
   const handleVerify = async (e) => {
     e.preventDefault();
@@ -147,14 +162,18 @@ export const MfaEnrollModal = ({ onStartEnrollment, onComplete, onCancel, error 
             <div className="bg-slate-50 rounded-lg p-4 mb-4 flex items-center justify-center min-h-[200px]">
               {isLoading ? (
                 <div className="text-slate-400">Loading QR code...</div>
-              ) : qrData ? (
+              ) : qrImage ? (
                 <img
-                  src={`https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${encodeURIComponent(qrData.qrUrl)}`}
+                  src={qrImage}
                   alt="QR Code for Google Authenticator"
                   className="rounded-lg"
                 />
+              ) : qrError || !qrData ? (
+                <div className="text-red-500 text-sm text-center">
+                  Failed to generate QR code. Use the manual code below.
+                </div>
               ) : (
-                <div className="text-red-500">Failed to generate QR code</div>
+                <div className="text-slate-400">Generating QR code...</div>
               )}
             </div>
 

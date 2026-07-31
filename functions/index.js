@@ -460,9 +460,21 @@ exports.setUserRole = onCall(async (request) => {
     throw new HttpsError("permission-denied", "Only the master account can assign roles.");
   }
 
-  const { uid, role } = request.data;
-  if (!uid || !role) {
-    throw new HttpsError("invalid-argument", "uid and role are required.");
+  const { uid: uidArg, email, role, teams, teamEmails } = request.data;
+  if (!role || (!uidArg && !email)) {
+    throw new HttpsError("invalid-argument", "role and one of uid/email are required.");
+  }
+
+  // Accept an email so the caller doesn't have to copy UIDs out of the console —
+  // resolving server-side removes a transcription step that silently grants the role
+  // to the wrong account if it goes wrong.
+  let uid = uidArg;
+  if (!uid) {
+    try {
+      uid = (await getAuth().getUserByEmail(String(email).toLowerCase())).uid;
+    } catch {
+      throw new HttpsError("not-found", `No account found for ${email}.`);
+    }
   }
 
   const validRoles = ["master", "advisor", "registeredClient"];
@@ -470,7 +482,22 @@ exports.setUserRole = onCall(async (request) => {
     throw new HttpsError("invalid-argument", `role must be one of: ${validRoles.join(", ")}`);
   }
 
-  await getAuth().setCustomUserClaims(uid, { role });
+  // Team ids and legacy teammate emails travel in the claim so firestore.rules can
+  // enforce team visibility server-side. Custom claims are capped at 1000 bytes total,
+  // so reject oversized lists loudly rather than silently truncating someone's access.
+  const claims = { role };
+  if (Array.isArray(teams) && teams.length) claims.teams = teams;
+  if (Array.isArray(teamEmails) && teamEmails.length) {
+    claims.teamEmails = teamEmails.map((e) => String(e).toLowerCase());
+  }
+  if (JSON.stringify(claims).length > 900) {
+    throw new HttpsError(
+      "invalid-argument",
+      "Claim payload too large (>900 bytes). Reduce teamEmails — migrate those plans to a teamId instead.",
+    );
+  }
+
+  await getAuth().setCustomUserClaims(uid, claims);
 
   // Log the role change
   await writeAuditLog({

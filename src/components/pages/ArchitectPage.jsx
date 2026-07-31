@@ -1,4 +1,5 @@
 import React, { useState, useMemo, useEffect } from 'react';
+import QRCode from 'qrcode';
 import {
   PieChart, Pie, Cell, Tooltip, ResponsiveContainer, BarChart, Bar,
   XAxis, YAxis, CartesianGrid, Legend, ComposedChart, Line, Area, AreaChart, LineChart
@@ -137,6 +138,14 @@ export const ArchitectPage = ({
   const finalProjectionAge = lastProjectionEntry?.age || 95;
   const retirementAge = clientInfo.retirementAge || 65;
   const projectionYears = finalProjectionAge - retirementAge;
+  // Scheduling QR, rendered locally rather than fetched from an external image service
+  const [schedulingQr, setSchedulingQr] = useState(null);
+  useEffect(() => {
+    QRCode.toDataURL(SCHEDULING_URL, { width: 150, margin: 1 })
+      .then(setSchedulingQr)
+      .catch(() => setSchedulingQr(null));
+  }, []);
+
   const legacyEntry = useMemo(() => getLegacyEntry(projectionData, retirementAge), [projectionData, retirementAge]);
   const legacyDisplayAge = legacyEntry?.age ?? finalProjectionAge;
   const legacyYear = new Date().getFullYear() + Math.max(0, legacyDisplayAge - (clientInfo.currentAge || retirementAge));
@@ -2719,12 +2728,15 @@ export const ArchitectPage = ({
           <div className="border-t border-slate-200 pt-6 w-full max-w-md">
             <p className="text-lg font-bold text-slate-900 mb-1">Ready to explore your full plan?</p>
             <p className="text-[13px] text-slate-600 mb-4">Scan to schedule a complimentary consultation</p>
-            <img
-              src={`https://api.qrserver.com/v1/create-qr-code/?size=150x150&data=${encodeURIComponent(SCHEDULING_URL)}`}
-              alt="Schedule a meeting"
-              className="mx-auto mb-3"
-              style={{ width: '120px', height: '120px' }}
-            />
+            {/* Generated locally so the app depends on no third-party image host */}
+            {schedulingQr && (
+              <img
+                src={schedulingQr}
+                alt="Schedule a meeting"
+                className="mx-auto mb-3"
+                style={{ width: '120px', height: '120px' }}
+              />
+            )}
             <p className="text-[12px] text-slate-500">www.millerwm.com | (480) 613-7400</p>
           </div>
         </div>

@@ -3,7 +3,6 @@ import {
   signInAnonymously,
   onAuthStateChanged,
   signInWithEmailAndPassword,
-  createUserWithEmailAndPassword,
   sendPasswordResetEmail,
   signOut,
   multiFactor,
@@ -11,14 +10,12 @@ import {
   TotpSecret,
   getMultiFactorResolver
 } from 'firebase/auth';
-import { collection, getDocs } from 'firebase/firestore';
-import { auth, db, appId, MASTER_EMAIL, signInToCommandCenter } from '../constants';
+import { auth, MASTER_EMAIL, signInToCommandCenter } from '../constants';
 import {
   checkAccountLockout,
   recordFailedAttempt,
   resetFailedAttempts,
-  checkPasswordExpiry,
-  initializeSecurityRecord
+  checkPasswordExpiry
 } from '../utils/accountSecurity';
 
 /**
@@ -55,49 +52,29 @@ export const useAuth = () => {
         if (user.isAnonymous) {
           setUserRole('anonymous');
         } else {
-          // Check if master first
+          // Role comes from a server-set custom auth claim, assigned by the master via
+          // the setUserRole Cloud Function. It is never inferred from data the user can
+          // create — the previous approach scanned every plan in the database and
+          // defaulted unknown users to 'advisor', so anyone who signed up became an
+          // advisor and the read rule had to be wide open for the scan to work.
+          //
+          // No claim means no privileges: the user still sees plans assigned to their
+          // own email (enforced server-side), which is the correct least-privilege
+          // landing spot for both new signups and advisors awaiting a claim.
           if (user.email && user.email.toLowerCase() === MASTER_EMAIL.toLowerCase()) {
             setUserRole('master');
           } else {
-            // Check if this user has any plans assigned to them (making them a client)
-            // or if they have created plans (making them an advisor)
             try {
-              if (db && user.email) {
-                const querySnapshot = await getDocs(
-                  collection(db, 'artifacts', appId, 'public', 'data', 'scenarios')
-                );
-                let hasAssignedPlans = false;
-                let hasCreatedPlans = false;
-
-                querySnapshot.forEach((doc) => {
-                  const data = doc.data();
-                  // Check if user has plans assigned to them
-                  if (data.assignedClientEmail?.toLowerCase() === user.email.toLowerCase()) {
-                    hasAssignedPlans = true;
-                  }
-                  // Check if user has created plans (is an advisor)
-                  if (data.advisorId === user.uid ||
-                      data.advisorEmail?.toLowerCase() === user.email.toLowerCase()) {
-                    hasCreatedPlans = true;
-                  }
-                });
-
-                // If they have created plans, they're an advisor
-                // If they only have assigned plans, they're a registered client
-                if (hasCreatedPlans) {
-                  setUserRole('advisor');
-                } else if (hasAssignedPlans) {
-                  setUserRole('registeredClient');
-                } else {
-                  // New user - default to advisor (they can create plans)
-                  setUserRole('advisor');
-                }
+              const { claims } = await user.getIdTokenResult();
+              const claimedRole = claims?.role;
+              if (claimedRole === 'master' || claimedRole === 'advisor' || claimedRole === 'registeredClient') {
+                setUserRole(claimedRole);
               } else {
-                setUserRole('advisor');
+                setUserRole('registeredClient');
               }
             } catch {
-              // Default to advisor if check fails
-              setUserRole('advisor');
+              // Fail closed — least privilege if the token can't be read
+              setUserRole('registeredClient');
             }
           }
         }
@@ -199,28 +176,13 @@ export const useAuth = () => {
    * @param {string} email - Client email
    * @param {string} password - Client password
    */
-  const handleClientSignup = useCallback(async (email, password) => {
-    if (!auth) return;
-    setAuthError('');
-    try {
-      await createUserWithEmailAndPassword(auth, email, password);
-
-      // BOSP: Initialize security record with password history
-      await initializeSecurityRecord(email, password);
-
-      // Also sign in to Command Center to enable cross-project queries
-      await signInToCommandCenter(email, password);
-      // The onAuthStateChanged will check if they have plans assigned and set role accordingly
-      setViewMode('app');
-    } catch (e) {
-      if (e.code === 'auth/email-already-in-use') {
-        setAuthError('An account with this email already exists. Please log in instead.');
-      } else if (e.code === 'auth/weak-password') {
-        setAuthError('Password is too weak. Please use at least 6 characters.');
-      } else {
-        setAuthError(e.message);
-      }
-    }
+  // Client logins are disabled — no client should be able to create an account. The
+  // entry point was removed from GateScreen a while back, but this path still created
+  // real Firebase accounts if it was ever reached, so it now refuses outright rather
+  // than being left as a dormant signup route. Prospects use the anonymous wizard
+  // (ClientWizard) and never need a login.
+  const handleClientSignup = useCallback(async () => {
+    setAuthError('Client accounts are not available. Please contact your advisor.');
   }, []);
 
   /**
@@ -267,14 +229,10 @@ export const useAuth = () => {
     try {
       let userCredential;
       if (isSignup) {
-        userCredential = await createUserWithEmailAndPassword(auth, email, password);
-
-        // BOSP: Initialize security record with password history
-        await initializeSecurityRecord(email, password);
-
-        // New users need to enroll in MFA
-        pendingCredentialsRef.current = { email, password };
-        setMfaEnrollRequired(true);
+        // Advisor accounts are provisioned by the master, not self-service. Leaving this
+        // open let anyone create an advisor account. Kept as a guarded branch (rather
+        // than deleted) so any stale caller fails loudly instead of silently creating one.
+        setAuthError('Advisor accounts are created by your administrator. Please contact them for access.');
         return;
       } else {
         userCredential = await signInWithEmailAndPassword(auth, email, password);

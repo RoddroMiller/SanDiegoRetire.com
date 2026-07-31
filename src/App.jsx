@@ -4,6 +4,7 @@ import React, { useState, useMemo, useEffect, useCallback, useRef } from 'react'
 import { formatPhoneNumber, calculateAccumulation, calculateBasePlan, runSimulation, calculateSSAnalysis, calculateSSPartnerAnalysis, calculateWealthBreakeven, calculateBreakevenMatrix, getAdjustedSS, calculateAlternativeAllocations, runOptimizedSimulation, getLegacyEntry } from './utils';
 import { GateScreen, LoginScreen, ClientLoginScreen, AccumulationPage, ArchitectPage, ClientWizard, PlanManagement, InputsPage } from './components';
 import { MfaVerifyModal, MfaEnrollModal } from './components/auth/MfaModals';
+import { grantUserRole } from './utils/accountSecurity';
 import { PasswordExpiryModal } from './components/auth/PasswordExpiryModal';
 import { AdvisorNavBar, TeamPickerModal } from './components/ui';
 import { useAuth, useScenarios, useAdvisors, useCommandCenter } from './hooks';
@@ -1245,6 +1246,24 @@ export default function BucketPortfolioBuilder() {
     });
   };
 
+  // Master-only: grant the advisor role claim that firestore.rules now requires.
+  // teams/teamEmails come from the Command Center data the app already loaded, so the
+  // team id never has to be looked up by hand. Claims only apply to a NEW id token —
+  // the grantee must sign out and back in before their plans appear.
+  const [roleStatus, setRoleStatus] = useState({});
+  const handleGrantAdvisorRole = useCallback(async (email) => {
+    if (!email) return;
+    setRoleStatus(prev => ({ ...prev, [email]: 'Granting…' }));
+    const teamEmails = [...new Set([...(teamMemberEmails || []), email.toLowerCase()])];
+    const result = await grantUserRole(email, 'advisor', myTeamIds, teamEmails);
+    setRoleStatus(prev => ({
+      ...prev,
+      [email]: result.success
+        ? 'Granted — they must sign out and back in'
+        : `Failed: ${result.error || 'unknown error'}`
+    }));
+  }, [myTeamIds, teamMemberEmails]);
+
   const applyFourPercentRule = () => {
     const clientSS = getAdjustedSS(inputs.ssPIA, inputs.ssStartAge) * 12;
     const partnerSS = clientInfo.isMarried ? getAdjustedSS(inputs.partnerSSPIA, inputs.partnerSSStartAge) * 12 : 0;
@@ -1621,6 +1640,8 @@ export default function BucketPortfolioBuilder() {
         advisors={advisors}
         isLoadingAdvisors={isLoadingAdvisors}
         onAddAdvisor={addAdvisor}
+        onGrantAdvisorRole={handleGrantAdvisorRole}
+        roleStatus={roleStatus}
         onDeleteAdvisor={deleteAdvisor}
         onRefreshAdvisors={refreshAdvisors}
         onAssignPlanToClient={assignPlanToClient}

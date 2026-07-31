@@ -58,9 +58,20 @@ function asMaster() {
   }).firestore();
 }
 
-function asAdvisor() {
+function asAdvisor(extraClaims = {}) {
   return testEnv.authenticatedContext(ADVISOR_UID, {
     email: ADVISOR_EMAIL,
+    role: 'advisor',
+    firebase: { sign_in_provider: 'password' },
+    ...extraClaims,
+  }).firestore();
+}
+
+// An authenticated user with NO role claim — e.g. someone who self-registered, or an
+// existing advisor before the master backfills their claim.
+function asRolelessUser() {
+  return testEnv.authenticatedContext(OTHER_UID, {
+    email: OTHER_EMAIL,
     firebase: { sign_in_provider: 'password' },
   }).firestore();
 }
@@ -120,22 +131,93 @@ describe('Scenarios collection', () => {
   // ─── READ ───
 
   describe('read', () => {
-    it('allows signed-in anonymous user to read', async () => {
+    it('denies anonymous user from reading (closes read-all hole)', async () => {
       await seedScenario('s1', scenarioData);
       const db = asAnonymous();
-      await assertSucceeds(getDoc(doc(db, SCENARIO_PATH, 's1')));
-    });
-
-    it('allows authenticated user to read', async () => {
-      await seedScenario('s1', scenarioData);
-      const db = asAdvisor();
-      await assertSucceeds(getDoc(doc(db, SCENARIO_PATH, 's1')));
+      await assertFails(getDoc(doc(db, SCENARIO_PATH, 's1')));
     });
 
     it('denies unauthenticated user from reading', async () => {
       await seedScenario('s1', scenarioData);
       const db = asUnauthenticated();
       await assertFails(getDoc(doc(db, SCENARIO_PATH, 's1')));
+    });
+
+    it('denies an authenticated user with no role claim from reading others plans', async () => {
+      await seedScenario('s1', scenarioData);
+      const db = asRolelessUser();
+      await assertFails(getDoc(doc(db, SCENARIO_PATH, 's1')));
+    });
+
+    it('denies a signed-up user who has not been granted the advisor role', async () => {
+      await seedScenario('s1', scenarioData);
+      // Same email as no-one; role claim absent entirely
+      const db = testEnv.authenticatedContext('stranger-uid', {
+        email: 'stranger@example.com',
+        firebase: { sign_in_provider: 'password' },
+      }).firestore();
+      await assertFails(getDoc(doc(db, SCENARIO_PATH, 's1')));
+    });
+
+    it('allows owner to read their own plan', async () => {
+      await seedScenario('s1', scenarioData);
+      await assertSucceeds(getDoc(doc(asAdvisor(), SCENARIO_PATH, 's1')));
+    });
+
+    it('allows master to read any plan', async () => {
+      await seedScenario('s1', { ...scenarioData, advisorId: 'someone-else', advisorEmail: OTHER_EMAIL });
+      await assertSucceeds(getDoc(doc(asMaster(), SCENARIO_PATH, 's1')));
+    });
+
+    it('allows assigned client to read the plan assigned to them', async () => {
+      await seedScenario('s1', scenarioData);
+      await assertSucceeds(getDoc(doc(asClient(), SCENARIO_PATH, 's1')));
+    });
+
+    it('denies a client from reading a plan assigned to someone else', async () => {
+      await seedScenario('s1', { ...scenarioData, assignedClientEmail: 'someone@else.com' });
+      await assertFails(getDoc(doc(asClient(), SCENARIO_PATH, 's1')));
+    });
+
+    it('denies an advisor from reading another advisors unrelated plan', async () => {
+      await seedScenario('s1', {
+        advisorId: 'other-advisor-uid', advisorEmail: OTHER_EMAIL, name: 'Not mine', teamId: null,
+      });
+      await assertFails(getDoc(doc(asAdvisor(), SCENARIO_PATH, 's1')));
+    });
+
+    it('allows an advisor to read a plan on one of their teams', async () => {
+      await seedScenario('s1', {
+        advisorId: 'other-advisor-uid', advisorEmail: OTHER_EMAIL, name: 'Team plan', teamId: 'team-a',
+      });
+      const db = asAdvisor({ teams: ['team-a', 'team-b'] });
+      await assertSucceeds(getDoc(doc(db, SCENARIO_PATH, 's1')));
+    });
+
+    it('denies an advisor a team plan when they are not on that team', async () => {
+      await seedScenario('s1', {
+        advisorId: 'other-advisor-uid', advisorEmail: OTHER_EMAIL, name: 'Team plan', teamId: 'team-z',
+      });
+      const db = asAdvisor({ teams: ['team-a'] });
+      await assertFails(getDoc(doc(db, SCENARIO_PATH, 's1')));
+    });
+
+    it('allows an advisor to read an unmigrated teammate plan by email', async () => {
+      await seedScenario('s1', {
+        advisorId: 'other-advisor-uid', advisorEmail: OTHER_EMAIL, name: 'Legacy', teamId: null,
+      });
+      const db = asAdvisor({ teamEmails: [OTHER_EMAIL] });
+      await assertSucceeds(getDoc(doc(db, SCENARIO_PATH, 's1')));
+    });
+
+    it('allows an advisor to read the prospect inbox', async () => {
+      await seedScenario('s1', { advisorId: 'CLIENT_SUBMISSION', advisorEmail: 'Client Submission' });
+      await assertSucceeds(getDoc(doc(asAdvisor(), SCENARIO_PATH, 's1')));
+    });
+
+    it('denies a roleless user from reading the prospect inbox', async () => {
+      await seedScenario('s1', { advisorId: 'CLIENT_SUBMISSION', advisorEmail: 'Client Submission' });
+      await assertFails(getDoc(doc(asRolelessUser(), SCENARIO_PATH, 's1')));
     });
   });
 

@@ -16,7 +16,25 @@ service cloud.firestore {
 
     function isMaster() {
       return isAuthenticated()
-          && request.auth.token.email.lower() == 'rmiller@millerwm.com';
+          && (request.auth.token.email.lower() == 'rmiller@millerwm.com'
+              || request.auth.token.get('role', '') == 'master');
+    }
+
+    // Role comes from a server-set custom auth claim (functions/index.js setUserRole),
+    // NOT from anything the client can influence. Users without a claim get no
+    // advisor privileges — they can still reach plans assigned to their own email.
+    function isAdvisor() {
+      return isAuthenticated() && request.auth.token.get('role', '') == 'advisor';
+    }
+
+    // Team ids and legacy teammate emails ride along in the same claim so team
+    // visibility can be enforced server-side instead of filtered in the browser.
+    function myTeams() {
+      return request.auth.token.get('teams', []);
+    }
+
+    function myTeamEmails() {
+      return request.auth.token.get('teamEmails', []);
     }
 
     function isOwner(resource) {
@@ -27,7 +45,25 @@ service cloud.firestore {
 
     function isAssignedClient(resource) {
       return isAuthenticated()
-          && resource.data.assignedClientEmail.lower() == request.auth.token.email.lower();
+          && resource.data.get('assignedClientEmail', '').lower() == request.auth.token.email.lower();
+    }
+
+    // Unclaimed prospect plans (wizard submissions / saved progress). Advisors work
+    // these as a shared inbox, so any advisor may read them.
+    function isProspectPlan(resource) {
+      return resource.data.advisorId in ['CLIENT_SUBMISSION', 'CLIENT_PROGRESS'];
+    }
+
+    function isTeamPlan(resource) {
+      return resource.data.get('teamId', null) != null
+          && resource.data.teamId in myTeams();
+    }
+
+    // Dual-path for plans saved before the team migration: visible to teammates by
+    // the creator's email. Drops away once plans carry a teamId.
+    function isLegacyTeammatePlan(resource) {
+      return resource.data.get('teamId', null) == null
+          && resource.data.get('advisorEmail', '').lower() in myTeamEmails();
     }
 
     // ─── Scenarios ──────────────────────────────────────────────────
@@ -35,16 +71,27 @@ service cloud.firestore {
 
     match /artifacts/{appId}/public/data/scenarios/{scenarioId} {
 
-      // Any signed-in user (including anonymous) can read.
-      // The app reads ALL scenarios to determine user role (useAuth.js).
-      allow read: if isSignedIn();
+      // Read is per-document and must match how the app queries (useScenarios.js):
+      // master reads all; advisors query their own plans, their teams' plans and the
+      // prospect inbox; registered clients query only plans assigned to their email.
+      // Anonymous sessions get nothing — the wizard writes progress but never reads
+      // the collection, so denying them costs no functionality and closes the hole
+      // where any visitor could read every saved plan.
+      allow read: if isMaster()
+        || isOwner(resource)
+        || isAssignedClient(resource)
+        || (isAdvisor() && (isProspectPlan(resource)
+                            || isTeamPlan(resource)
+                            || isLegacyTeammatePlan(resource)));
 
       // Create: authenticated users must stamp their own identity.
       // Anonymous/client users can create CLIENT_SUBMISSION or CLIENT_PROGRESS docs.
       allow create: if isSignedIn()
         && (
-          // Authenticated advisor/master creating a plan — must stamp own identity
-          (isAuthenticated()
+          // Advisor/master creating a plan — must hold the role AND stamp own identity.
+          // The role check stops a self-registered client account from creating
+          // advisor-owned plans (which previously also self-granted advisor status).
+          ((isAdvisor() || isMaster())
             && request.resource.data.advisorId == request.auth.uid
             && request.resource.data.advisorEmail.lower() == request.auth.token.email.lower())
           ||

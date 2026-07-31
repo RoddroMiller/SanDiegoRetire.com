@@ -1,47 +1,73 @@
 import { useState, useEffect, useCallback } from 'react';
-import { collection, doc, setDoc, getDocs, deleteDoc, updateDoc } from 'firebase/firestore';
+import { collection, doc, setDoc, getDocs, deleteDoc, updateDoc, query, where } from 'firebase/firestore';
 import { db, appId } from '../constants';
 import { calculateBasePlan, runSimulation, getLegacyEntry } from '../utils';
 
 /**
- * Apply role/team-based visibility rules to a set of scenarios.
- * Dual-path: honors legacy advisorEmail∈teamMemberEmails for unmigrated plans.
+ * Fetch only the scenarios this user is allowed to read.
+ *
+ * Security rules are not filters: a read of the whole collection now fails outright,
+ * because the rule can no longer prove every document is readable. So each role issues
+ * queries whose `where` constraints mirror a branch of the scenarios read rule, and the
+ * results are merged. Anything added here needs a matching rule branch, or the query
+ * fails wholesale rather than silently returning less.
+ *
+ * Firestore caps `in` filters at 30 values, so team lists are chunked.
  */
-const applyPlanVisibility = (scenarios, { currentUser, userRole, planFilter, myTeamIds, teamMemberEmails }) => {
-  if (!currentUser) return [];
+const SCENARIOS_PATH = ['artifacts', null, 'public', 'data', 'scenarios'];
 
+const chunk = (arr, size) => {
+  const out = [];
+  for (let i = 0; i < arr.length; i += size) out.push(arr.slice(i, i + size));
+  return out;
+};
+
+const fetchVisibleScenarios = async ({ currentUser, userRole, myTeamIds, teamMemberEmails }) => {
+  const path = [...SCENARIOS_PATH];
+  path[1] = appId;
+  const coll = collection(db, ...path);
   const myEmail = currentUser.email?.toLowerCase();
-  const myUid = currentUser.uid;
-  const isProspective = (s) => s.advisorId === 'CLIENT_PROGRESS' || s.advisorId === 'CLIENT_SUBMISSION';
-  const isCreator = (s) =>
-    s.advisorId === myUid ||
-    s.advisorEmail?.toLowerCase() === myEmail ||
-    s.advisorId?.toLowerCase?.() === myEmail;
+  const byId = new Map();
 
-  if (userRole === 'registeredClient') {
-    return scenarios.filter(s => s.assignedClientEmail?.toLowerCase() === myEmail);
-  }
+  const run = async (q) => {
+    const snap = await getDocs(q);
+    snap.forEach(d => byId.set(d.id, { id: d.id, ...d.data() }));
+  };
 
-  // Specific team filter (applies to both master and advisor)
-  if (planFilter) {
-    return scenarios.filter(s => s.teamId === planFilter);
-  }
-
-  // Default view
+  // Master reads everything — the rule's isMaster() branch covers an unfiltered read.
   if (userRole === 'master') {
-    return scenarios;
+    await run(coll);
+    return [...byId.values()];
   }
 
-  // Advisor default: plans on any of my teams, my personal (teamId=null) plans,
-  // prospective plans, and (dual-path) legacy advisor-in-team-members plans.
-  return scenarios.filter(s => {
-    if (isProspective(s)) return true;
-    if (s.teamId && myTeamIds.includes(s.teamId)) return true;
-    if (!s.teamId && isCreator(s)) return true;
-    // Dual-path legacy visibility for unmigrated plans
-    if (!s.teamId && s.advisorEmail && teamMemberEmails.includes(s.advisorEmail.toLowerCase())) return true;
-    return false;
+  // Registered clients see only plans assigned to their email.
+  if (userRole === 'registeredClient') {
+    if (myEmail) await run(query(coll, where('assignedClientEmail', '==', myEmail)));
+    return [...byId.values()];
+  }
+
+  if (userRole !== 'advisor') return [];
+
+  // Advisors: own plans, the shared prospect inbox, their teams' plans, and (dual-path)
+  // unmigrated teammate plans by creator email. Each maps to a read-rule branch.
+  const queries = [
+    query(coll, where('advisorEmail', '==', myEmail)),
+    query(coll, where('advisorId', '==', currentUser.uid)),
+    query(coll, where('advisorId', 'in', ['CLIENT_SUBMISSION', 'CLIENT_PROGRESS'])),
+    ...chunk(myTeamIds || [], 30).map(ids => query(coll, where('teamId', 'in', ids))),
+    ...chunk((teamMemberEmails || []).filter(e => e && e !== myEmail), 30)
+      .map(emails => query(coll, where('advisorEmail', 'in', emails))),
+  ];
+
+  // Settle individually: one failing branch (e.g. a stale team id) must not blank the
+  // advisor's whole plan list.
+  const results = await Promise.allSettled(queries.map(run));
+  results.forEach((r, i) => {
+    if (r.status === 'rejected') {
+      console.error(`Scenario query ${i} failed (check rules/indexes):`, r.reason);
+    }
   });
+  return [...byId.values()];
 };
 
 /**
@@ -66,21 +92,18 @@ export const useScenarios = ({ currentUser, userRole, planFilter = '', teamMembe
     const fetchScenarios = async () => {
       setIsLoadingScenarios(true);
       try {
-        const querySnapshot = await getDocs(
-          collection(db, 'artifacts', appId, 'public', 'data', 'scenarios')
-        );
-        let scenarios = [];
-        querySnapshot.forEach((doc) => {
-          scenarios.push({ id: doc.id, ...doc.data() });
-        });
-
-        scenarios = applyPlanVisibility(scenarios, {
+        const fetched = await fetchVisibleScenarios({
           currentUser,
           userRole,
-          planFilter,
           myTeamIds,
           teamMemberEmails,
         });
+
+        // planFilter narrows an already-authorized set to one team. Purely a UI
+        // convenience — the security boundary is the query/rule pair above.
+        const scenarios = planFilter
+          ? fetched.filter(s => s.teamId === planFilter)
+          : fetched;
 
         // Backfill computed fields for plans saved before they existed
         scenarios.forEach(s => {
@@ -92,7 +115,7 @@ export const useScenarios = ({ currentUser, userRole, planFilter = '', teamMembe
               const projection = runSimulation(basePlan, s.assumptions, s.inputs, s.rebalanceFreq || 3);
               const legacyEntry = getLegacyEntry(projection, s.clientInfo.retirementAge);
               s.legacyBalance = legacyEntry?.total || 0;
-            } catch (e) {
+            } catch {
               // Leave existing value if computation fails
             }
             // Backfill monthlySpending from currentSpending adjusted for inflation
@@ -482,21 +505,15 @@ export const useScenarios = ({ currentUser, userRole, planFilter = '', teamMembe
 
     setIsLoadingScenarios(true);
     try {
-      const querySnapshot = await getDocs(
-        collection(db, 'artifacts', appId, 'public', 'data', 'scenarios')
-      );
-      let scenarios = [];
-      querySnapshot.forEach((doc) => {
-        scenarios.push({ id: doc.id, ...doc.data() });
-      });
-
-      scenarios = applyPlanVisibility(scenarios, {
+      const fetched = await fetchVisibleScenarios({
         currentUser,
         userRole,
-        planFilter,
         myTeamIds,
         teamMemberEmails,
       });
+      const scenarios = planFilter
+        ? fetched.filter(s => s.teamId === planFilter)
+        : fetched;
 
       scenarios.sort((a, b) => b.updatedAt - a.updatedAt);
       setSavedScenarios(scenarios);

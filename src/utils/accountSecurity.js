@@ -24,6 +24,31 @@ const callCheckPasswordExpiry = functions ? httpsCallable(functions, 'checkPassw
 const callInitializeSecurityRecord = functions ? httpsCallable(functions, 'initializeSecurityRecord') : null;
 const callCheckPasswordHistory = functions ? httpsCallable(functions, 'checkPasswordHistory') : null;
 const callAddToPasswordHistory = functions ? httpsCallable(functions, 'addToPasswordHistory') : null;
+const callSetUserRole = functions ? httpsCallable(functions, 'setUserRole') : null;
+
+/**
+ * Grant a role to a user by email. Master-only — the Cloud Function rejects anyone else,
+ * so this cannot be abused from the client even though it ships in the bundle.
+ *
+ * Roles live in custom auth claims, which firestore.rules reads directly. Team ids and
+ * teammate emails ride along so team visibility is enforced server-side rather than
+ * filtered in the browser.
+ *
+ * @param {string} email - Account to grant the role to
+ * @param {string} role - 'advisor' | 'registeredClient' | 'master'
+ * @param {string[]} teams - Team ids the user belongs to
+ * @param {string[]} teamEmails - Teammate emails, for plans saved before the team migration
+ * @returns {Promise<{success: boolean, error?: string}>}
+ */
+export const grantUserRole = async (email, role, teams = [], teamEmails = []) => {
+  if (!callSetUserRole) return { success: false, error: 'Cloud Functions unavailable.' };
+  try {
+    const result = await callSetUserRole({ email, role, teams, teamEmails });
+    return { success: !!result?.data?.success };
+  } catch (e) {
+    return { success: false, error: e?.message || 'Failed to set role.' };
+  }
+};
 
 // Security constants (keep in sync for client-side fallback values)
 const MAX_FAILED_ATTEMPTS = 5;
