@@ -48,6 +48,7 @@ export const PlanManagement = ({
   const [selectedPlans, setSelectedPlans] = useState([]);
   const [reassignTeamId, setReassignTeamId] = useState('');
   const [showAddAdvisor, setShowAddAdvisor] = useState(false);
+  const [grantEmail, setGrantEmail] = useState('');
   const [newAdvisorName, setNewAdvisorName] = useState('');
   const [addAdvisorEmail, setAddAdvisorEmail] = useState(''); // For Add Advisor form
   const [addAdvisorError, setAddAdvisorError] = useState('');
@@ -441,6 +442,51 @@ Your Financial Advisor`;
               >
                 <UserPlus className="w-4 h-4" /> Add Advisor
               </button>
+            </div>
+
+            {/* Grant the advisor role claim directly by login email.
+                Deliberately independent of the directory below: that list is a
+                name-lookup table seeded from saved plans, so an advisor who has not
+                saved one yet would have no row — and role grants must not depend on
+                a cosmetic list. This works for any Firebase Auth account. */}
+            <div className="mb-4 p-4 bg-mwm-green/5 rounded-lg border border-mwm-green/30">
+              <h4 className="text-sm font-bold text-slate-700 mb-1">Grant Advisor Role</h4>
+              <p className="text-xs text-slate-500 mb-3">
+                Enter the person&apos;s login email. They must sign out and back in before it takes effect.
+              </p>
+              <div className="flex flex-wrap gap-3 items-end">
+                <div className="flex-1 min-w-[220px]">
+                  <input
+                    type="email"
+                    placeholder="advisor@millerwm.com"
+                    value={grantEmail}
+                    onChange={(e) => setGrantEmail(e.target.value)}
+                    className="w-full px-3 py-2 border rounded-lg text-sm focus:ring-mwm-green focus:border-mwm-green"
+                  />
+                </div>
+                <button
+                  onClick={() => {
+                    const email = grantEmail.trim();
+                    if (email) onGrantAdvisorRole(email);
+                  }}
+                  disabled={!grantEmail.trim() || roleStatus[grantEmail.trim()] === 'Granting…'}
+                  className="px-4 py-2 text-sm font-medium bg-mwm-green text-white rounded-lg hover:bg-mwm-green/80 disabled:opacity-50 transition-all"
+                >
+                  Grant Role
+                </button>
+              </div>
+              {Object.entries(roleStatus).length > 0 && (
+                <div className="mt-3 space-y-1">
+                  {Object.entries(roleStatus).map(([email, status]) => (
+                    <p
+                      key={email}
+                      className={`text-xs ${status.startsWith('Granted') ? 'text-mwm-green' : status === 'Granting…' ? 'text-slate-500' : 'text-red-600'}`}
+                    >
+                      <strong>{email}</strong> — {status}
+                    </p>
+                  ))}
+                </div>
+              )}
             </div>
 
             {/* Add Advisor Form */}
