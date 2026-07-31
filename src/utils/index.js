@@ -22,7 +22,8 @@ export {
   optimizeLiquidationStrategy,
   optimizeRetirementTaxStrategy,
   applyDeemedFiling,
-  getImpliedPIA
+  getImpliedPIA,
+  getLegacyEntry
 } from './calculations';
 export {
   calculateSSAnalysis,

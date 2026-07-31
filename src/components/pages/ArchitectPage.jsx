@@ -12,7 +12,7 @@ import {
 } from 'lucide-react';
 
 import { COLORS, LOGO_URL } from '../../constants';
-import { getAdjustedSS, getImpliedPIA, applyDeemedFiling, generateAndDownloadIPS, calculateAnnualTax, calculateTaxableSS, calculateFederalTax, getInflationAdjustedBrackets, getInflationAdjustedDeduction, STATE_TAX_DATA, calculateBasePlan, runSimulation } from '../../utils';
+import { getAdjustedSS, getImpliedPIA, applyDeemedFiling, generateAndDownloadIPS, calculateAnnualTax, calculateTaxableSS, calculateFederalTax, getInflationAdjustedBrackets, getInflationAdjustedDeduction, STATE_TAX_DATA, calculateBasePlan, runSimulation, getLegacyEntry } from '../../utils';
 import { Card, StatBox, AllocationRow, FormattedNumberInput, Disclaimer } from '../ui';
 import {
   AllocationTab, WithdrawalOverrideModal, MonteCarloTab, SSOptimizationTab,
@@ -130,18 +130,30 @@ export const ArchitectPage = ({
     }
   }, [basePlan, assumptions, inputs, rebalanceTargets, projectionData]);
 
-  // Compute legacy balance and final projection age
+  // Compute legacy balance and final projection age. The legacy is measured at a defined
+  // horizon — the earlier of life expectancy (the projection's final age) and 30 years
+  // into retirement — so the headline age no longer drifts to wherever the projection ends.
   const lastProjectionEntry = useMemo(() => projectionData[projectionData.length - 1], [projectionData]);
   const finalProjectionAge = lastProjectionEntry?.age || 95;
   const retirementAge = clientInfo.retirementAge || 65;
   const projectionYears = finalProjectionAge - retirementAge;
-  const legacyYear = new Date().getFullYear() + Math.max(0, finalProjectionAge - (clientInfo.currentAge || retirementAge));
+  const legacyEntry = useMemo(() => getLegacyEntry(projectionData, retirementAge), [projectionData, retirementAge]);
+  const legacyDisplayAge = legacyEntry?.age ?? finalProjectionAge;
+  const legacyYear = new Date().getFullYear() + Math.max(0, legacyDisplayAge - (clientInfo.currentAge || retirementAge));
   const legacyLabel = `${legacyYear}`;
+  // Monte Carlo runs the full projection to life expectancy, which can outlast the legacy
+  // horizon above. Success-rate copy must cite this year, not legacyLabel.
+  const horizonYear = new Date().getFullYear() + Math.max(0, finalProjectionAge - (clientInfo.currentAge || retirementAge));
+  const horizonLabel = `${horizonYear}`;
   const legacyAt95 = useMemo(() => {
-    if (monteCarloData?.medianLegacy != null) return monteCarloData.medianLegacy;
-    const entry = projectionData.find(p => p.age >= 95) || lastProjectionEntry;
-    return entry?.total || 0;
-  }, [monteCarloData, projectionData, lastProjectionEntry]);
+    // Prefer the Monte Carlo median only when it's measured at the same horizon we're
+    // labeling (medianLegacy is the final-year balance); otherwise use the deterministic
+    // balance at the legacy horizon so the value and its age label always agree.
+    if (monteCarloData?.medianLegacy != null && legacyDisplayAge >= finalProjectionAge) {
+      return monteCarloData.medianLegacy;
+    }
+    return legacyEntry?.total || 0;
+  }, [monteCarloData, legacyEntry, legacyDisplayAge, finalProjectionAge]);
 
   // Command Center client selector state
   const [showClientSelector, setShowClientSelector] = useState(false);
@@ -1325,7 +1337,7 @@ export const ArchitectPage = ({
                 : `${(monteCarloData?.successRate || 0).toFixed(1)}%`}
               subtext={adjustedProjections.hasChanges
                 ? <><span className="line-through opacity-60">{(monteCarloData?.successRate || 0).toFixed(1)}%</span> → +{(adjustedProjections.successRate - (monteCarloData?.successRate || 0)).toFixed(1)}%</>
-                : `Positive balance through ${legacyLabel}`}
+                : `Positive balance through ${horizonLabel}`}
               icon={Activity}
               colorClass={`${(() => { const sr = adjustedProjections.hasChanges ? adjustedProjections.successRate : monteCarloData?.successRate; return sr >= 85 ? "bg-mwm-green" : sr >= 65 ? "bg-orange-500" : "bg-red-600"; })()} text-white ${adjustedProjections.hasChanges ? 'ring-2 ring-mwm-gold/60' : ''}`}
             />
@@ -2658,7 +2670,7 @@ export const ArchitectPage = ({
           <div className="mt-4 p-3 border border-slate-200 rounded-lg flex items-center justify-between">
             <div>
               <p className="text-[11px] font-bold text-slate-700">Portfolio Sustainability</p>
-              <p className="text-[10px] text-slate-500">Based on 1,000 Monte Carlo simulations through {legacyLabel}.</p>
+              <p className="text-[10px] text-slate-500">Based on 1,000 Monte Carlo simulations through {horizonLabel}.</p>
             </div>
             <div className={`text-3xl font-bold ${monteCarloData.successRate >= 85 ? 'text-mwm-green' : monteCarloData.successRate >= 65 ? 'text-orange-600' : 'text-red-600'}`}>
               {monteCarloData.successRate.toFixed(1)}%

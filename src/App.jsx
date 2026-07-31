@@ -1,7 +1,7 @@
 import React, { useState, useMemo, useEffect, useCallback, useRef } from 'react';
 
 // --- Local Imports ---
-import { formatPhoneNumber, calculateAccumulation, calculateBasePlan, runSimulation, calculateSSAnalysis, calculateSSPartnerAnalysis, calculateWealthBreakeven, calculateBreakevenMatrix, getAdjustedSS, calculateAlternativeAllocations, runOptimizedSimulation } from './utils';
+import { formatPhoneNumber, calculateAccumulation, calculateBasePlan, runSimulation, calculateSSAnalysis, calculateSSPartnerAnalysis, calculateWealthBreakeven, calculateBreakevenMatrix, getAdjustedSS, calculateAlternativeAllocations, runOptimizedSimulation, getLegacyEntry } from './utils';
 import { GateScreen, LoginScreen, ClientLoginScreen, AccumulationPage, ArchitectPage, ClientWizard, PlanManagement, InputsPage } from './components';
 import { MfaVerifyModal, MfaEnrollModal } from './components/auth/MfaModals';
 import { PasswordExpiryModal } from './components/auth/PasswordExpiryModal';
@@ -137,6 +137,14 @@ export default function BucketPortfolioBuilder() {
   const [taxStrategyComparison, setTaxStrategyComparison] = useState(null); // Optimizer comparison data for print
   const [isGeneratingReport, setIsGeneratingReport] = useState(false);
   const [showCashFlowTable, setShowCashFlowTable] = useState(false);
+  // Declared here (not next to the print modal below) so the optimizer memo can gate on
+  // them — a memo can't reference state declared further down the component.
+  const [showPrintOptions, setShowPrintOptions] = useState(false);
+  const [printOptions, setPrintOptions] = useState({
+    mode: 'deterministic', // 'deterministic' | 'montecarlo'
+    excludeAccumulation: false,
+    excludeStrategyComparison: false,
+  });
 
   // SS Recommendation State
   const [targetMaxPortfolioAge, setTargetMaxPortfolioAge] = useState(80);
@@ -193,6 +201,10 @@ export default function BucketPortfolioBuilder() {
   const [inputs, setInputs] = useState({
     totalPortfolio: 0,
     monthlySpending: 0,
+    // Retirement spending budget auto-derives from currentSpending inflated at the personal
+    // rate over the runway to retirement. Set once the advisor types their own figure (or
+    // applies the 4% rule), which pins the value and stops the auto-recalc.
+    monthlySpendingOverridden: false,
     ssPIA: 2500,
     partnerSSPIA: 2500,
     ssStartAge: 65,
@@ -315,7 +327,7 @@ export default function BucketPortfolioBuilder() {
   };
 
   const handleSaveScenario = async () => {
-    const legacyEntry = projectionData.find(p => p.age >= 95) || projectionData[projectionData.length - 1];
+    const legacyEntry = getLegacyEntry(projectionData, clientInfo.retirementAge);
     const legacyBalance = legacyEntry?.total || 0;
     const team = await resolveTeamForSave();
     if (team.cancelled) return;
@@ -352,13 +364,13 @@ export default function BucketPortfolioBuilder() {
   };
 
   const handleClientSubmit = () => {
-    const legacyEntry = projectionData.find(p => p.age >= 95) || projectionData[projectionData.length - 1];
+    const legacyEntry = getLegacyEntry(projectionData, clientInfo.retirementAge);
     const legacyBalance = legacyEntry?.total || 0;
     submitClientScenario({ clientInfo, inputs, assumptions, targetMaxPortfolioAge, rebalanceFreq, vaEnabled, vaInputs, legacyBalance });
   };
 
   const handleClientFinish = async () => {
-    const legacyEntry = projectionData.find(p => p.age >= 95) || projectionData[projectionData.length - 1];
+    const legacyEntry = getLegacyEntry(projectionData, clientInfo.retirementAge);
     const legacyBalance = legacyEntry?.total || 0;
     await submitClientScenario(
       { clientInfo, inputs, assumptions, targetMaxPortfolioAge, rebalanceFreq, vaEnabled, vaInputs, legacyBalance },
@@ -380,7 +392,7 @@ export default function BucketPortfolioBuilder() {
     });
     setInputs(prev => ({
       ...prev,
-      totalPortfolio: 0, monthlySpending: 0,
+      totalPortfolio: 0, monthlySpending: 0, monthlySpendingOverridden: false,
       ssPIA: 2500, partnerSSPIA: 2500,
       ssStartAge: 65, ssCurrentlyReceiving: false,
       partnerSSStartAge: 65, partnerSSCurrentlyReceiving: false,
@@ -436,6 +448,10 @@ export default function BucketPortfolioBuilder() {
         unifiedTimeline: s.inputs.unifiedTimeline ?? true,
         retirementIllustrationStartAge: s.inputs.retirementIllustrationStartAge ?? null,
         surplusToPortfolio: s.inputs.surplusToPortfolio ?? false,
+        // Plans saved before the auto-calc existed carry a spending figure the advisor
+        // signed off on. Treat any existing value as an override so loading an old plan
+        // never silently re-derives (and changes) its numbers.
+        monthlySpendingOverridden: s.inputs.monthlySpendingOverridden ?? (s.inputs.monthlySpending > 0),
       });
       // Migrate assumptions: apply current forward-looking defaults if saved data uses old values
       const CURRENT_DEFAULTS = {
@@ -565,6 +581,21 @@ export default function BucketPortfolioBuilder() {
   const handleToggleVa = (enabled) => setVaEnabled(enabled);
 
   // --- Calculations (using imported utilities) ---
+
+  // The advisor accumulation page renders only the projected-growth chart, which needs
+  // nothing beyond displayAccumulationData. Monte Carlo, the optimizer battery and the SS
+  // analyses all feed views that aren't mounted yet, so running them on every keystroke
+  // just blocks the input. Defer them until the advisor proceeds — flipping advisorView to
+  // 'inputs' drops this flag and every gated memo recomputes then.
+  // Client views (ClientWizard) are deliberately excluded: they render their own
+  // projections from this same chain, so gating them would blank the client's charts.
+  // This mirrors the render branches below exactly: 'management' and 'inputs' return first,
+  // then step === 1 is the accumulation page. Note advisorView is still 'planning' on the
+  // Architect page (step 2) — gating on advisorView alone would blank the architect's charts.
+  const isClientView = userRole === 'anonymous' || userRole === 'registeredClient';
+  const isAdvisorAccumulationPage =
+    advisorView !== 'management' && advisorView !== 'inputs' && step === 1;
+  const deferHeavyCalcs = !isClientView && isAdvisorAccumulationPage;
   const accumulationData = useMemo(() => calculateAccumulation(
     clientInfo,
     inputs.inflationRate,
@@ -587,9 +618,9 @@ export default function BucketPortfolioBuilder() {
 
   // VA-adjusted bucket calculations (with VA income factored in)
   const vaAdjustedBasePlan = useMemo(() => {
-    if (!vaEnabled) return null;
+    if (deferHeavyCalcs || !vaEnabled) return null;
     return calculateBasePlan(inputs, assumptions, clientInfo, true, vaInputs);
-  }, [inputs, assumptions, clientInfo, vaEnabled, vaInputs]);
+  }, [deferHeavyCalcs, inputs, assumptions, clientInfo, vaEnabled, vaInputs]);
 
   // Use manual allocations if enabled, otherwise use formula-calculated values
   const basePlan = useMemo(() => {
@@ -606,24 +637,25 @@ export default function BucketPortfolioBuilder() {
     return formulaBasePlan;
   }, [formulaBasePlan, useManualAllocation, manualAllocations]);
 
-  const ssAnalysis = useMemo(() => calculateSSAnalysis({
+  const ssAnalysis = useMemo(() => deferHeavyCalcs ? { winner: null } : calculateSSAnalysis({
     inputs,
     clientInfo,
     assumptions,
     targetMaxPortfolioAge,
     retirementPortfolio: basePlan?.retirementPortfolio
-  }), [inputs, clientInfo, targetMaxPortfolioAge, assumptions, basePlan?.retirementPortfolio]);
+  }), [deferHeavyCalcs, inputs, clientInfo, targetMaxPortfolioAge, assumptions, basePlan?.retirementPortfolio]);
 
-  const ssPartnerAnalysis = useMemo(() => calculateSSPartnerAnalysis({
+  const ssPartnerAnalysis = useMemo(() => deferHeavyCalcs ? { winner: null } : calculateSSPartnerAnalysis({
     inputs,
     clientInfo,
     assumptions,
     targetMaxPortfolioAge,
     clientSSWinner: ssAnalysis.winner,
     retirementPortfolio: basePlan?.retirementPortfolio
-  }), [inputs, clientInfo, targetMaxPortfolioAge, assumptions, ssAnalysis.winner, basePlan?.retirementPortfolio]);
+  }), [deferHeavyCalcs, inputs, clientInfo, targetMaxPortfolioAge, assumptions, ssAnalysis.winner, basePlan?.retirementPortfolio]);
 
   const ssBreakevenResults = useMemo(() => {
+    if (deferHeavyCalcs) return null;
     const common = {
       pia: inputs.ssPIA,
       growthRate: inputs.ssReinvestRate,
@@ -647,7 +679,7 @@ export default function BucketPortfolioBuilder() {
         growthRate: inputs.ssReinvestRate, colaRate: inputs.inflationRate
       }),
     };
-  }, [inputs.ssPIA, inputs.ssReinvestRate, inputs.inflationRate,
+  }, [deferHeavyCalcs, inputs.ssPIA, inputs.ssReinvestRate, inputs.inflationRate,
       inputs.ssBridgeNqPercent, inputs.ssMarginalTaxRate,
       inputs.monthlySpending, basePlan.retirementPortfolio,
       inputs.partnerSSPIA, inputs.partnerSSStartAge, clientInfo.isMarried]);
@@ -722,6 +754,7 @@ export default function BucketPortfolioBuilder() {
   // `data`; the time-series charts plot retirement only (matching projectionData), so
   // slice off the accumulation prefix and re-index `year` to 1..N.
   const monteCarloData = useMemo(() => {
+    if (deferHeavyCalcs) return null;
     const raw = runSimulation(di.basePlan, di.assumptions, di.inputs, rebalanceFreq, true, null, di.rebalanceTargets);
     if (!di.inputs.unifiedTimeline || !raw?.data) return raw;
     const accumYears = di.basePlan?.retirementYearIndex || 0;
@@ -730,7 +763,7 @@ export default function BucketPortfolioBuilder() {
       ...raw,
       data: raw.data.slice(accumYears).map((row, idx) => ({ ...row, year: idx + 1 })),
     };
-  }, [di, rebalanceFreq]);
+  }, [deferHeavyCalcs, di, rebalanceFreq]);
 
   // Tax-forced inputs for client view: assume 100% traditional IRA/401k, 5% state tax
   const clientTaxInputs = useMemo(() => ({
@@ -745,22 +778,30 @@ export default function BucketPortfolioBuilder() {
   }), [di]);
 
   const clientProjectionData = useMemo(() =>
-    runSimulation(di.basePlan, di.assumptions, clientTaxInputs, rebalanceFreq, false, null, di.rebalanceTargets),
-    [di, clientTaxInputs, rebalanceFreq]
+    deferHeavyCalcs ? [] : runSimulation(di.basePlan, di.assumptions, clientTaxInputs, rebalanceFreq, false, null, di.rebalanceTargets),
+    [deferHeavyCalcs, di, clientTaxInputs, rebalanceFreq]
   );
   const clientMonteCarloData = useMemo(() =>
-    runSimulation(di.basePlan, di.assumptions, clientTaxInputs, rebalanceFreq, true, null, di.rebalanceTargets),
-    [di, clientTaxInputs, rebalanceFreq]
+    deferHeavyCalcs ? null : runSimulation(di.basePlan, di.assumptions, clientTaxInputs, rebalanceFreq, true, null, di.rebalanceTargets),
+    [deferHeavyCalcs, di, clientTaxInputs, rebalanceFreq]
   );
 
   // VA GIB Monte Carlo - uses VA-adjusted bucket allocations
   const vaMonteCarloData = useMemo(() => {
-    if (!vaEnabled || !vaAdjustedBasePlan) return null;
+    if (deferHeavyCalcs || !vaEnabled || !vaAdjustedBasePlan) return null;
     return runSimulation(vaAdjustedBasePlan, di.assumptions, di.inputs, rebalanceFreq, true, vaInputs, di.rebalanceTargets);
-  }, [vaAdjustedBasePlan, di, rebalanceFreq, vaEnabled, vaInputs]);
+  }, [deferHeavyCalcs, vaAdjustedBasePlan, di, rebalanceFreq, vaEnabled, vaInputs]);
+
+  // The six-strategy optimizer is by far the most expensive calculation in the app (~1.7s),
+  // and only two places read it: the Optimizer tab and the printout's Strategy Comparison
+  // page. Run it on demand for those. Opening the report dialog is the trigger for the
+  // print path rather than the print itself, so the work happens while the advisor is
+  // choosing options instead of racing the 500ms timer before window.print().
+  const needsOptimizer = activeTab === 'optimizer' || showPrintOptions || isGeneratingReport;
 
   // Optimizer data - compare six allocation strategies with consistent rebalancing
   const optimizerData = useMemo(() => {
+    if (deferHeavyCalcs || !needsOptimizer) return null;
     try {
       const allocations = calculateAlternativeAllocations(di.inputs, di.basePlan);
       return {
@@ -775,11 +816,11 @@ export default function BucketPortfolioBuilder() {
       console.error('Optimizer calculation error:', error);
       return null;
     }
-  }, [di, optimizerRebalanceFreq]);
+  }, [deferHeavyCalcs, needsOptimizer, di, optimizerRebalanceFreq]);
 
   // VA-enabled optimizer data
   const vaOptimizerData = useMemo(() => {
-    if (!vaEnabled) return null;
+    if (deferHeavyCalcs || !needsOptimizer || !vaEnabled) return null;
     try {
       const allocations = calculateAlternativeAllocations(di.inputs, di.basePlan);
       return {
@@ -794,7 +835,7 @@ export default function BucketPortfolioBuilder() {
       console.error('VA Optimizer calculation error:', error);
       return null;
     }
-  }, [di, optimizerRebalanceFreq, vaEnabled, vaInputs]);
+  }, [deferHeavyCalcs, needsOptimizer, di, optimizerRebalanceFreq, vaEnabled, vaInputs]);
 
 
   // Keep totalPortfolio in sync with accumulation data
@@ -948,6 +989,11 @@ export default function BucketPortfolioBuilder() {
       val = parseFloat(value) || 0;
     }
     if ((name === 'ssStartAge' || name === 'partnerSSStartAge') && val > 70) val = 70;
+    // Typing in the retirement spending budget pins it against the auto-calc
+    if (name === 'monthlySpending') {
+      setInputs(prev => ({ ...prev, monthlySpending: val, monthlySpendingOverridden: true }));
+      return;
+    }
     setInputs(prev => ({ ...prev, [name]: val }));
   };
 
@@ -1212,7 +1258,43 @@ export default function BucketPortfolioBuilder() {
       adjustedPortfolio = Math.max(0, basePlan.retirementPortfolio - bridgeCost);
     }
     const safeWithdrawal = adjustedPortfolio * 0.04;
-    setInputs(prev => ({ ...prev, monthlySpending: Math.round((safeWithdrawal + totalAnnualSS) / 12) }));
+    // An explicit 4% rule application is a manual override — it must survive the auto-calc
+    setInputs(prev => ({
+      ...prev,
+      monthlySpending: Math.round((safeWithdrawal + totalAnnualSS) / 12),
+      monthlySpendingOverridden: true
+    }));
+  };
+
+  // Retirement spending budget: current spending inflated at the personal inflation rate
+  // over the runway to retirement. basePlan.retirementYearIndex is the authoritative runway
+  // (it accounts for a later-retiring partner and the illustration start-age override).
+  const autoRetirementSpending = useMemo(() => {
+    const yearsToRetire = basePlan?.retirementYearIndex
+      ?? Math.max(0, clientInfo.retirementAge - clientInfo.currentAge);
+    return Math.round(
+      (clientInfo.currentSpending || 0)
+      * Math.pow(1 + ((inputs.personalInflationRate || 0) / 100), yearsToRetire)
+    );
+  }, [basePlan?.retirementYearIndex, clientInfo.retirementAge, clientInfo.currentAge,
+      clientInfo.currentSpending, inputs.personalInflationRate]);
+
+  // Keep the budget in step with its drivers until the advisor pins it. Returning `prev`
+  // unchanged when the value already matches lets React bail out — without that, the
+  // basePlan → inputs → basePlan cycle would re-render forever.
+  useEffect(() => {
+    if (inputs.monthlySpendingOverridden) return;
+    setInputs(prev => prev.monthlySpending === autoRetirementSpending
+      ? prev
+      : { ...prev, monthlySpending: autoRetirementSpending });
+  }, [autoRetirementSpending, inputs.monthlySpendingOverridden]);
+
+  const resetSpendingToAuto = () => {
+    setInputs(prev => ({
+      ...prev,
+      monthlySpending: autoRetirementSpending,
+      monthlySpendingOverridden: false
+    }));
   };
 
   const updateSSStartAge = (age) => {
@@ -1223,34 +1305,30 @@ export default function BucketPortfolioBuilder() {
     setInputs(prev => ({ ...prev, partnerSSStartAge: age }));
   };
 
-  // Build the inputs payload that gets persisted. In legacy mode, totalPortfolio and
-  // monthlySpending are pre-inflated to retirement-age values for backward compat. In
-  // unified mode, both stay as today-state values — basePlan.retirementPortfolio and
-  // the engine's expense inflation handle the projection at render time.
-  const buildPersistInputs = (initializeIfZero) => {
+  // Build the inputs payload that gets persisted. In both modes, monthlySpending is the
+  // RETIREMENT-year monthly spend: current spending inflated at the personal inflation
+  // rate over the runway to retirement. The advisor can manually override this figure and
+  // it flows straight through to net spend (the engine no longer re-inflates it). In
+  // unified mode totalPortfolio stays as today-state (basePlan.retirementPortfolio and the
+  // engine's boundary-relative expense inflation handle the projection at render time).
+  const buildPersistInputs = () => {
+    // autoRetirementSpending is the same figure the auto-calc effect writes into state; it
+    // only stands in here as a floor for the not-yet-populated (zero) case.
+    const spending = inputs.monthlySpending || autoRetirementSpending;
     if (inputs.unifiedTimeline) {
-      return {
-        ...inputs,
-        monthlySpending: (initializeIfZero && inputs.monthlySpending === 0)
-          ? clientInfo.currentSpending
-          : inputs.monthlySpending
-      };
+      return { ...inputs, monthlySpending: spending };
     }
     const finalAccumulation = accumulationData[accumulationData.length - 1]?.balance || 0;
-    const yearsToRetire = Math.max(0, clientInfo.retirementAge - clientInfo.currentAge);
-    const futureSpending = clientInfo.currentSpending * Math.pow(1 + (inputs.personalInflationRate / 100), yearsToRetire);
     return {
       ...inputs,
       totalPortfolio: finalAccumulation,
-      monthlySpending: (initializeIfZero && inputs.monthlySpending === 0)
-        ? Math.round(futureSpending)
-        : (inputs.monthlySpending || Math.round(futureSpending))
+      monthlySpending: spending
     };
   };
 
   const proceedToArchitect = () => {
-    const updatedInputs = buildPersistInputs(false);
-    const legacyEntry = projectionData.find(p => p.age >= 95) || projectionData[projectionData.length - 1];
+    const updatedInputs = buildPersistInputs();
+    const legacyEntry = getLegacyEntry(projectionData, clientInfo.retirementAge);
     const legacyBalance = legacyEntry?.total || 0;
     saveProgress({ clientInfo, inputs: updatedInputs, assumptions, targetMaxPortfolioAge, rebalanceFreq, vaEnabled, vaInputs, legacyBalance }, userRole);
 
@@ -1261,9 +1339,9 @@ export default function BucketPortfolioBuilder() {
 
   // Client wizard save progress (auto-save after each page)
   const handleClientSaveProgress = () => {
-    const updatedInputs = buildPersistInputs(true);
+    const updatedInputs = buildPersistInputs();
     setInputs(updatedInputs);
-    const legacyEntry = projectionData.find(p => p.age >= 95) || projectionData[projectionData.length - 1];
+    const legacyEntry = getLegacyEntry(projectionData, clientInfo.retirementAge);
     const legacyBalance = legacyEntry?.total || 0;
     saveProgress({ clientInfo, inputs: updatedInputs, assumptions, targetMaxPortfolioAge, rebalanceFreq, vaEnabled, vaInputs, legacyBalance }, userRole);
   };
@@ -1277,21 +1355,14 @@ export default function BucketPortfolioBuilder() {
 
     if (autoSaveTimerRef.current) clearTimeout(autoSaveTimerRef.current);
     autoSaveTimerRef.current = setTimeout(() => {
-      const updatedInputs = buildPersistInputs(true);
-      const legacyEntry = projectionData.find(p => p.age >= 95) || projectionData[projectionData.length - 1];
+      const updatedInputs = buildPersistInputs();
+      const legacyEntry = getLegacyEntry(projectionData, clientInfo.retirementAge);
       const legacyBalance = legacyEntry?.total || 0;
       saveProgress({ clientInfo, inputs: updatedInputs, assumptions, targetMaxPortfolioAge, rebalanceFreq, vaEnabled, vaInputs, legacyBalance }, userRole);
     }, 2000);
 
     return () => { if (autoSaveTimerRef.current) clearTimeout(autoSaveTimerRef.current); };
   }, [clientInfo, inputs, assumptions, targetMaxPortfolioAge, rebalanceFreq, vaEnabled, vaInputs, userRole, accumulationData, projectionData, saveProgress]);
-
-  const [showPrintOptions, setShowPrintOptions] = useState(false);
-  const [printOptions, setPrintOptions] = useState({
-    mode: 'deterministic', // 'deterministic' | 'montecarlo'
-    excludeAccumulation: false,
-    excludeStrategyComparison: false,
-  });
 
   const generateReport = () => {
     setShowPrintOptions(true);
@@ -1592,6 +1663,8 @@ export default function BucketPortfolioBuilder() {
         onApplyForwardLooking={applyForwardLookingEstimates}
         onApplyConservative={applyConservativeEstimates}
         onApplyFourPercentRule={applyFourPercentRule}
+        autoRetirementSpending={autoRetirementSpending}
+        onResetSpendingToAuto={resetSpendingToAuto}
         showSettings={showSettings}
         onToggleSettings={() => setShowSettings(!showSettings)}
         targetMaxPortfolioAge={targetMaxPortfolioAge}

@@ -1,13 +1,13 @@
 import React from 'react';
 import { TrendingUp, Clock, PiggyBank, DollarSign, Activity } from 'lucide-react';
 
-import { getAdjustedSS } from '../../../utils';
+import { getAdjustedSS, getLegacyEntry } from '../../../utils';
 import { Card } from '../../ui';
 
 // Improve Outcome Tab - Advisory Only
 export const ImproveOutcomeTab = ({ clientInfo, inputs, basePlan, monteCarloData, projectionData, onInputChange }) => {
   const successRate = monteCarloData?.successRate || 0;
-  const legacyEntry = projectionData.find(p => p.age >= 95) || projectionData[projectionData.length - 1];
+  const legacyEntry = getLegacyEntry(projectionData, clientInfo.retirementAge);
   const legacyBalance = legacyEntry?.total || 0;
   const annualSpending = inputs.monthlySpending * 12;
   const legacyToSpendingRatio = annualSpending > 0 ? legacyBalance / annualSpending : 0;

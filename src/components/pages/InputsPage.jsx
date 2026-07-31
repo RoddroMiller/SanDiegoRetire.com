@@ -27,6 +27,8 @@ export const InputsPage = ({
   onApplyForwardLooking,
   onApplyConservative,
   onApplyFourPercentRule,
+  autoRetirementSpending,
+  onResetSpendingToAuto,
   // UI State
   showSettings,
   onToggleSettings,
@@ -102,7 +104,7 @@ export const InputsPage = ({
           <div className="relative group">
             <div className="flex justify-between items-center mb-1">
               <label className="text-xs font-bold text-slate-500 uppercase flex items-center gap-1">
-                Monthly Spending Need <Info className="w-3 h-3 text-slate-400" />
+                Monthly Spending at Retirement <Info className="w-3 h-3 text-slate-400" />
               </label>
               <button
                 onClick={onApplyFourPercentRule}
@@ -112,9 +114,26 @@ export const InputsPage = ({
               </button>
             </div>
             <div className="absolute left-0 bottom-full mb-2 hidden group-hover:block w-64 bg-slate-800 text-white text-xs p-2 rounded shadow-lg z-10">
-              Based on ${clientInfo.currentSpending.toLocaleString()} current spend adjusted for inflation over {clientInfo.retirementAge - clientInfo.currentAge} years.
+              {inputs.monthlySpendingOverridden
+                ? `Manually set. Auto-calculated value is $${(autoRetirementSpending || 0).toLocaleString()}/mo, based on $${clientInfo.currentSpending.toLocaleString()} current spend inflated at ${inputs.personalInflationRate}% over ${clientInfo.retirementAge - clientInfo.currentAge} years.`
+                : `Auto-calculated from $${clientInfo.currentSpending.toLocaleString()} current spend inflated at ${inputs.personalInflationRate}% over ${clientInfo.retirementAge - clientInfo.currentAge} years. Type a value to override.`}
             </div>
             <FormattedNumberInput name="monthlySpending" value={inputs.monthlySpending} onChange={onInputChange} className="w-full mt-1 px-3 py-2 border rounded-md text-sm font-bold text-slate-700" />
+            <div className="mt-1 text-[11px] flex items-center gap-2">
+              {inputs.monthlySpendingOverridden ? (
+                <>
+                  <span className="text-slate-500">Manually set</span>
+                  <button
+                    onClick={onResetSpendingToAuto}
+                    className="text-mwm-green underline hover:text-mwm-green/80 font-medium"
+                  >
+                    Reset to auto (${(autoRetirementSpending || 0).toLocaleString()})
+                  </button>
+                </>
+              ) : (
+                <span className="text-slate-400">Auto-calculated at {inputs.personalInflationRate}% personal inflation</span>
+              )}
+            </div>
           </div>
         </div>
 

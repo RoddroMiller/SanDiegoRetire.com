@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { collection, doc, setDoc, getDocs, deleteDoc, updateDoc } from 'firebase/firestore';
 import { db, appId } from '../constants';
-import { calculateBasePlan, runSimulation } from '../utils';
+import { calculateBasePlan, runSimulation, getLegacyEntry } from '../utils';
 
 /**
  * Apply role/team-based visibility rules to a set of scenarios.
@@ -85,11 +85,12 @@ export const useScenarios = ({ currentUser, userRole, planFilter = '', teamMembe
         // Backfill computed fields for plans saved before they existed
         scenarios.forEach(s => {
           if (s.inputs && s.assumptions && s.clientInfo) {
-            // Always compute legacyBalance at age 95 from saved inputs
+            // Compute legacyBalance at the legacy horizon (life expectancy or 30 years
+            // into retirement, whichever is earlier) from saved inputs
             try {
               const basePlan = calculateBasePlan(s.inputs, s.assumptions, s.clientInfo);
               const projection = runSimulation(basePlan, s.assumptions, s.inputs, s.rebalanceFreq || 3);
-              const legacyEntry = projection.find(p => p.age >= 95) || projection[projection.length - 1];
+              const legacyEntry = getLegacyEntry(projection, s.clientInfo.retirementAge);
               s.legacyBalance = legacyEntry?.total || 0;
             } catch (e) {
               // Leave existing value if computation fails

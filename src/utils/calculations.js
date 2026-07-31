@@ -1230,9 +1230,13 @@ export const calculateBasePlan = (inputs, assumptions, clientInfo, vaEnabled = f
     const preSimYears = simulationStartAge - clientInfo.currentAge;
     // Expenses use personal inflation rate.
     // Legacy: monthlySpending is pre-inflated to simulationStartAge, so factor is yearIndex only.
-    // Unified: monthlySpending is today's value, so factor inflates from currentAge → simAge.
+    // Unified: monthlySpending is the RETIREMENT-year spend (either auto-populated from
+    //   current spending inflated to retirement, or manually overridden by the advisor).
+    //   The factor is therefore relative to the retirement boundary — exactly 1.0 in the
+    //   first retirement year — so the entered value flows straight through to net spend.
+    //   Pre-retirement years deflate back toward today's-dollar living expenses.
     const expenseInflationFactor = unified
-      ? Math.pow(1 + (personalInflationRate / 100), yearIndex + preSimYears)
+      ? Math.pow(1 + (personalInflationRate / 100), yearIndex - retirementYearIndex)
       : Math.pow(1 + (personalInflationRate / 100), yearIndex);
     // Income (SS, pension) uses full inflation rate from simulation start
     const incomeInflationFactor = Math.pow(1 + (inflationRate / 100), yearIndex);
@@ -1634,6 +1638,23 @@ export const calculateBasePlan = (inputs, assumptions, clientInfo, vaEnabled = f
 };
 
 /**
+ * Resolve the projection row at which the "projected legacy" balance is measured.
+ * The legacy is reported at a defined horizon: the earlier of the household's final
+ * projection age (life expectancy / second death) and 30 years into retirement. This
+ * mirrors the client-facing wizard convention and keeps the headline age deterministic
+ * rather than falling back to wherever the projection happens to end.
+ * @param {Array} projection - Retirement-phase projection rows (each with .age/.total)
+ * @param {number} retirementAge - Client retirement age
+ * @returns {object|null} The projection row at the legacy horizon (or null if empty)
+ */
+export const getLegacyEntry = (projection, retirementAge) => {
+  if (!projection || projection.length === 0) return null;
+  const finalAge = projection[projection.length - 1]?.age ?? 95;
+  const targetAge = Math.min(finalAge, (retirementAge || 65) + 30);
+  return projection.find(p => p.age >= targetAge) || projection[projection.length - 1];
+};
+
+/**
  * Run portfolio simulation (deterministic or Monte Carlo)
  * @param {object} basePlan - Base plan object
  * @param {object} assumptions - Return assumptions
@@ -1666,7 +1687,11 @@ export const runSimulation = (basePlan, assumptions, inputs, rebalanceFreq, isMo
   const accumulationGrowthRate = (clientInfo?.expectedReturn || 0) / 100;
   const accumulationInflRate = (inputs.inflationRate || 0) / 100;
 
-  // Run until the later-dying spouse's expected death age (inclusive), capped at 40 years
+  // Run until the later-dying spouse's expected death age (inclusive). The cap is a
+  // runaway safety bound, not a planning horizon: in unified mode the loop starts at
+  // currentAge, so a 40-year cap would truncate a young client's projection well before
+  // life expectancy (e.g. age 45 → 85). 75 years covers currentAge → death for any
+  // realistic input while keeping Monte Carlo iteration counts bounded.
   const startAge = simulationStartAge || 65;
   const clientDeathAge = inputs.expectedDeathAge || 95;
   let lastDeathClientAge = clientDeathAge;
@@ -1678,7 +1703,7 @@ export const runSimulation = (basePlan, assumptions, inputs, rebalanceFreq, isMo
     lastDeathClientAge = Math.max(clientDeathAge, partnerDeathInClientAge);
   }
   // +1 so the death year itself is included in the projection
-  const years = Math.min(40, Math.max(1, lastDeathClientAge - startAge + 1));
+  const years = Math.min(75, Math.max(1, lastDeathClientAge - startAge + 1));
   let results = [];
   let failureCount = 0;
   const iterations = isMonteCarlo ? 1000 : 1;
