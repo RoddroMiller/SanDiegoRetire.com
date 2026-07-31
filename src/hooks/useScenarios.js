@@ -165,7 +165,8 @@ export const useScenarios = ({ currentUser, userRole, planFilter = '', teamMembe
     // Preserve existing clientStatus if set, otherwise default to 'client' for advisor saves
     const existingScenario = savedScenarios.find(s => s.id === safeDocId);
     const now = Date.now();
-    const userEmail = currentUser.email || 'anonymous';
+    // Lowercased to match the exact-match read query — see saveProgress for why
+    const userEmail = currentUser.email?.toLowerCase() || 'anonymous';
     const scenarioData = {
       advisorId: currentUser.uid,
       advisorEmail: userEmail,
@@ -233,8 +234,12 @@ export const useScenarios = ({ currentUser, userRole, planFilter = '', teamMembe
     }
 
     const isClient = role === 'client' || role === 'anonymous' || role === 'registeredClient';
+    // Prospect drafts are keyed by the session's uid, not by the name typed into the form.
+    // Keying by name meant two prospects with the same name shared one document — and
+    // anyone who had not typed a name yet collided on the single id `progress_client`,
+    // so concurrent visitors overwrote each other's plan on every autosave.
     const baseDocId = isClient
-      ? `progress_${clientInfo.name || clientInfo.email || 'client'}`
+      ? `progress_${currentUser.uid}`
       : (clientInfo.email || clientInfo.name || `scenario_${Date.now()}`);
     const safeBaseDocId = baseDocId.replace(/[^a-zA-Z0-9_-]/g, '_');
 
@@ -253,10 +258,18 @@ export const useScenarios = ({ currentUser, userRole, planFilter = '', teamMembe
 
     const now = Date.now();
     const actorId = isClient ? 'CLIENT_PROGRESS' : currentUser.uid;
-    const actorEmail = isClient ? 'Client Progress' : (currentUser.email || 'anonymous');
+    // Stored lowercase because the read query matches this field exactly while the rule
+    // compares case-insensitively. A mixed-case login email would otherwise store a value
+    // the owner's own query never matches, silently hiding their plans from them.
+    const actorEmail = isClient
+      ? 'Client Progress'
+      : (currentUser.email?.toLowerCase() || 'anonymous');
     const scenarioData = {
       advisorId: actorId,
       advisorEmail: actorEmail,
+      // Binds a prospect draft to the session that created it so the rules can stop
+      // anyone else from overwriting it.
+      ownerUid: currentUser.uid,
       // Team only applies to advisor saves; client-progress plans stay team-less until claimed
       teamId: isClient ? null : (teamId ?? existingScenario?.teamId ?? null),
       teamName: isClient ? null : (teamName ?? existingScenario?.teamName ?? null),

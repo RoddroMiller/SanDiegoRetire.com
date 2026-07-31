@@ -313,6 +313,30 @@ describe('Scenarios collection', () => {
       await assertFails(updateDoc(doc(db, SCENARIO_PATH, 's1'), { advisorEmail: CLIENT_EMAIL }));
     });
 
+    it('allows a prospect to update their own CLIENT_PROGRESS draft', async () => {
+      await seedScenario('p1', { advisorId: 'CLIENT_PROGRESS', ownerUid: 'anon-uid', name: 'Draft' });
+      const db = asAnonymous();
+      await assertSucceeds(updateDoc(doc(db, SCENARIO_PATH, 'p1'), {
+        advisorId: 'CLIENT_PROGRESS', ownerUid: 'anon-uid', name: 'Updated',
+      }));
+    });
+
+    it('denies a prospect from overwriting another prospects draft', async () => {
+      await seedScenario('p1', { advisorId: 'CLIENT_PROGRESS', ownerUid: 'someone-else-uid', name: 'Theirs' });
+      const db = asAnonymous(); // uid is 'anon-uid'
+      await assertFails(updateDoc(doc(db, SCENARIO_PATH, 'p1'), {
+        advisorId: 'CLIENT_PROGRESS', ownerUid: 'someone-else-uid', name: 'Hijacked',
+      }));
+    });
+
+    it('denies a prospect from claiming ownership of another draft', async () => {
+      await seedScenario('p1', { advisorId: 'CLIENT_PROGRESS', ownerUid: 'someone-else-uid', name: 'Theirs' });
+      const db = asAnonymous();
+      await assertFails(updateDoc(doc(db, SCENARIO_PATH, 'p1'), {
+        advisorId: 'CLIENT_PROGRESS', ownerUid: 'anon-uid', name: 'Hijacked',
+      }));
+    });
+
     it('denies unrelated user from updating', async () => {
       await seedScenario('s1', scenarioData);
       const db = asOther();
