@@ -173,6 +173,17 @@ exports.onSecurityRecordUpdated = onDocumentUpdated(SECURITY_PATH, async (event)
 // These run BEFORE authentication so they do NOT require request.auth.
 // The admin SDK bypasses security rules to read/write the locked-down
 // security collection.
+//
+// Because they are unauthenticated by design, App Check is their ONLY gate —
+// without it anyone holding the public API key could call them directly, e.g.
+// hammering recordFailedAttempt to lock a known advisor out of their account,
+// or probing checkAccountLockout to enumerate which emails exist. Callables
+// have no console enforcement toggle; enforceAppCheck below is the mechanism.
+//
+// Note the client-side helpers in accountSecurity.js catch errors and return
+// safe defaults, so if attestation ever stops attaching, login keeps working
+// while lockout and expiry silently stop enforcing. Verify with a callable that
+// surfaces its result (setUserRole) rather than by checking that login works.
 
 const MAX_FAILED_ATTEMPTS = 5;
 const LOCKOUT_DURATION_MS = 15 * 60 * 1000; // 15 minutes
@@ -187,7 +198,7 @@ function getSecurityDocRef(email) {
   return db.doc(`security/users/${hashEmail(email)}/data`);
 }
 
-exports.checkAccountLockout = onCall(async (request) => {
+exports.checkAccountLockout = onCall({ enforceAppCheck: true }, async (request) => {
   const { email } = request.data;
   if (!email) {
     throw new HttpsError("invalid-argument", "email is required.");
@@ -230,7 +241,7 @@ exports.checkAccountLockout = onCall(async (request) => {
   }
 });
 
-exports.recordFailedAttempt = onCall(async (request) => {
+exports.recordFailedAttempt = onCall({ enforceAppCheck: true }, async (request) => {
   const { email } = request.data;
   if (!email) {
     throw new HttpsError("invalid-argument", "email is required.");
@@ -273,7 +284,7 @@ exports.recordFailedAttempt = onCall(async (request) => {
   }
 });
 
-exports.resetFailedAttempts = onCall(async (request) => {
+exports.resetFailedAttempts = onCall({ enforceAppCheck: true }, async (request) => {
   if (!request.auth) {
     throw new HttpsError("unauthenticated", "Must be signed in.");
   }
@@ -304,7 +315,7 @@ exports.resetFailedAttempts = onCall(async (request) => {
 
 // ─── Callable: Password Expiry & History ────────────────────────────
 
-exports.checkPasswordExpiry = onCall(async (request) => {
+exports.checkPasswordExpiry = onCall({ enforceAppCheck: true }, async (request) => {
   if (!request.auth) {
     throw new HttpsError("unauthenticated", "Must be signed in.");
   }
@@ -342,7 +353,7 @@ exports.checkPasswordExpiry = onCall(async (request) => {
   }
 });
 
-exports.initializeSecurityRecord = onCall(async (request) => {
+exports.initializeSecurityRecord = onCall({ enforceAppCheck: true }, async (request) => {
   if (!request.auth) {
     throw new HttpsError("unauthenticated", "Must be signed in.");
   }
@@ -371,7 +382,7 @@ exports.initializeSecurityRecord = onCall(async (request) => {
   }
 });
 
-exports.checkPasswordHistory = onCall(async (request) => {
+exports.checkPasswordHistory = onCall({ enforceAppCheck: true }, async (request) => {
   if (!request.auth) {
     throw new HttpsError("unauthenticated", "Must be signed in.");
   }
@@ -410,7 +421,7 @@ exports.checkPasswordHistory = onCall(async (request) => {
   }
 });
 
-exports.addToPasswordHistory = onCall(async (request) => {
+exports.addToPasswordHistory = onCall({ enforceAppCheck: true }, async (request) => {
   if (!request.auth) {
     throw new HttpsError("unauthenticated", "Must be signed in.");
   }
@@ -454,7 +465,7 @@ exports.addToPasswordHistory = onCall(async (request) => {
 // ─── Callable: Set User Role ────────────────────────────────────────
 // Future use — master can assign custom claims (roles) to users.
 
-exports.setUserRole = onCall(async (request) => {
+exports.setUserRole = onCall({ enforceAppCheck: true }, async (request) => {
   // Only master can call this
   if (!request.auth || request.auth.token.email?.toLowerCase() !== MASTER_EMAIL) {
     throw new HttpsError("permission-denied", "Only the master account can assign roles.");
