@@ -7,13 +7,20 @@ import { db, appId } from '../constants';
  * Auto-seeds directory from existing scenario data on first load
  * @returns {object} Advisors state and handlers
  */
-export const useAdvisors = () => {
+export const useAdvisors = ({ currentUser, userRole } = {}) => {
   const [advisors, setAdvisors] = useState([]);
   const [isLoadingAdvisors, setIsLoadingAdvisors] = useState(true);
 
-  // Fetch advisors and auto-seed from existing scenario data
+  // Fetch advisors and auto-seed from existing scenario data.
+  //
+  // Gated on currentUser because the directory's read rule requires isAuthenticated().
+  // This effect used to run on mount with no auth dependency, racing Firebase Auth's
+  // async session restore: win the race and the directory loads, lose it and the read is
+  // denied, the handler returns early, and the effect never retries — so the directory
+  // looked empty until a reload happened to win. Depending on currentUser means it runs
+  // once auth is actually established, and re-runs if the user changes.
   useEffect(() => {
-    if (!db) {
+    if (!db || !currentUser) {
       setIsLoadingAdvisors(false);
       return;
     }
@@ -45,6 +52,16 @@ export const useAdvisors = () => {
 
       // Step 2: best-effort auto-seed any advisors discovered in scenarios.
       // Each write is isolated so one rule rejection does not abort the rest.
+      //
+      // Master only: this scans the whole scenarios collection, which the tightened read
+      // rules allow for master alone. Non-master advisors would get a permission denial
+      // here on every load — noise that could mask a real error — and they could not
+      // write other people's directory entries anyway. Their entries get seeded the next
+      // time master opens this page.
+      if (userRole !== 'master') {
+        setIsLoadingAdvisors(false);
+        return;
+      }
       try {
         const scenarioSnapshot = await getDocs(
           collection(db, 'artifacts', appId, 'public', 'data', 'scenarios')
@@ -98,7 +115,7 @@ export const useAdvisors = () => {
     };
 
     fetchAdvisors();
-  }, []);
+  }, [currentUser, userRole]);
 
   /**
    * Add a new advisor

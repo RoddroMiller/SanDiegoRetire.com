@@ -97,7 +97,7 @@ export default function BucketPortfolioBuilder() {
     addAdvisor,
     deleteAdvisor,
     refreshAdvisors
-  } = useAdvisors();
+  } = useAdvisors({ currentUser, userRole });
 
   // Auto-register current user as advisor on login
   useEffect(() => {
