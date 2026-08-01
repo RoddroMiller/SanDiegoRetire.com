@@ -201,28 +201,42 @@ representation to a client should reflect that.
 
 ### 4.3 Retention requirement
 
-**FOR COUNSEL — this is the most significant open item.**
+**This system is not the firm's system of record.**
 
-The firm's working assumption is **10 years**, reasoning that it covers the statute of
-limitations for potential litigation. That has not been verified against the firm's actual
-regulatory obligations. Advisers Act recordkeeping rules and applicable state requirements
-should be confirmed by counsel, and the retention period set deliberately rather than
-assumed.
+Portfolio Architect is a working modeling tool. Plans in it are live and change as
+assumptions are revised. Any version actually presented to a client is printed to PDF and
+filed in that client's file, maintained outside this application. The firm's books and
+records obligations are therefore satisfied by the client file, not by this database, and
+no multi-year retention or immutable-archive requirement attaches to this system.
 
-**GAP — and the assumption exposes it.** Whatever the number, the current architecture does
-not satisfy a multi-year retention obligation in the way such rules typically contemplate:
+*This operational step belongs in the MWM standard operating procedures — the control
+only works if the PDF is reliably produced and filed. See §4.4.*
 
-- The **live database** holds records indefinitely, so the data exists — but it is mutable
-  and deletable by any advisor with access. It is not an immutable archive.
-- **Backups max out at 98 days.** They are a disaster-recovery mechanism, not a records
-  archive, and cannot evidence the state of a record years later.
-- There is **no periodic immutable export** — no WORM storage, no retention lock, no
-  independently retained copy.
+**FOR COUNSEL (lower priority than previously assessed):** confirm that the
+print-to-PDF-and-file practice satisfies the applicable recordkeeping rules for advice
+presented to clients, and that no obligation attaches to intermediate modeling data.
 
-If a multi-year retention obligation applies, this needs a separate archival mechanism —
-for example, scheduled exports to Cloud Storage with a retention policy or bucket lock,
-which prevents deletion or alteration until the retention period expires. That work has
-not been scoped.
+### 4.4 Data minimization — the remaining consideration
+
+Because this system is *not* the record of authority, indefinite retention here is
+unnecessary rather than required. That inverts the usual analysis:
+
+- The application holds client nonpublic personal information — names, contact details,
+  portfolio balances, income, Social Security benefit amounts — **indefinitely, with no
+  expiry.**
+- Safeguarding obligations attach to that data regardless of whether retention obligations
+  do. Data the firm holds is data the firm must protect, and data it can lose.
+- Every plan retained past its usefulness enlarges the exposure in a breach without
+  serving a records purpose, since the authoritative copy is already in the client file.
+
+**GAP (medium):** there is no policy or mechanism for purging stale plans. Worth deciding
+a working retention period for modeling data — for instance, purge prospect drafts after N
+months and closed-client plans after N years — and applying it. This reduces exposure and
+is straightforward to implement once the period is chosen.
+
+An operational dependency worth naming: if a plan is deleted here and no PDF was filed,
+the record of what was presented is gone. The purge policy and the print-to-file SOP have
+to be consistent with each other.
 
 ---
 
@@ -230,14 +244,18 @@ not been scoped.
 
 | # | Gap | Severity |
 |---|---|---|
-| 1 | No immutable long-term archive; backups cap at 98 days versus a presumed 10-year requirement | **High** — likely a compliance requirement |
-| 2 | Retention period assumed, not legally determined | **High** — drives #1 |
-| 3 | No incident-notification procedure or template (Reg S-P) | **High** |
+| 1 | No incident-notification procedure or template (Reg S-P) | **High** |
+| 2 | Print-to-PDF-and-file step is the firm's records control but is not yet written into the MWM SOPs | **High** — the control only works if documented and followed |
+| 3 | No purge policy for stale plans; client NPI retained indefinitely in a system that is not the record of authority | Medium |
 | 4 | No alerting on anomalous activity; detection is manual | Medium |
 | 5 | No documented access review cadence or offboarding checklist | Medium |
 | 6 | Command Center project (`miller-one-process`) not covered by this review; App Check not enforced there | Medium |
 | 7 | 7 moderate dependency vulnerabilities remain (transitive; no fix without further major upgrades) | Low |
 | 8 | `index.html` cached up to 1 hour, delaying propagation of emergency fixes | Low |
+
+*Revised 2026-08-01: the original #1 and #2 (immutable archive, retention period) were
+written on the assumption that this system was the record of authority. It is not — see
+§4.3 — so those are withdrawn and replaced by the SOP and data-minimization items.*
 
 ---
 
