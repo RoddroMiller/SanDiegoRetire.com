@@ -22,7 +22,7 @@ These policies document the security controls, procedures, and responsibilities 
 | Policy | Review Cadence | Next Review |
 |--------|---------------|-------------|
 | Information Security Policy | Annually | 2027-02-13 |
-| Access Control Policy | Quarterly | 2026-05-13 |
+| Access Control Policy | Quarterly | 2026-11-05 |
 | Change Management Policy | Annually | 2027-02-13 |
 | Data Retention Policy | Annually | 2027-02-13 |
 | Incident Response Plan | Quarterly | 2026-05-13 |
