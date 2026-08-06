@@ -1,46 +1,38 @@
-# Security Policies — Portfolio Architect
+# Security Documentation — consolidated elsewhere
 
-These policies document the security controls, procedures, and responsibilities for Portfolio Architect. They are maintained as part of the codebase to ensure they stay in sync with the actual implementation.
+The firm's security policies are **firm-level** and are maintained in one place:
 
-## Policies
+**`the-one-process/docs/security/`**
 
-| Document | Purpose |
-|----------|---------|
-| [Information Security Policy](INFORMATION_SECURITY_POLICY.md) | Overarching security program: objectives, governance, and controls summary |
-| [Access Control Policy](ACCESS_CONTROL_POLICY.md) | Who can access what, how access is granted and revoked |
-| [Change Management Policy](CHANGE_MANAGEMENT_POLICY.md) | How changes are reviewed, tested, deployed, and rolled back |
-| [Data Retention Policy](DATA_RETENTION_POLICY.md) | How long data is kept and how it is securely disposed of |
-| [Incident Response Plan](INCIDENT_RESPONSE_PLAN.md) | How to detect, contain, investigate, and recover from security incidents |
-| [Risk Assessment](RISK_ASSESSMENT.md) | Identified threats, likelihood, impact, and mitigating controls |
-| [Vendor Management Policy](VENDOR_MANAGEMENT_POLICY.md) | Third-party vendor evaluation, monitoring, and risk management |
-| [Business Continuity Plan](BUSINESS_CONTINUITY_PLAN.md) | Disaster recovery, backup strategy, RTO/RPO objectives |
-| [Encryption Policy](ENCRYPTION_POLICY.md) | Data encryption in transit and at rest |
-| [Acceptable Use Policy](ACCEPTABLE_USE_POLICY.md) | Authorized use of systems and data handling rules |
+Every `.md` file in this directory is now a pointer to its canonical counterpart. They
+are kept rather than deleted so that anyone working in this repository is told where the
+policy lives and why it moved.
 
-## Review Schedule
+## Why
 
-| Policy | Review Cadence | Next Review |
-|--------|---------------|-------------|
-| Information Security Policy | Annually | 2027-02-13 |
-| Access Control Policy | Quarterly | 2026-11-05 |
-| Change Management Policy | Annually | 2027-02-13 |
-| Data Retention Policy | Annually | 2027-02-13 |
-| Incident Response Plan | Quarterly | 2026-05-13 |
-| Risk Assessment | Annually | 2027-02-13 |
-| Vendor Management Policy | Annually | 2027-02-13 |
-| Business Continuity Plan | Annually | 2027-02-13 |
-| Encryption Policy | Annually | 2027-02-13 |
-| Acceptable Use Policy | Annually | 2027-02-13 |
+Nine policies existed in both repositories and **all nine had diverged.** Asked "what is
+your incident response plan?", the firm had two different answers — 141 lines here
+against 336 lines there, the shorter one missing every amended Regulation S-P
+requirement. They were not simply stale copies: several were genuinely different
+documents describing different systems, which is why consolidation separated firm-level
+requirements (stated once) from system-specific facts (stated in a per-system section of
+the relevant policy).
 
-## Technical Controls Summary
+Consolidated 2026-08-05 to 2026-08-06. Each canonical document's review history records
+what changed and what was corrected.
 
-These policies reference the following technical controls implemented in code:
+## What stays here
 
-- **Firestore security rules** (`firestore.rules`) — Server-side access control
-- **Cloud Functions** (`functions/index.js`) — Audit logging, account lockout, password security
-- **Security headers** (`firebase.json`) — HSTS, CSP, X-Frame-Options, etc.
-- **CI/CD pipeline** (`.github/workflows/ci.yml`) — Automated build, lint, rules tests, dependency audit
-- **MFA enforcement** (`src/hooks/useAuth.js`) — TOTP-based multi-factor authentication
-- **Session timeout** (`src/hooks/useSessionTimeout.js`) — 15-minute inactivity logout
-- **Password policy** (`src/utils/passwordValidation.js`) — 12-char minimum, special character, 90-day expiry, history of 5
-- **PII detection** (`src/utils/piiValidation.js`) — SSN pattern blocking
+`docs/information-security-program.md` — a technical system profile for Portfolio
+Architect covering its data inventory, access enforcement, incident detection signals,
+retention behaviour and known gaps. It is an appendix, not a competing policy, and is
+referenced from the canonical WISP.
+
+`GCP-[FALL-2025] GCP SOC 2 Report..pdf` — vendor evidence, duplicated in both
+repositories by design so it is available wherever it is needed.
+
+## Do not reintroduce a local copy
+
+If a policy needs to say something specific to Portfolio Architect, add it to that
+policy's system-specific section in the canonical location. A second copy in this
+repository will diverge again — that is what created the problem being unwound here.
