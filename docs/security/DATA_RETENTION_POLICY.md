@@ -1,92 +1,21 @@
-# Data Retention Policy
+# Data Retention Policy — moved
 
-**Owner:** Rodd Miller (rmiller@millerwm.com)
-**Last Reviewed:** 2026-03-19
-**Review Cadence:** Annually
+This policy is **firm-level** and is no longer maintained separately in this repository.
 
----
+**Canonical location:** `the-one-process/docs/security/DATA_RETENTION_POLICY.md`
 
-## 1. Purpose
+Portfolio Architect's retention table is **§2.2** of that document. Three things found
+during consolidation apply to this system specifically:
 
-This policy defines how long data is retained in Portfolio Architect and when it is deleted. The goal is to keep data only as long as it serves a business or regulatory purpose, and to dispose of it securely when no longer needed.
+- **§3.3 — the copy here asserted a control that does not exist.** It described an
+  `archiveOldAuditLogs` Cloud Function running weekly and deleting audit logs older than
+  seven years. This project has **no scheduled functions at all**. Audit logs and
+  security records accumulate here with no automated disposal, and closing that is a
+  High action item in the canonical policy.
+- **§1.2 — the recordkeeping basis was wrong.** Both copies cited SEC Rule 17a-4, which
+  governs broker-dealers. The applicable rule for a registered investment adviser is
+  Advisers Act Rule 204-2, with a five-year minimum.
+- **§2.3 — prospect drafts and anonymous Auth accounts have no defined retention
+  period** and accumulate indefinitely.
 
----
-
-## 2. Data Categories & Retention Periods
-
-| Data Category | Firestore Collection | Retention Period | Justification |
-|--------------|---------------------|-----------------|---------------|
-| **Financial plans (scenarios)** | `artifacts/portfolio-architect/public/data/scenarios` | Duration of client relationship + 7 years | SEC/FINRA recordkeeping requirements for investment advisory records |
-| **Advisor directory** | `artifacts/portfolio-architect/public/data/advisors` | Duration of employment + 3 years | Business need; regulatory retention for associated persons |
-| **Security records** | `security/users/{hashedEmail}/data` | 1 year after last activity | Contains lockout status, failed attempts, password history (hashed). No business need beyond active security enforcement. |
-| **Audit logs** | `audit_logs` | 7 years | SEC Rule 17a-4 and SOC 2 audit trail requirements |
-| **Firebase Authentication accounts** | Firebase Auth (managed) | Duration of relationship + 7 years | Aligned with financial plan retention |
-
----
-
-## 3. Data Deletion Procedures
-
-### 3.1 Client-Initiated Deletion
-
-When a client requests account deletion:
-
-1. Delete all scenarios where `assignedClientEmail` matches the client.
-2. Delete the client's Firebase Authentication account via Firebase Console.
-3. Delete the client's security record from the `security/users/` collection (via admin SDK).
-4. Audit log entries referencing the client are **retained** (required for compliance) but the client's email is noted as deleted.
-5. Confirm deletion to the client in writing within 30 days.
-
-### 3.2 Advisor Offboarding
-
-When an advisor leaves:
-
-1. Reassign or archive the advisor's scenarios (transfer `advisorId`/`advisorEmail` to another advisor or master).
-2. Remove the advisor from the `advisors` directory.
-3. Disable the advisor's Firebase Authentication account (do not delete — retain for audit trail).
-4. Revoke any Command Center access.
-
-### 3.3 Automated Cleanup
-
-The following automated processes are implemented as scheduled Cloud Functions in the One Process project (`functions/index.js`):
-
-- **Security records:** `cleanupStaleSecurityRecords` — runs daily at 02:00 UTC. Deletes security records with no activity in 1+ year. Uses batch deletes (500 per batch) for efficiency.
-- **Audit log cleanup:** `archiveOldAuditLogs` — runs weekly (Monday 03:00 UTC). Deletes audit logs older than 7 years. Uses batch deletes (500 per batch).
-
-> **Deployed:** 2026-03-19. Cloud Storage export for long-term archival can be added as a future enhancement.
-
----
-
-## 4. Data Backup
-
-| Data | Backup Method | Frequency | Retention |
-|------|--------------|-----------|-----------|
-| Firestore (all collections) | Firebase scheduled backups (Google Cloud) | Daily | 30 days |
-| Audit logs | Firestore native + future Cloud Storage export | Continuous (triggers) | 7 years |
-| Source code | GitHub repository | Every push | Indefinite (git history) |
-
-### Backup Verification
-
-- **Monthly:** Spot-check that Firebase backups are running by reviewing Google Cloud Console > Firestore > Backups.
-- **Quarterly:** Test restore of a backup to a non-production Firestore instance to verify integrity.
-
----
-
-## 5. Data Disposal
-
-When data reaches the end of its retention period:
-
-- **Firestore documents:** Delete via admin SDK. Firestore does not retain deleted documents.
-- **Firebase Auth accounts:** Delete via Firebase Console or admin SDK.
-- **Cloud Storage exports:** Delete from the storage bucket. Verify deletion.
-- **Local copies:** Any local exports or backups must be securely deleted (not just moved to trash).
-
----
-
-## 6. Exceptions
-
-Retention periods may be extended when:
-- Data is subject to an active legal hold or regulatory investigation.
-- A client dispute is unresolved.
-- An audit is in progress.
-
-The Incident Commander (Rodd Miller) must approve any retention extension in writing.
+Retired 2026-08-06. See §7 of the canonical policy for the full record.
